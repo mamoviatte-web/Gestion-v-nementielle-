@@ -1,77 +1,99 @@
 -- =====================================================================
 -- Données de référence (seed) — Stade Maurice David (CDC V1.1)
 -- À exécuter APRÈS schema.sql (et rls_policies.sql).
--- Idempotent : utilise des ON CONFLICT sur les clés naturelles.
+-- Idempotent : ON CONFLICT sur les clés naturelles.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
 -- 1. Les 16 espaces (codes exacts CDC)
 -- ---------------------------------------------------------------------
-insert into spaces (name, code, type) values
-  ('Salon Nord',       'SN2026',  'VIP'),
-  ('Salon Sud',        'SS2026',  'VIP'),
-  ('Le Pub',           'PUB2026', 'Bar'),
-  ('Loge Est',         'LE2026',  'VIP'),
-  ('Comptoir',         'CO2026',  'Bar'),
-  ('Bistrot',          'BI2026',  'Bar'),
-  ('Loge Ouest Nord',  'LON2026', 'VIP'),
-  ('Loge Ouest Sud',   'LOS2026', 'VIP'),
-  ('Wine bar Nord',    'WBN2026', 'Bar'),
-  ('Wine bar Sud',     'WBS2026', 'Bar'),
-  ('Club 70 Nord',     'C70N26',  'VIP'),
-  ('Club 70 Sud',      'C70S26',  'VIP'),
-  ('Terrasses',        'TER2026', 'Bar'),
-  ('Bodega',           'BOD2026', 'Bar'),
-  ('Buvette 1',        'BV12026', 'Buvette'),
-  ('Buvette 2',        'BV22026', 'Buvette')
-on conflict (code) do nothing;
+insert into spaces (space_name, space_type, access_code) values
+  ('Salon Nord',       'VIP',     'SN2026'),
+  ('Salon Sud',        'VIP',     'SS2026'),
+  ('Le Pub',           'Bar',     'PUB2026'),
+  ('Loge Est',         'VIP',     'LE2026'),
+  ('Comptoir',         'Bar',     'CO2026'),
+  ('Bistrot',          'Bar',     'BI2026'),
+  ('Loge Ouest Nord',  'VIP',     'LON2026'),
+  ('Loge Ouest Sud',   'VIP',     'LOS2026'),
+  ('Wine bar Nord',    'Bar',     'WBN2026'),
+  ('Wine bar Sud',     'Bar',     'WBS2026'),
+  ('Club 70 Nord',     'Bar',     'C70N26'),
+  ('Club 70 Sud',      'Bar',     'C70S26'),
+  ('Terrasses',        'Bar',     'TER2026'),
+  ('Bodega',           'Bar',     'BOD2026'),
+  ('Buvette 1',        'Buvette', 'BV12026'),
+  ('Buvette 2',        'Buvette', 'BV22026')
+on conflict (access_code) do nothing;
 
 -- ---------------------------------------------------------------------
--- 2. 25 produits de démonstration (toutes catégories)
+-- 2. 25 produits de démonstration (valeurs exactes CDC)
 -- ---------------------------------------------------------------------
-insert into products (name, category, unit, unit_price_ht, packaging) values
+insert into products (product_name, category, unit, unit_price_ht) values
   -- Vins (5)
-  ('Mumm Cordon Rouge',        'Vin',        'bouteille', 23.96, '75cl'),
-  ('Mumm Blanc de Blanc',      'Vin',        'bouteille', 38.11, '75cl'),
-  ('Côtes de Provence Rosé',   'Vin',        'bouteille', 6.90,  '75cl'),
-  ('Côtes du Rhône Rouge',     'Vin',        'bouteille', 7.40,  '75cl'),
-  ('Chardonnay Blanc',         'Vin',        'bouteille', 8.20,  '75cl'),
+  ('Mumm Cordon Rouge',     'Vins',        'btl', 23.96),
+  ('Mumm Blanc de Blanc',   'Vins',        'btl', 38.11),
+  ('Rosé Réal',             'Vins',        'btl', 8.70),
+  ('Rosé Pey Blanc',        'Vins',        'btl', 7.20),
+  ('Rosé Miraval',          'Vins',        'btl', 12.50),
   -- Bières (3)
-  ('Fût BUD',                  'Bière',      'fût',       97.95, '30L'),
-  ('Fût LEFFE',                'Bière',      'fût',       129.75,'30L'),
-  ('Bière en verre',           'Bière',      'verre',     1.34,  '25cl'),
+  ('Fût BUD',               'Bières',      'fût', 97.95),
+  ('Fût LEFFE',             'Bières',      'fût', 129.75),
+  ('Bière en verre',        'Bières',      'u',   1.34),
   -- Soft (4)
-  ('Pepsi',                    'Soft',       'bouteille', 1.80,  '1L'),
-  ('Cristaline',               'Soft',       'bouteille', 0.17,  '50cl'),
-  ('Jus de fruits',            'Soft',       'bouteille', 2.60,  '1L'),
-  ('Schweppes',                'Soft',       'bouteille', 2.41,  '1L'),
+  ('Pepsi bouteille',       'Soft',        'btl', 1.80),
+  ('Cristaline 50cl',       'Soft',        'btl', 0.17),
+  ('Jus de fruits',         'Soft',        'btl', 2.60),
+  ('Schweppes',             'Soft',        'btl', 2.41),
   -- Sirops (4)
-  ('Sirop Pêche',              'Sirop',      'bouteille', 6.45,  '70cl'),
-  ('Sirop Grenadine',          'Sirop',      'bouteille', 5.01,  '70cl'),
-  ('Sirop Menthe',             'Sirop',      'bouteille', 5.50,  '70cl'),
-  ('Sirop Citron',             'Sirop',      'bouteille', 4.80,  '70cl'),
+  ('Sirop de pêche',        'Sirops',      'btl', 6.45),
+  ('Sirop de grenadine',    'Sirops',      'btl', 5.01),
+  ('Sirop de menthe',       'Sirops',      'btl', 5.50),
+  ('Sirop de citron',       'Sirops',      'btl', 4.80),
   -- Spiritueux (5)
-  ('Whisky Jameson',           'Spiritueux', 'bouteille', 18.59, '70cl'),
-  ('Lillet Blanc',             'Spiritueux', 'bouteille', 12.52, '75cl'),
-  ('Ricard',                   'Spiritueux', 'bouteille', 16.79, '1L'),
-  ('GET 27',                   'Spiritueux', 'bouteille', 12.21, '70cl'),
-  ('Ricard Herbes',            'Spiritueux', 'bouteille', 15.30, '70cl'),
-  -- Matériel (4) — sans prix HT
-  ('Housses Mange debout',     'Matériel',   'pièce',     null,  null),
-  ('Housses Buffet',           'Matériel',   'pièce',     null,  null),
-  ('Housse Desk',              'Matériel',   'pièce',     null,  null),
-  ('Nappes',                   'Matériel',   'pièce',     null,  null)
+  ('Whisky Jameson',        'Spiritueux',  'btl', 18.59),
+  ('Lillet Blanc',          'Spiritueux',  'btl', 12.52),
+  ('Lillet Rosé',           'Spiritueux',  'btl', 13.10),
+  ('Ricard classique',      'Spiritueux',  'btl', 16.79),
+  ('GET 27',                'Spiritueux',  'btl', 12.21),
+  -- Matériel (4) — sans prix HT (unit_price_ht = NULL)
+  ('Housses Mange debout',  'Matériel',    'u',   null),
+  ('Housses Buffet',        'Matériel',    'u',   null),
+  ('Housse Desk D''accueil','Matériel',    'u',   null),
+  ('Nappes de rechange',    'Matériel',    'u',   null)
 on conflict do nothing;
 
 -- ---------------------------------------------------------------------
--- 3. Compte ROLE_STADE de test
---    ⚠ La création d'un compte auth se fait normalement via le Dashboard
---    Supabase (Authentication → Users) ou l'Admin API, en renseignant
---    user_metadata = { "role": "ROLE_STADE", "name": "Admin Stade" }.
+-- 3. Comptes (table applicative `users`)
+--    1 compte ROLE_STADE + 16 comptes ROLE_RESPONSABLE (un par espace).
+--    ⚠ Ce sont les enregistrements MÉTIER. Les comptes d'AUTHENTIFICATION
+--      Supabase (auth.users) doivent être créés à part (cf. §4).
+-- ---------------------------------------------------------------------
+insert into users (name, email, role, space_id)
+select 'Admin Stade', 'admin@stade-mauricedavid.fr', 'ROLE_STADE', null
+where not exists (select 1 from users where email = 'admin@stade-mauricedavid.fr');
+
+insert into users (name, email, role, space_id)
+select 'Responsable ' || s.space_name,
+       lower(s.access_code) || '@stade.fr',
+       'ROLE_RESPONSABLE',
+       s.space_id
+from spaces s
+where not exists (
+  select 1 from users u where u.email = lower(s.access_code) || '@stade.fr'
+);
+
+-- ---------------------------------------------------------------------
+-- 4. Comptes d'authentification Supabase
+--    La création de auth.users se fait normalement via le Dashboard
+--    (Authentication → Users) ou l'Admin API, avec user_metadata :
+--      ROLE_STADE       : { "role":"ROLE_STADE", "name":"Admin Stade" }
+--      ROLE_RESPONSABLE : { "role":"ROLE_RESPONSABLE", "space_id":"<uuid>",
+--                           "space_code":"SN2026" }
+--    Responsable : email = {code}@stade.fr, password = {code}.
 --
---    Le bloc ci-dessous tente une création directe (utile en local).
---    email    : admin@stade-mauricedavid.fr
---    password : admin2026   (à changer)
+--    Le bloc ci-dessous tente une création directe du compte admin (local).
+--    email: admin@stade-mauricedavid.fr  /  password: admin2026
 -- ---------------------------------------------------------------------
 do $$
 declare
@@ -101,18 +123,18 @@ exception
 end $$;
 
 -- ---------------------------------------------------------------------
--- 4. Événement de démonstration + espaces associés
+-- 5. Événement de démonstration + espaces activés
 -- ---------------------------------------------------------------------
-insert into events (name, type, date, start_time, expected_attendees, status)
-select 'Provence Rugby vs Montauban', 'match', date '2026-06-28', '19:00', 8000, 'préparé'
+insert into events (event_name, event_type, event_date, start_time, end_time, expected_attendees, status)
+select 'Provence Rugby vs Montauban', 'match', date '2026-06-28', time '19:00', time '23:00', 8000, 'préparé'
 where not exists (
-  select 1 from events where name = 'Provence Rugby vs Montauban' and date = date '2026-06-28'
+  select 1 from events where event_name = 'Provence Rugby vs Montauban' and event_date = date '2026-06-28'
 );
 
--- Associe tous les espaces à l'événement de démonstration.
+-- Active tous les espaces sur l'événement de démonstration.
 insert into event_spaces (event_id, space_id)
-select e.id, s.id
+select e.event_id, s.space_id
 from events e
 cross join spaces s
-where e.name = 'Provence Rugby vs Montauban' and e.date = date '2026-06-28'
+where e.event_name = 'Provence Rugby vs Montauban' and e.event_date = date '2026-06-28'
 on conflict (event_id, space_id) do nothing;

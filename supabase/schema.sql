@@ -1,6 +1,7 @@
 -- =====================================================================
 -- Schéma PostgreSQL — Stade Maurice David (CDC V1.1 — Provence Rugby)
--- À coller dans Supabase → SQL Editor (ordre des tables = respect des FK)
+-- Source de vérité : CLAUDE.md (noms de tables/colonnes EXACTS).
+-- À coller dans Supabase → SQL Editor (ordre des tables = respect des FK).
 -- =====================================================================
 
 -- Extension pour gen_random_uuid()
@@ -18,87 +19,99 @@ end;
 $$ language plpgsql;
 
 -- =====================================================================
--- 1. spaces — les 16 espaces du stade
+-- 1. spaces — 16 espaces du stade
 -- =====================================================================
 create table if not exists spaces (
-  id          uuid primary key default gen_random_uuid(),
-  name        text not null,
-  code        text not null unique,
-  type        text not null check (type in ('VIP', 'Bar', 'Buvette')),
-  capacity    integer,
-  created_at  timestamptz not null default now()
+  space_id    uuid primary key default gen_random_uuid(),
+  space_name  text not null,
+  space_type  text not null check (space_type in ('VIP','Bar','Buvette')),
+  access_code text unique not null,
+  capacity    int,
+  active      boolean default true,
+  created_at  timestamptz default now()
 );
-comment on table spaces is 'Espaces de vente du stade (VIP, Bar, Buvette).';
-comment on column spaces.code is 'Code d''accès unique servant d''identifiant au Responsable (ex: SN2026).';
+comment on table spaces is 'Les 16 espaces de vente du stade.';
+comment on column spaces.access_code is 'Code d''accès unique (identifiant Responsable, ex: SN2026).';
 
 -- =====================================================================
--- 2. products — catalogue produits
+-- 2. users — registre applicatif des comptes
+-- =====================================================================
+create table if not exists users (
+  user_id       uuid primary key default gen_random_uuid(),
+  name          text not null,
+  email         text unique,
+  role          text not null check (role in ('ROLE_STADE','ROLE_RESPONSABLE')),
+  space_id      uuid references spaces(space_id),
+  is_active     boolean default true,
+  last_login_at timestamptz,
+  created_at    timestamptz default now()
+);
+comment on table users is 'Registre des comptes applicatifs (miroir métier de auth.users).';
+
+-- =====================================================================
+-- 3. products — catalogue (cible 269 produits)
 -- =====================================================================
 create table if not exists products (
-  id             uuid primary key default gen_random_uuid(),
-  name           text not null,
-  category       text not null check (category in ('Vin','Bière','Soft','Sirop','Spiritueux','Matériel')),
-  unit           text not null default 'pièce',
-  unit_price_ht  numeric(10,2),                 -- NULL = prix manquant (RG-003/RG-005)
-  packaging      text,
-  active         boolean not null default true,
-  created_at     timestamptz not null default now()
+  product_id    uuid primary key default gen_random_uuid(),
+  product_name  text not null,
+  category      text not null check (category in ('Vins','Bières','Soft','Sirops','Spiritueux','Matériel')),
+  unit          text not null,
+  packaging     text,
+  unit_price_ht decimal(10,2),   -- NULL autorisé → alerte RG-005
+  stock_min     int default 0,
+  active        boolean default true
 );
 comment on table products is 'Catalogue produits (boissons + matériel).';
-comment on column products.unit_price_ht is 'Prix unitaire HT. NULL = prix manquant. Colonne sensible (RG-003).';
+comment on column products.unit_price_ht is 'Prix unitaire HT. NULL = prix manquant (RG-005). Jamais exposé au ROLE_RESPONSABLE (RG-003).';
 
 -- =====================================================================
--- 3. events — événements
+-- 4. events — événements
 -- =====================================================================
 create table if not exists events (
-  id                  uuid primary key default gen_random_uuid(),
-  name                text not null,
-  type                text not null default 'match' check (type in ('match','séminaire','privatisation','autre')),
-  date                date not null,
-  start_time          text not null,            -- HH:MM
-  expected_attendees  integer,
-  status              text not null default 'brouillon'
-                        check (status in ('brouillon','préparé','en_cours','clôture_en_attente','clôturé','archivé')),
-  created_at          timestamptz not null default now(),
-  updated_at          timestamptz not null default now()
+  event_id           uuid primary key default gen_random_uuid(),
+  event_name         text not null,
+  event_type         text check (event_type in ('match','séminaire','cocktail','réception_vip','événement_partenaire','réunion','autre')),
+  event_date         date not null,
+  start_time         time,
+  end_time           time,
+  expected_attendees int,
+  status             text default 'brouillon'
+                       check (status in ('brouillon','préparé','en_cours','clôture_en_attente','clôturé','archivé')),
+  created_at         timestamptz default now()
 );
-comment on table events is 'Événements (matchs, séminaires, privatisations).';
-comment on column events.status is 'Cycle de vie de l''événement.';
-
-create trigger trg_events_updated_at
-  before update on events
-  for each row execute function set_updated_at();
+comment on table events is 'Événements (matchs, séminaires, cocktails, etc.).';
 
 -- =====================================================================
--- 4. event_spaces — espaces ouverts pour un événement
+-- 5. event_spaces — espaces activés par événement
 -- =====================================================================
 create table if not exists event_spaces (
-  id                uuid primary key default gen_random_uuid(),
-  event_id          uuid not null references events(id) on delete cascade,
-  space_id          uuid not null references spaces(id) on delete cascade,
-  responsable_name  text,                       -- nom saisi à la connexion (RG-001)
-  created_at        timestamptz not null default now(),
+  id                       uuid primary key default gen_random_uuid(),
+  event_id                 uuid not null references events(event_id) on delete cascade,
+  space_id                 uuid not null references spaces(space_id),
+  responsible_default_name text,
   unique (event_id, space_id)
 );
-comment on table event_spaces is 'Association événement ↔ espace ouvert.';
-comment on column event_spaces.responsable_name is 'Nom du responsable saisi à la connexion (RG-001).';
+comment on table event_spaces is 'Espaces activés pour un événement.';
 
 create index if not exists idx_event_spaces_event on event_spaces(event_id);
 create index if not exists idx_event_spaces_space on event_spaces(space_id);
 
 -- =====================================================================
--- 5. runner_dotations — dotations logistiques préparées par le Stade
+-- 6. runner_dotations — fiches runner digitalisées (CDC §8)
 -- =====================================================================
 create table if not exists runner_dotations (
-  id          uuid primary key default gen_random_uuid(),
-  event_id    uuid not null references events(id) on delete cascade,
-  space_id    uuid not null references spaces(id) on delete cascade,
-  product_id  uuid not null references products(id) on delete restrict,
-  quantity    numeric(10,2) not null default 0,
-  status      text not null default 'à_préparer'
-                check (status in ('à_préparer','préparé','monté','contrôlé','annulé')),
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
+  dotation_id     uuid primary key default gen_random_uuid(),
+  event_id        uuid not null references events(event_id),
+  space_id        uuid not null references spaces(space_id),
+  product_id      uuid not null references products(product_id),
+  planned_qty     int not null default 0,
+  office_qty      int default 0,
+  cartons_to_move int default 0,
+  runner_status   text default 'à_préparer'
+                    check (runner_status in ('à_préparer','préparé','monté','contrôlé','annulé')),
+  runner_comment  text,
+  updated_at      timestamptz default now(),
+  unique (event_id, space_id, product_id)
 );
 comment on table runner_dotations is 'Dotations logistiques (runner) par espace/produit/événement.';
 
@@ -111,122 +124,141 @@ create trigger trg_runner_dotations_updated_at
   for each row execute function set_updated_at();
 
 -- =====================================================================
--- 6. event_stock_lines — lignes de stock par espace/produit/événement
+-- 7. event_stock_lines — état stock par événement/espace/produit (CDC §9)
+--    consumed_qty = initial_qty + reassort_qty - final_qty  (CALCULÉ côté app)
 -- =====================================================================
 create table if not exists event_stock_lines (
-  id             uuid primary key default gen_random_uuid(),
-  event_id       uuid not null references events(id) on delete cascade,
-  space_id       uuid not null references spaces(id) on delete cascade,
-  product_id     uuid not null references products(id) on delete restrict,
-  initial_qty    numeric(10,2) not null default 0,
-  reassort_qty   numeric(10,2) not null default 0,
-  final_qty      numeric(10,2),                 -- NULL tant que la clôture n'est pas saisie
-  unit_price_ht  numeric(10,2),                 -- snapshot du prix ; INTERDIT au Responsable (RG-003)
-  phase          text not null default 'ouverture' check (phase in ('ouverture','reassort','cloture')),
-  created_at     timestamptz not null default now(),
-  updated_at     timestamptz not null default now(),
+  line_id         uuid primary key default gen_random_uuid(),
+  event_id        uuid not null references events(event_id),
+  space_id        uuid not null references spaces(space_id),
+  product_id      uuid not null references products(product_id),
+  initial_qty     int default 0,
+  reassort_qty    int default 0,
+  final_qty       int,              -- NULL tant que clôture non faite
+  product_state   text check (product_state in ('fermé','ouvert','cassé','perdu','périmé','fût_vide','fût_percuté')),
+  anomaly_comment text,             -- obligatoire si consommation < 0 (RG-004)
+  responsable_nom text not null,    -- RG-001 : traçabilité nominative obligatoire
+  submitted_at    timestamptz,
   unique (event_id, space_id, product_id)
 );
-comment on table event_stock_lines is 'Lignes de stock (initial/réassort/final) par espace, produit et événement.';
-comment on column event_stock_lines.unit_price_ht is 'Snapshot prix HT. Colonne masquée au ROLE_RESPONSABLE (RG-003).';
+comment on table event_stock_lines is 'État stock (initial/réassort/final) par événement, espace, produit. consumed_qty calculé app-side (CDC §9).';
 
 create index if not exists idx_stock_lines_event on event_stock_lines(event_id);
 create index if not exists idx_stock_lines_space on event_stock_lines(space_id);
 create index if not exists idx_stock_lines_product on event_stock_lines(product_id);
 
-create trigger trg_stock_lines_updated_at
-  before update on event_stock_lines
-  for each row execute function set_updated_at();
-
 -- =====================================================================
--- 7. stock_movements — journal des mouvements de stock
+-- 8. stock_movements — historique complet (RG-002)
 -- =====================================================================
 create table if not exists stock_movements (
-  id          uuid primary key default gen_random_uuid(),
-  event_id    uuid not null references events(id) on delete cascade,
-  space_id    uuid not null references spaces(id) on delete cascade,
-  product_id  uuid not null references products(id) on delete restrict,
-  quantity    numeric(10,2) not null,
-  state       text not null check (state in ('fermé','ouvert','cassé','perdu','périmé','fût_vide','fût_percuté')),
-  phase       text not null check (phase in ('ouverture','reassort','cloture')),
-  created_by  text,
-  created_at  timestamptz not null default now()
+  movement_id     uuid primary key default gen_random_uuid(),
+  event_id        uuid not null references events(event_id),
+  space_id        uuid not null references spaces(space_id),
+  product_id      uuid not null references products(product_id),
+  movement_type   text not null check (movement_type in ('entrée','sortie','réassort','retour','casse','perte','correction','inventaire')),
+  qty             int not null,
+  responsable_nom text not null,
+  created_at      timestamptz default now()
 );
-comment on table stock_movements is 'Journal append-only des mouvements de stock.';
+comment on table stock_movements is 'Journal append-only de tous les mouvements de stock (RG-002).';
 
 create index if not exists idx_movements_event on stock_movements(event_id);
 create index if not exists idx_movements_space on stock_movements(space_id);
 create index if not exists idx_movements_product on stock_movements(product_id);
 
 -- =====================================================================
--- 8. provider_presence — présence des prestataires (RG-008)
+-- 9. provider_presence — prestataires présents (CDC §7)
 -- =====================================================================
 create table if not exists provider_presence (
-  id                 uuid primary key default gen_random_uuid(),
-  event_id           uuid not null references events(id) on delete cascade,
-  assigned_space_id  uuid not null references spaces(id) on delete cascade,
-  name               text not null,
-  role               text,
-  planned_arrival    text,                      -- HH:MM
-  planned_departure  text,
-  actual_arrival     text,
-  actual_departure   text,
-  status             text not null default 'prévu'
-                       check (status in ('prévu','présent','en_retard','terminé','absent','annulé')),
-  created_at         timestamptz not null default now(),
-  updated_at         timestamptz not null default now()
+  provider_presence_id  uuid primary key default gen_random_uuid(),
+  event_id              uuid not null references events(event_id),
+  space_id              uuid references spaces(space_id),   -- NULL = tout stade
+  provider_company      text not null,
+  provider_type         text not null check (provider_type in ('traiteur','sécurité','nettoyage','technique','logistique','animation','autre')),
+  provider_contact_name text,
+  provider_phone        text,
+  planned_arrival_time  time,
+  actual_arrival_time   time,
+  planned_start_time    time,
+  actual_start_time     time,
+  planned_end_time      time,
+  actual_end_time       time,
+  actual_departure_time time,
+  status                text default 'prévu'
+                          check (status in ('prévu','présent','en_retard','terminé','absent','annulé')),
+  responsable_nom       text,
+  comment               text
 );
-comment on table provider_presence is 'Présence des prestataires par espace (RG-008).';
+comment on table provider_presence is 'Présence des prestataires (RG-008 : retard > 15 min → en_retard).';
 
 create index if not exists idx_provider_event on provider_presence(event_id);
-create index if not exists idx_provider_space on provider_presence(assigned_space_id);
-
-create trigger trg_provider_updated_at
-  before update on provider_presence
-  for each row execute function set_updated_at();
+create index if not exists idx_provider_space on provider_presence(space_id);
 
 -- =====================================================================
--- 9. schedules — horaires du personnel par espace
+-- 10. schedules — horaires staff par espace
 -- =====================================================================
 create table if not exists schedules (
-  id          uuid primary key default gen_random_uuid(),
-  event_id    uuid not null references events(id) on delete cascade,
-  space_id    uuid not null references spaces(id) on delete cascade,
-  staff_name  text not null,
-  role        text,
-  arrival     text not null,                    -- HH:MM
-  departure   text not null,
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
+  schedule_id          uuid primary key default gen_random_uuid(),
+  event_id             uuid not null references events(event_id),
+  space_id             uuid not null references spaces(space_id),
+  staff_name           text not null,
+  role                 text,
+  planned_arrival      time,
+  planned_departure    time,
+  actual_departure     time,
+  confirmed_by_staff   boolean default false,
+  confirmed_by_manager boolean default false
 );
 comment on table schedules is 'Horaires planifiés du personnel par espace.';
 
 create index if not exists idx_schedules_event on schedules(event_id);
 create index if not exists idx_schedules_space on schedules(space_id);
 
-create trigger trg_schedules_updated_at
-  before update on schedules
-  for each row execute function set_updated_at();
-
 -- =====================================================================
--- 10. debriefs — débriefs de fin d'événement par espace
+-- 11. debriefs — formulaire post-événement (7 sections)
 -- =====================================================================
 create table if not exists debriefs (
-  id          uuid primary key default gen_random_uuid(),
-  event_id    uuid not null references events(id) on delete cascade,
-  space_id    uuid not null references spaces(id) on delete cascade,
-  content     text not null default '',
-  rating      integer check (rating between 1 and 5),
-  created_by  text,
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now(),
+  debrief_id              uuid primary key default gen_random_uuid(),
+  event_id                uuid not null references events(event_id),
+  space_id                uuid not null references spaces(space_id),
+  responsable             text not null,
+  -- 1.1 Effectif
+  nb_personnes            int,
+  effectif_adapte         text,
+  effectif_comment        text,
+  efficacite              text,
+  efficacite_comment      text,
+  suggestion_effectif     text,
+  -- 1.2 Organisation
+  amenagement             text,
+  amenagement_comment     text,
+  problemes_espace        text,
+  -- 1.3 Stocks
+  stocks_suffisants       text,
+  stocks_comment          text,
+  suggestions_stocks      text,
+  besoins_materiel        text,
+  -- 2.1 Communication interne
+  consignes_claires       text,
+  consignes_comment       text,
+  problemes_coordination  text,
+  -- 2.2 Communication clients
+  retours_clients         text,
+  retours_clients_detail  text,
+  -- 3. Propreté
+  espace_etat_bon         text,
+  espace_etat_comment     text,
+  problemes_dechets       text,
+  suggestions_proprete    text,
+  -- 5. Suggestions
+  suggestions_generales   text,
+  besoins_specifiques     text,
+  signature               boolean default false,
+  submitted_at            timestamptz,
+  created_at              timestamptz default now(),
   unique (event_id, space_id)
 );
-comment on table debriefs is 'Débrief de fin d''événement par espace.';
+comment on table debriefs is 'Débrief de fin d''événement par espace (7 sections).';
 
 create index if not exists idx_debriefs_event on debriefs(event_id);
 create index if not exists idx_debriefs_space on debriefs(space_id);
-
-create trigger trg_debriefs_updated_at
-  before update on debriefs
-  for each row execute function set_updated_at();

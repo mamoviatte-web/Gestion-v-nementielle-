@@ -7,13 +7,12 @@
 --   ROLE_RESPONSABLE  : accès restreint à son propre espace (space_id)
 --
 -- NOTE RG-003 (masquage de unit_price_ht) :
---   PostgreSQL RLS filtre des LIGNES, pas des COLONNES. Le masquage du
---   prix HT pour les Responsables est assuré par :
---     1) la vue `event_stock_lines_public` (sans unit_price_ht) ci-dessous,
---     2) le client applicatif qui ne sélectionne jamais cette colonne en
---        contexte Responsable.
---   Un GRANT/REVOKE colonne ne suffit pas car Supabase n'expose qu'un seul
---   rôle SQL (`authenticated`) pour tous les comptes connectés.
+--   PostgreSQL RLS filtre des LIGNES, pas des COLONNES. Le prix HT n'existe
+--   que dans `products`. Pour ne jamais l'exposer au Responsable :
+--     1) aucune politique de SELECT n'est posée sur `products` pour lui ;
+--     2) il lit le catalogue via la vue `products_public` (sans
+--        unit_price_ht), définie en SECURITY DEFINER pour contourner la RLS
+--        de la table de base tout en n'exposant que des colonnes sûres.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -55,6 +54,7 @@ $$;
 -- Activation RLS sur toutes les tables
 -- ---------------------------------------------------------------------
 alter table spaces             enable row level security;
+alter table users              enable row level security;
 alter table products           enable row level security;
 alter table events             enable row level security;
 alter table event_spaces       enable row level security;
@@ -74,18 +74,22 @@ create policy spaces_stade_all on spaces
   for all using (is_stade()) with check (is_stade());
 
 create policy spaces_resp_select on spaces
-  for select using (is_responsable_of(id));
+  for select using (is_responsable_of(space_id));
+
+-- =====================================================================
+-- users (table admin) — RESPONSABLE : aucun accès (interdite, CDC §4)
+-- =====================================================================
+create policy users_stade_all on users
+  for all using (is_stade()) with check (is_stade());
 
 -- =====================================================================
 -- products
---   STADE        : tout
---   RESPONSABLE  : SELECT uniquement (le masquage du prix HT passe par la vue)
+--   STADE        : tout (prix inclus)
+--   RESPONSABLE  : AUCUNE policy ici → lecture via la vue products_public
+--                  (le prix HT n'est jamais exposé — RG-003)
 -- =====================================================================
 create policy products_stade_all on products
   for all using (is_stade()) with check (is_stade());
-
-create policy products_resp_select on products
-  for select using (app_role() = 'ROLE_RESPONSABLE');
 
 -- =====================================================================
 -- events
@@ -100,7 +104,7 @@ create policy events_resp_select on events
     app_role() = 'ROLE_RESPONSABLE'
     and exists (
       select 1 from event_spaces es
-      where es.event_id = events.id
+      where es.event_id = events.event_id
         and es.space_id = app_space_id()
     )
   );
@@ -131,7 +135,7 @@ create policy runner_dotations_resp_select on runner_dotations
 -- event_stock_lines
 --   STADE        : tout
 --   RESPONSABLE  : SELECT / INSERT / UPDATE si space_id = son espace
---                  (lecture du prix HT bloquée par la vue, cf. note RG-003)
+--   (la table ne contient aucun prix — RG-003 garanti par construction)
 -- =====================================================================
 create policy stock_lines_stade_all on event_stock_lines
   for all using (is_stade()) with check (is_stade());
@@ -163,20 +167,20 @@ create policy movements_resp_insert on stock_movements
 -- =====================================================================
 -- provider_presence
 --   STADE        : tout
---   RESPONSABLE  : SELECT / INSERT / UPDATE si assigned_space_id = son espace
+--   RESPONSABLE  : SELECT / INSERT / UPDATE si space_id = son espace
 -- =====================================================================
 create policy provider_stade_all on provider_presence
   for all using (is_stade()) with check (is_stade());
 
 create policy provider_resp_select on provider_presence
-  for select using (is_responsable_of(assigned_space_id));
+  for select using (is_responsable_of(space_id));
 
 create policy provider_resp_insert on provider_presence
-  for insert with check (is_responsable_of(assigned_space_id));
+  for insert with check (is_responsable_of(space_id));
 
 create policy provider_resp_update on provider_presence
-  for update using (is_responsable_of(assigned_space_id))
-  with check (is_responsable_of(assigned_space_id));
+  for update using (is_responsable_of(space_id))
+  with check (is_responsable_of(space_id));
 
 -- =====================================================================
 -- schedules
@@ -215,16 +219,18 @@ create policy debriefs_resp_update on debriefs
   with check (is_responsable_of(space_id));
 
 -- =====================================================================
--- RG-003 — Vue sans prix HT pour le contexte Responsable
--- Le client Responsable lit cette vue (security_invoker => RLS respectée).
+-- RG-003 — Vue catalogue SANS prix HT pour le contexte Responsable
+-- SECURITY DEFINER (security_invoker = false) : contourne la RLS de
+-- `products` pour exposer uniquement des colonnes sûres (sans unit_price_ht).
 -- =====================================================================
-create or replace view event_stock_lines_public
-with (security_invoker = true) as
+create or replace view products_public
+with (security_invoker = false) as
   select
-    id, event_id, space_id, product_id,
-    initial_qty, reassort_qty, final_qty,
-    phase, created_at, updated_at
-  from event_stock_lines;
+    product_id, product_name, category, unit, packaging, stock_min, active
+  from products
+  where active = true;
 
-comment on view event_stock_lines_public is
-  'Vue des lignes de stock SANS unit_price_ht (RG-003) destinée au ROLE_RESPONSABLE.';
+comment on view products_public is
+  'Vue du catalogue SANS unit_price_ht (RG-003), destinée au ROLE_RESPONSABLE.';
+
+grant select on products_public to authenticated;

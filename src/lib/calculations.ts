@@ -17,18 +17,21 @@ import type { ProviderPresence, ProviderStatus } from './types';
  *
  *   consommé = (initial + réassort) − final
  *
+ * La valeur n'est volontairement PAS plafonnée à 0 : une consommation
+ * négative est une anomalie qui doit être détectée et commentée (RG-004),
+ * pas masquée.
+ *
  * @param initial  Stock d'ouverture.
  * @param reassort Réassort cumulé pendant l'événement.
  * @param final    Stock de clôture.
- * @returns La quantité consommée (jamais négative, plancher à 0).
+ * @returns La quantité consommée (peut être négative — anomalie RG-004).
  */
 export function computeConsumed(
   initial: number,
   reassort: number,
   final: number,
 ): number {
-  const consumed = initial + reassort - final;
-  return consumed > 0 ? consumed : 0;
+  return initial + reassort - final;
 }
 
 /**
@@ -137,18 +140,19 @@ export function computeProviderDelay(
 /* Statut prestataire (RG-008)                                         */
 /* ------------------------------------------------------------------ */
 
-/** Seuil de tolérance (minutes) au-delà duquel un prestataire est "en retard". */
-export const DELAY_TOLERANCE_MINUTES = 5;
+/** Seuil de tolérance (minutes) au-delà duquel un prestataire est "en retard" (RG-008). */
+export const DELAY_TOLERANCE_MINUTES = 15;
 
 /**
- * Calcule le statut réel d'un prestataire à partir de ses données (RG-008).
+ * Calcule le statut réel d'un prestataire à partir de ses données (RG-008) :
  *
- * Règles :
- *  - statut figé `annulé` → conservé tel quel.
- *  - départ réel renseigné → `terminé`.
- *  - arrivée réelle renseignée → `présent`, ou `en_retard` si le retard
- *    dépasse la tolérance.
- *  - sinon → `prévu` (ou `absent` si déjà marqué absent).
+ *   if (actual_departure_time)        → 'terminé'
+ *   if (!actual_arrival_time)         → 'prévu'
+ *   if (delay_minutes > 15)           → 'en_retard'
+ *   else                              → 'présent'
+ *
+ * Les statuts non déductibles des horaires (`annulé`, `absent`) renseignés
+ * manuellement sont conservés.
  *
  * @param provider Enregistrement de présence prestataire.
  * @returns Le statut calculé.
@@ -158,23 +162,22 @@ export function computeProviderStatus(
 ): ProviderStatus {
   if (provider.status === 'annulé') return 'annulé';
 
-  if (provider.actual_departure) return 'terminé';
+  if (provider.actual_departure_time) return 'terminé';
 
-  if (provider.actual_arrival) {
-    if (provider.planned_arrival) {
-      const delay = computeProviderDelay(
-        provider.planned_arrival,
-        provider.actual_arrival,
-      );
-      if (delay !== null && delay > DELAY_TOLERANCE_MINUTES) {
-        return 'en_retard';
-      }
-    }
-    return 'présent';
+  if (!provider.actual_arrival_time) {
+    return provider.status === 'absent' ? 'absent' : 'prévu';
   }
 
-  if (provider.status === 'absent') return 'absent';
-  return 'prévu';
+  if (provider.planned_arrival_time) {
+    const delay = computeProviderDelay(
+      provider.planned_arrival_time,
+      provider.actual_arrival_time,
+    );
+    if (delay !== null && delay > DELAY_TOLERANCE_MINUTES) {
+      return 'en_retard';
+    }
+  }
+  return 'présent';
 }
 
 /* ------------------------------------------------------------------ */
@@ -226,8 +229,8 @@ export function formatHours(decimal: number): string {
 }
 
 /**
- * Formate une valeur monétaire en euros (français).
- * Ex : 23.96 → "23,96 €". `null` → "—" (prix manquant, RG-005).
+ * Formate une valeur monétaire HT (convention CDC : `toFixed(2) + ' € HT'`).
+ * Ex : 23.96 → "23.96 € HT". `null` → "—" (prix manquant, RG-005).
  *
  * @param value Montant, ou `null` si indisponible.
  * @returns Chaîne formatée, ou "—".
@@ -236,8 +239,5 @@ export function formatEuro(value: number | null): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return '—';
   }
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(value);
+  return `${value.toFixed(2)} € HT`;
 }

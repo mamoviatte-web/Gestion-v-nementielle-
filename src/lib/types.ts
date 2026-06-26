@@ -1,14 +1,9 @@
 /**
  * Types TypeScript — Stade Maurice David (CDC V1.1 — Provence Rugby)
  *
- * Ce fichier décrit :
- *  1. Les enums correspondant aux contraintes CHECK de la base PostgreSQL
- *  2. Un type par table (les 10 tables du modèle de données)
- *  3. Les types d'état de l'UI
- *  4. Les types utilitaires de réponse Supabase
- *
- * Convention : noms de propriétés en anglais (snake_case côté DB,
- * conservé tel quel pour coller aux colonnes Supabase).
+ * Source de vérité : CLAUDE.md (noms de tables/colonnes EXACTS).
+ * Un type par table (10 tables métier + `users`), enums miroir des
+ * contraintes CHECK, types d'état UI et réponses Supabase.
  */
 
 /* ------------------------------------------------------------------ */
@@ -21,14 +16,24 @@ export type UserRole = 'ROLE_STADE' | 'ROLE_RESPONSABLE';
 /** Type fonctionnel d'un espace. */
 export type SpaceType = 'VIP' | 'Bar' | 'Buvette';
 
-/** Catégories du catalogue produits. */
+/** Catégories du catalogue produits (libellés au pluriel — CDC). */
 export type ProductCategory =
-  | 'Vin'
-  | 'Bière'
+  | 'Vins'
+  | 'Bières'
   | 'Soft'
-  | 'Sirop'
+  | 'Sirops'
   | 'Spiritueux'
   | 'Matériel';
+
+/** Type d'événement. */
+export type EventType =
+  | 'match'
+  | 'séminaire'
+  | 'cocktail'
+  | 'réception_vip'
+  | 'événement_partenaire'
+  | 'réunion'
+  | 'autre';
 
 /** Cycle de vie d'un événement. */
 export type EventStatus =
@@ -39,10 +44,7 @@ export type EventStatus =
   | 'clôturé'
   | 'archivé';
 
-/** Type d'événement. */
-export type EventType = 'match' | 'séminaire' | 'privatisation' | 'autre';
-
-/** Statut d'une dotation runner (préparation logistique d'un espace). */
+/** Statut d'une dotation runner. */
 export type RunnerStatus =
   | 'à_préparer'
   | 'préparé'
@@ -50,7 +52,7 @@ export type RunnerStatus =
   | 'contrôlé'
   | 'annulé';
 
-/** État physique d'un produit lors d'un mouvement de stock. */
+/** État physique d'un produit (sur une ligne de stock). */
 export type ProductState =
   | 'fermé'
   | 'ouvert'
@@ -59,6 +61,27 @@ export type ProductState =
   | 'périmé'
   | 'fût_vide'
   | 'fût_percuté';
+
+/** Type de mouvement de stock (RG-002). */
+export type MovementType =
+  | 'entrée'
+  | 'sortie'
+  | 'réassort'
+  | 'retour'
+  | 'casse'
+  | 'perte'
+  | 'correction'
+  | 'inventaire';
+
+/** Type de prestataire (CDC §7). */
+export type ProviderType =
+  | 'traiteur'
+  | 'sécurité'
+  | 'nettoyage'
+  | 'technique'
+  | 'logistique'
+  | 'animation'
+  | 'autre';
 
 /** Statut de présence d'un prestataire (RG-008). */
 export type ProviderStatus =
@@ -69,7 +92,7 @@ export type ProviderStatus =
   | 'absent'
   | 'annulé';
 
-/** Phase de saisie de stock dans le cycle d'un événement. */
+/** Phase de saisie de stock dans le cycle d'un événement (état UI uniquement). */
 export type StockPhase = 'ouverture' | 'reassort' | 'cloture';
 
 /* ------------------------------------------------------------------ */
@@ -78,163 +101,190 @@ export type StockPhase = 'ouverture' | 'reassort' | 'cloture';
 
 /** Table `spaces` — les 16 espaces du stade. */
 export interface Space {
-  id: string;
-  /** Libellé affiché (ex: "Salon Nord"). */
-  name: string;
+  space_id: string;
+  space_name: string;
+  space_type: SpaceType;
   /** Code d'accès unique servant d'identifiant Responsable (ex: "SN2026"). */
-  code: string;
-  type: SpaceType;
-  /** Capacité indicative (optionnelle). */
+  access_code: string;
   capacity: number | null;
+  active: boolean;
+  created_at: string;
+}
+
+/** Table `users` — registre applicatif des comptes. */
+export interface User {
+  user_id: string;
+  name: string;
+  email: string | null;
+  role: UserRole;
+  space_id: string | null;
+  is_active: boolean;
+  last_login_at: string | null;
   created_at: string;
 }
 
 /** Table `products` — catalogue produits. */
 export interface Product {
-  id: string;
-  name: string;
+  product_id: string;
+  product_name: string;
   category: ProductCategory;
-  /** Unité de comptage (ex: "bouteille", "fût", "verre", "pièce"). */
+  /** Unité de comptage (ex: "btl", "fût", "u"). */
   unit: string;
-  /**
-   * Prix unitaire HT. NULL = prix manquant (RG-003 / RG-005).
-   * Le matériel n'a pas de prix HT.
-   */
-  unit_price_ht: number | null;
-  /** Conditionnement (ex: "75cl", "30L"), optionnel. */
   packaging: string | null;
-  /** Produit actif dans le catalogue. */
+  /** Prix unitaire HT. NULL = prix manquant (RG-003 / RG-005). */
+  unit_price_ht: number | null;
+  stock_min: number;
   active: boolean;
-  created_at: string;
 }
+
+/** Variante de `products` sans le prix HT (RG-003, contexte Responsable). */
+export type ProductPublic = Omit<Product, 'unit_price_ht'>;
 
 /** Table `events` — événements. */
 export interface Event {
-  id: string;
-  name: string;
-  type: EventType;
+  event_id: string;
+  event_name: string;
+  event_type: EventType | null;
   /** Date de l'événement (YYYY-MM-DD). */
-  date: string;
-  /** Heure de début (HH:MM). */
-  start_time: string;
-  /** Affluence attendue. */
+  event_date: string;
+  /** Heure de début (HH:MM[:SS]). */
+  start_time: string | null;
+  /** Heure de fin (HH:MM[:SS]). */
+  end_time: string | null;
   expected_attendees: number | null;
   status: EventStatus;
   created_at: string;
-  updated_at: string;
 }
 
-/** Table `event_spaces` — espaces ouverts pour un événement. */
+/** Table `event_spaces` — espaces activés pour un événement. */
 export interface EventSpace {
   id: string;
   event_id: string;
   space_id: string;
-  /** Nom du responsable saisi à la connexion (RG-001), optionnel. */
-  responsable_name: string | null;
-  created_at: string;
+  /** Nom du responsable pré-rempli (le nom effectif est saisi via RG-001). */
+  responsible_default_name: string | null;
 }
 
-/** Table `runner_dotations` — dotations logistiques préparées par le Stade. */
+/** Table `runner_dotations` — fiches runner digitalisées (CDC §8). */
 export interface RunnerDotation {
-  id: string;
+  dotation_id: string;
   event_id: string;
   space_id: string;
   product_id: string;
-  /** Quantité dotée. */
-  quantity: number;
-  status: RunnerStatus;
-  created_at: string;
+  planned_qty: number;
+  office_qty: number;
+  cartons_to_move: number;
+  runner_status: RunnerStatus;
+  runner_comment: string | null;
   updated_at: string;
 }
 
-/** Table `event_stock_lines` — lignes de stock par espace/produit/événement. */
+/** Table `event_stock_lines` — état stock par espace/produit/événement (CDC §9). */
 export interface EventStockLine {
-  id: string;
+  line_id: string;
   event_id: string;
   space_id: string;
   product_id: string;
-  /** Stock initial (ouverture). */
   initial_qty: number;
-  /** Réassort cumulé en cours d'événement. */
   reassort_qty: number;
   /** Stock final (clôture), NULL tant que non saisi. */
   final_qty: number | null;
-  /**
-   * Prix unitaire HT figé pour cette ligne (snapshot du catalogue).
-   * Colonne INTERDITE au ROLE_RESPONSABLE (RG-003).
-   */
-  unit_price_ht: number | null;
-  phase: StockPhase;
-  created_at: string;
-  updated_at: string;
+  product_state: ProductState | null;
+  /** Commentaire obligatoire si consommation < 0 (RG-004). */
+  anomaly_comment: string | null;
+  /** Traçabilité nominative obligatoire (RG-001). */
+  responsable_nom: string;
+  submitted_at: string | null;
 }
 
-/** Table `stock_movements` — journal des mouvements de stock. */
+/** Table `stock_movements` — historique complet (RG-002). */
 export interface StockMovement {
-  id: string;
+  movement_id: string;
   event_id: string;
   space_id: string;
   product_id: string;
-  /** Quantité du mouvement (positive). */
-  quantity: number;
-  /** État physique du produit concerné. */
-  state: ProductState;
-  phase: StockPhase;
-  /** Auteur du mouvement (nom responsable ou compte stade). */
-  created_by: string | null;
+  movement_type: MovementType;
+  qty: number;
+  responsable_nom: string;
   created_at: string;
 }
 
-/** Table `provider_presence` — présence des prestataires (RG-008). */
+/** Table `provider_presence` — présence des prestataires (CDC §7 / RG-008). */
 export interface ProviderPresence {
-  id: string;
+  provider_presence_id: string;
   event_id: string;
-  assigned_space_id: string;
-  /** Nom du prestataire. */
-  name: string;
-  /** Rôle / fonction (optionnel). */
-  role: string | null;
-  /** Heure d'arrivée prévue (HH:MM). */
-  planned_arrival: string | null;
-  /** Heure de départ prévue (HH:MM). */
-  planned_departure: string | null;
-  /** Heure d'arrivée réelle (HH:MM). */
-  actual_arrival: string | null;
-  /** Heure de départ réel (HH:MM). */
-  actual_departure: string | null;
+  /** NULL = prestataire pour tout le stade. */
+  space_id: string | null;
+  provider_company: string;
+  provider_type: ProviderType;
+  provider_contact_name: string | null;
+  provider_phone: string | null;
+  planned_arrival_time: string | null;
+  actual_arrival_time: string | null;
+  planned_start_time: string | null;
+  actual_start_time: string | null;
+  planned_end_time: string | null;
+  actual_end_time: string | null;
+  actual_departure_time: string | null;
   status: ProviderStatus;
-  created_at: string;
-  updated_at: string;
+  responsable_nom: string | null;
+  comment: string | null;
 }
 
-/** Table `schedules` — horaires du personnel par espace. */
+/** Table `schedules` — horaires staff par espace. */
 export interface Schedule {
-  id: string;
+  schedule_id: string;
   event_id: string;
   space_id: string;
-  /** Nom de la personne planifiée. */
   staff_name: string;
   role: string | null;
-  /** Heure d'arrivée (HH:MM). */
-  arrival: string;
-  /** Heure de départ (HH:MM). */
-  departure: string;
-  created_at: string;
-  updated_at: string;
+  planned_arrival: string | null;
+  planned_departure: string | null;
+  actual_departure: string | null;
+  confirmed_by_staff: boolean;
+  confirmed_by_manager: boolean;
 }
 
-/** Table `debriefs` — débriefs de fin d'événement par espace. */
+/** Table `debriefs` — formulaire post-événement (7 sections). */
 export interface Debrief {
-  id: string;
+  debrief_id: string;
   event_id: string;
   space_id: string;
-  /** Contenu libre du débrief. */
-  content: string;
-  /** Note de satisfaction 1–5 (optionnelle). */
-  rating: number | null;
-  created_by: string | null;
+  responsable: string;
+  // 1.1 Effectif
+  nb_personnes: number | null;
+  effectif_adapte: string | null;
+  effectif_comment: string | null;
+  efficacite: string | null;
+  efficacite_comment: string | null;
+  suggestion_effectif: string | null;
+  // 1.2 Organisation
+  amenagement: string | null;
+  amenagement_comment: string | null;
+  problemes_espace: string | null;
+  // 1.3 Stocks
+  stocks_suffisants: string | null;
+  stocks_comment: string | null;
+  suggestions_stocks: string | null;
+  besoins_materiel: string | null;
+  // 2.1 Communication interne
+  consignes_claires: string | null;
+  consignes_comment: string | null;
+  problemes_coordination: string | null;
+  // 2.2 Communication clients
+  retours_clients: string | null;
+  retours_clients_detail: string | null;
+  // 3. Propreté
+  espace_etat_bon: string | null;
+  espace_etat_comment: string | null;
+  problemes_dechets: string | null;
+  suggestions_proprete: string | null;
+  // 5. Suggestions
+  suggestions_generales: string | null;
+  besoins_specifiques: string | null;
+  signature: boolean;
+  submitted_at: string | null;
   created_at: string;
-  updated_at: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -255,7 +305,7 @@ export type ProviderTab = 'stock' | 'schedule' | 'debrief';
 /** Ligne de saisie de stock enrichie (jointure produit) pour l'UI. */
 export interface StockLineView extends EventStockLine {
   product: Product;
-  /** Consommation calculée (CDC §9). */
+  /** Consommation calculée (CDC §9) — peut être négative (anomalie RG-004). */
   consumed: number;
   /** Coût calculé, null si prix manquant (RG-005). */
   cost: number | null;
