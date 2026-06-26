@@ -138,3 +138,36 @@ from events e
 cross join spaces s
 where e.event_name = 'Provence Rugby vs Montauban' and e.event_date = date '2026-06-28'
 on conflict (event_id, space_id) do nothing;
+
+-- ---------------------------------------------------------------------
+-- 6. Dotations runner de démonstration (pour tester le flux Phase 2)
+--    Salon Nord (SN2026) + Buvette 1 (BV12026).
+-- ---------------------------------------------------------------------
+insert into runner_dotations (event_id, space_id, product_id, planned_qty, runner_status)
+select e.event_id, s.space_id, p.product_id, v.qty, 'à_préparer'
+from events e
+join spaces s on s.access_code = 'SN2026'
+join (values
+  ('Mumm Cordon Rouge', 24),
+  ('Rosé Réal',         36),
+  ('Fût BUD',            2),
+  ('Cristaline 50cl',  120),
+  ('Pepsi bouteille',   48)
+) as v(pname, qty) on true
+join products p on p.product_name = v.pname
+where e.event_name = 'Provence Rugby vs Montauban' and e.event_date = date '2026-06-28'
+on conflict (event_id, space_id, product_id) do nothing;
+
+insert into runner_dotations (event_id, space_id, product_id, planned_qty, runner_status)
+select e.event_id, s.space_id, p.product_id, v.qty, 'à_préparer'
+from events e
+join spaces s on s.access_code = 'BV12026'
+join (values
+  ('Bière en verre',   200),
+  ('Cristaline 50cl',  150),
+  ('Pepsi bouteille',   60),
+  ('Schweppes',         40)
+) as v(pname, qty) on true
+join products p on p.product_name = v.pname
+where e.event_name = 'Provence Rugby vs Montauban' and e.event_date = date '2026-06-28'
+on conflict (event_id, space_id, product_id) do nothing;
