@@ -65,13 +65,18 @@ on conflict do nothing;
 
 -- ---------------------------------------------------------------------
 -- 3. Comptes (table applicative `users`)
---    1 compte ROLE_STADE + 16 comptes ROLE_RESPONSABLE (un par espace).
+--    3 comptes ROLE_STADE nominatifs (Provence Rugby) + 16 ROLE_RESPONSABLE.
 --    ⚠ Ce sont les enregistrements MÉTIER. Les comptes d'AUTHENTIFICATION
---      Supabase (auth.users) doivent être créés à part (cf. §4).
+--      Supabase (auth.users) sont créés via le Dashboard (cf. §4 et README).
 -- ---------------------------------------------------------------------
-insert into users (name, email, role, space_id)
-select 'Admin Stade', 'admin@stade-mauricedavid.fr', 'ROLE_STADE', null
-where not exists (select 1 from users where email = 'admin@stade-mauricedavid.fr');
+insert into users (name, email, role)
+select v.name, v.email, 'ROLE_STADE'
+from (values
+  ('M. Viatte',   'mviatte@provencerugby.com'),
+  ('C. Sadras',   'csadras@provencerugby.com'),
+  ('A. Martinez', 'amartinez@provencerugby.com')
+) as v(name, email)
+where not exists (select 1 from users u where u.email = v.email);
 
 insert into users (name, email, role, space_id)
 select 'Responsable ' || s.space_name,
@@ -84,42 +89,47 @@ where not exists (
 );
 
 -- ---------------------------------------------------------------------
--- 4. Comptes d'authentification Supabase
---    La création de auth.users se fait normalement via le Dashboard
---    (Authentication → Users) ou l'Admin API, avec user_metadata :
---      ROLE_STADE       : { "role":"ROLE_STADE", "name":"Admin Stade" }
---      ROLE_RESPONSABLE : { "role":"ROLE_RESPONSABLE", "space_id":"<uuid>",
---                           "space_code":"SN2026" }
---    Responsable : email = {code}@stade.fr, password = {code}.
+-- 4. Comptes d'authentification Supabase (ROLE_STADE)
+--    Méthode recommandée : Dashboard → Authentication → Users → Add user
+--    (cf. README, section « Création des comptes »), avec user_metadata :
+--      { "role":"ROLE_STADE", "name":"<Nom>" }
+--    Mot de passe temporaire : StadeMD2026!  (à changer à la 1re connexion).
 --
---    Le bloc ci-dessous tente une création directe du compte admin (local).
---    email: admin@stade-mauricedavid.fr  /  password: admin2026
+--    Le bloc ci-dessous tente une création directe (utile en local / self-host).
 -- ---------------------------------------------------------------------
 do $$
 declare
-  v_user_id uuid := gen_random_uuid();
+  acct record;
 begin
-  if not exists (select 1 from auth.users where email = 'admin@stade-mauricedavid.fr') then
-    insert into auth.users (
-      id, instance_id, aud, role, email,
-      encrypted_password, email_confirmed_at,
-      raw_app_meta_data, raw_user_meta_data,
-      created_at, updated_at
-    ) values (
-      v_user_id,
-      '00000000-0000-0000-0000-000000000000',
-      'authenticated', 'authenticated',
-      'admin@stade-mauricedavid.fr',
-      crypt('admin2026', gen_salt('bf')),
-      now(),
-      '{"provider":"email","providers":["email"]}'::jsonb,
-      '{"role":"ROLE_STADE","name":"Admin Stade"}'::jsonb,
-      now(), now()
-    );
-  end if;
+  for acct in
+    select * from (values
+      ('mviatte@provencerugby.com',   'M. Viatte'),
+      ('csadras@provencerugby.com',   'C. Sadras'),
+      ('amartinez@provencerugby.com', 'A. Martinez')
+    ) as v(email, name)
+  loop
+    if not exists (select 1 from auth.users where email = acct.email) then
+      insert into auth.users (
+        id, instance_id, aud, role, email,
+        encrypted_password, email_confirmed_at,
+        raw_app_meta_data, raw_user_meta_data,
+        created_at, updated_at
+      ) values (
+        gen_random_uuid(),
+        '00000000-0000-0000-0000-000000000000',
+        'authenticated', 'authenticated',
+        acct.email,
+        crypt('StadeMD2026!', gen_salt('bf')),
+        now(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        jsonb_build_object('role', 'ROLE_STADE', 'name', acct.name),
+        now(), now()
+      );
+    end if;
+  end loop;
 exception
   when insufficient_privilege or undefined_table then
-    raise notice 'Création auth.users ignorée (droits insuffisants) — créer le compte via le Dashboard Supabase.';
+    raise notice 'Création auth.users ignorée (droits insuffisants) — créer les comptes via le Dashboard Supabase.';
 end $$;
 
 -- ---------------------------------------------------------------------
