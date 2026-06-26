@@ -14,7 +14,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useLateProvidersCount } from '@/hooks/useProviders';
 
 interface NavItem {
   to: string;
@@ -33,11 +35,18 @@ const NAV: NavItem[] = [
 export function AdminLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { data: lateCount = 0 } = useLateProvidersCount();
 
   async function handleLogout() {
     await logout();
     navigate('/login', { replace: true });
   }
+
+  const lateBadge = lateCount > 0 && (
+    <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white">
+      <AlertTriangle className="h-3.5 w-3.5" /> {lateCount} en retard
+    </span>
+  );
 
   return (
     <div className="flex min-h-full bg-slate-50">
@@ -46,6 +55,7 @@ export function AdminLayout() {
         <div className="px-5 py-5">
           <p className="text-lg font-bold leading-tight">Stade Maurice David</p>
           <p className="text-xs text-slate-300">Back-office Stade</p>
+          {lateBadge && <div className="mt-2">{lateBadge}</div>}
         </div>
         <nav className="flex-1 space-y-1 px-3">
           {NAV.map(({ to, label, icon: Icon }) => (
@@ -82,13 +92,16 @@ export function AdminLayout() {
         {/* Header mobile */}
         <header className="flex items-center justify-between border-b bg-white px-4 py-3 md:hidden">
           <p className="font-semibold text-provence">Stade Maurice David</p>
-          <button
-            onClick={handleLogout}
-            className="text-slate-500"
-            aria-label="Déconnexion"
-          >
-            <LogOut className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            {lateBadge}
+            <button
+              onClick={handleLogout}
+              className="text-slate-500"
+              aria-label="Déconnexion"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 px-4 py-5 pb-24 md:px-8 md:pb-8">

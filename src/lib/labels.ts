@@ -7,6 +7,7 @@ import type {
   EventStatus,
   ProductState,
   ProviderStatus,
+  ProviderType,
   RunnerStatus,
   StatusTone,
 } from './types';
@@ -68,3 +69,19 @@ export const PRODUCT_STATE_META: Record<ProductState, EnumMeta> = {
 export const PRODUCT_STATE_OPTIONS = (
   Object.keys(PRODUCT_STATE_META) as ProductState[]
 ).map((value) => ({ value, label: PRODUCT_STATE_META[value].label }));
+
+/** Libellés des types de prestataire. */
+export const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
+  traiteur: 'Traiteur',
+  sécurité: 'Sécurité',
+  nettoyage: 'Nettoyage',
+  technique: 'Technique',
+  logistique: 'Logistique',
+  animation: 'Animation',
+  autre: 'Autre',
+};
+
+/** Options <Select> pour le type de prestataire. */
+export const PROVIDER_TYPE_OPTIONS = (
+  Object.keys(PROVIDER_TYPE_LABELS) as ProviderType[]
+).map((value) => ({ value, label: PROVIDER_TYPE_LABELS[value] }));

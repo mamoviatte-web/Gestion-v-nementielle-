@@ -12,7 +12,7 @@ import { useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Boxes, PackageCheck, PlusCircle, ClipboardCheck } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { useOpenEventForSpace } from '@/hooks/useEvents';
+import { useOpenEventsForSpace } from '@/hooks/useEvents';
 import {
   useStock,
   type ClosingLineInput,
@@ -74,14 +74,20 @@ function StockEntryContent({
   spaceId: string;
   responsableNom: string;
 }) {
-  const eventQuery = useOpenEventForSpace(spaceId);
-  const event = eventQuery.data;
+  const eventsQuery = useOpenEventsForSpace(spaceId);
+  const events = eventsQuery.data ?? [];
+
+  // Sélecteur d'événement (si plusieurs ouverts) — trié par date décroissante.
+  const [selectedEventId, setSelectedEventId] = useState<string>('');
+  const event =
+    events.find((e) => e.event_id === selectedEventId) ?? events[0] ?? null;
+
   const stock = useStock(event?.event_id, spaceId, { withPrices: false });
 
   // Sous-mode local de la vue « en cours ».
   const [mode, setMode] = useState<'view' | 'reassort' | 'closing'>('view');
 
-  if (eventQuery.isLoading) return <Spinner fullPage label="Chargement…" />;
+  if (eventsQuery.isLoading) return <Spinner fullPage label="Chargement…" />;
   if (!event) {
     return (
       <EmptyState
@@ -93,10 +99,25 @@ function StockEntryContent({
   }
 
   const header = (
-    <PageHeader
-      title="Saisie des stocks"
-      description={`${event.event_name} — ${new Date(event.event_date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}`}
-    />
+    <>
+      <PageHeader
+        title="Saisie des stocks"
+        description={`${event.event_name} — ${new Date(event.event_date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}`}
+      />
+      {events.length > 1 && (
+        <div className="mb-4 max-w-sm">
+          <Select
+            label="Événement"
+            value={event.event_id}
+            onChange={(e) => setSelectedEventId(e.target.value)}
+            options={events.map((ev) => ({
+              value: ev.event_id,
+              label: `${ev.event_name} — ${new Date(ev.event_date).toLocaleDateString('fr-FR')}`,
+            }))}
+          />
+        </div>
+      )}
+    </>
   );
 
   if (stock.loading) {

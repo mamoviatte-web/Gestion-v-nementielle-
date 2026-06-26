@@ -65,23 +65,23 @@ export function useEventSpaces(eventId: string | undefined) {
 }
 
 /**
- * Événement ouvert pour l'espace du Responsable. La RLS restreint déjà aux
- * événements dont l'espace fait partie ; on filtre sur les statuts ouverts
- * et on retient le plus proche.
+ * Événements ouverts visibles par un Responsable (triés par date décroissante).
+ * La RLS restreint déjà aux événements dont l'espace du Responsable fait
+ * partie ; on filtre ici sur les statuts ouverts. Un sélecteur côté UI permet
+ * de choisir l'événement si plusieurs sont ouverts simultanément.
  */
-export function useOpenEventForSpace(spaceId: string | undefined) {
+export function useOpenEventsForSpace(spaceId: string | undefined) {
   return useQuery({
-    queryKey: ['openEvent', spaceId],
+    queryKey: ['openEvents', spaceId],
     enabled: !!spaceId,
-    queryFn: async (): Promise<Event | null> => {
+    queryFn: async (): Promise<Event[]> => {
       const { data, error } = await supabase
         .from('events')
         .select('*')
         .in('status', OPEN_STATUSES)
-        .order('event_date', { ascending: true });
+        .order('event_date', { ascending: false });
       if (error) throw error;
-      const events = (data ?? []) as Event[];
-      return events[0] ?? null;
+      return (data ?? []) as Event[];
     },
   });
 }

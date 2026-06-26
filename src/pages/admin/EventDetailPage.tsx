@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { useEvent, useEventSpaces } from '@/hooks/useEvents';
 import { EVENT_STATUS_META } from '@/lib/labels';
 import { StockDotationsTable } from '@/components/stock/StockDotationsTable';
+import { ProvidersPanel } from '@/components/providers/ProvidersPanel';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Select, Spinner } from '@/components/ui';
 
@@ -97,7 +98,7 @@ export default function EventDetailPage() {
         ))}
 
       {tab === 'prestataires' && (
-        <Alert variant="info">Module prestataires — à venir (Phase 4).</Alert>
+        <ProvidersPanel eventId={event.event_id} spaces={spaces} />
       )}
       {tab === 'horaires' && (
         <Alert variant="info">Horaires staff — à venir (Phase 5).</Alert>
