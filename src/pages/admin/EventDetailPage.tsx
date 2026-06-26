@@ -2,14 +2,15 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useEvent, useEventSpaces } from '@/hooks/useEvents';
+import { useEvent, useEventSpaces, useEventActions } from '@/hooks/useEvents';
+import { useEventStats } from '@/hooks/useEventStats';
 import { EVENT_STATUS_META } from '@/lib/labels';
 import { StockDotationsTable } from '@/components/stock/StockDotationsTable';
 import { ProvidersPanel } from '@/components/providers/ProvidersPanel';
 import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Alert, Badge, Select, Spinner } from '@/components/ui';
+import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
 
 type Tab = 'stocks' | 'prestataires' | 'horaires' | 'debriefs';
 
@@ -24,6 +25,8 @@ export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const eventQuery = useEvent(id);
   const spacesQuery = useEventSpaces(id);
+  const stats = useEventStats(id);
+  const { setStatus, updating } = useEventActions(id);
   const [tab, setTab] = useState<Tab>('stocks');
   const [spaceId, setSpaceId] = useState<string>('');
 
@@ -57,6 +60,37 @@ export default function EventDetailPage() {
         description={`${new Date(event.event_date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}${event.start_time ? ` · ${event.start_time.slice(0, 5)}` : ''}${event.expected_attendees ? ` · ${event.expected_attendees} spectateurs` : ''}`}
         action={<Badge tone={status.tone}>{status.label}</Badge>}
       />
+
+      {/* Compteurs + actions de statut */}
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <Badge tone="neutral">
+          Stocks soumis : {stats.spacesClosed}/{stats.spacesTotal}
+        </Badge>
+        <Badge tone="neutral">
+          Débriefs : {stats.debriefsReceived}/{stats.spacesTotal}
+        </Badge>
+        <div className="ml-auto flex gap-2">
+          {(event.status === 'brouillon' || event.status === 'préparé') && (
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={updating}
+              onClick={() => void setStatus('en_cours')}
+            >
+              Passer en cours
+            </Button>
+          )}
+          {event.status !== 'clôturé' && event.status !== 'archivé' && (
+            <Button
+              size="sm"
+              loading={updating}
+              onClick={() => void setStatus('clôturé')}
+            >
+              Clôturer l'événement
+            </Button>
+          )}
+        </div>
+      </div>
 
       {/* Onglets */}
       <div className="mb-5 flex flex-wrap gap-1 border-b border-slate-200">

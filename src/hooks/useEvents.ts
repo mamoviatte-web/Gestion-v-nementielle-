@@ -7,9 +7,9 @@
  * - useOpenEventForSpace() : événement ouvert visible par un Responsable.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { Event, EventSpace, Space } from '@/lib/types';
+import type { Event, EventSpace, EventStatus, Space } from '@/lib/types';
 
 /** Statuts considérés comme « ouverts » côté Responsable. */
 const OPEN_STATUSES = ['préparé', 'en_cours', 'clôture_en_attente'];
@@ -62,6 +62,32 @@ export function useEventSpaces(eventId: string | undefined) {
       return (data ?? []) as EventSpaceWithSpace[];
     },
   });
+}
+
+/**
+ * Mutations de statut d'événement (ROLE_STADE). « Passer en cours » et
+ * « Clôturer » (RG-006 — la RLS réserve déjà l'écriture sur events au Stade).
+ */
+export function useEventActions(eventId: string | undefined) {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: async (status: EventStatus) => {
+      if (!eventId) throw new Error('Événement manquant.');
+      const { error } = await supabase
+        .from('events')
+        .update({ status })
+        .eq('event_id', eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+      void queryClient.invalidateQueries({ queryKey: ['events'] });
+    },
+  });
+  return {
+    setStatus: (status: EventStatus) => mutation.mutateAsync(status),
+    updating: mutation.isPending,
+  };
 }
 
 /**
