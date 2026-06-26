@@ -8,6 +8,7 @@ import { useStock } from '@/hooks/useStock';
 import { computeConsumed, computeCost, formatEuro } from '@/lib/calculations';
 import { PRODUCT_STATE_META } from '@/lib/labels';
 import { RunnerStatusBadge } from '@/components/stock/RunnerStatusBadge';
+import { MovementHistory } from '@/components/stock/MovementHistory';
 import {
   Alert,
   Badge,
@@ -203,6 +204,14 @@ export function StockDotationsTable({
           * Total partiel : des produits consommés n'ont pas de prix HT (RG-005).
         </p>
       )}
+
+      <div className="pt-4">
+        <MovementHistory
+          eventId={eventId}
+          spaceId={spaceId}
+          productMap={stock.productMap}
+        />
+      </div>
     </div>
   );
 }

@@ -3,12 +3,14 @@
  * Soumission irréversible. Si déjà soumis : vue récapitulative lecture seule.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, MessageSquare, Send } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { useOpenEventsForSpace } from '@/hooks/useEvents';
 import { useDebrief } from '@/hooks/useDebriefs';
+import { useAutosaveDraft } from '@/hooks/useAutosaveDraft';
 import {
   DEBRIEF_SECTIONS,
   emptyDebriefValues,
@@ -52,10 +54,22 @@ function DebriefContent({
   const eventsQuery = useOpenEventsForSpace(spaceId);
   const event = (eventsQuery.data ?? [])[0] ?? null;
   const { debrief, submitDebrief, submitting } = useDebrief(event?.event_id, spaceId);
+  const { showToast } = useToast();
 
   const [step, setStep] = useState(0);
   const [values, setValues] = useState<DebriefFormValues>(emptyDebriefValues);
   const [error, setError] = useState<string | null>(null);
+
+  // Brouillon local (offline-first) — restauré au montage, effacé à la soumission.
+  const draftKey = `debrief.${event?.event_id ?? 'none'}.${spaceId}`;
+  const { loadDraft, clearDraft } = useAutosaveDraft(draftKey, values);
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current || !event) return;
+    restored.current = true;
+    const draft = loadDraft();
+    if (draft) setValues(draft);
+  }, [event, loadDraft]);
 
   const section = DEBRIEF_SECTIONS[step];
   const isLast = step === DEBRIEF_SECTIONS.length - 1;
@@ -99,8 +113,13 @@ function DebriefContent({
     setError(null);
     try {
       await submitDebrief(values, responsable);
+      clearDraft();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur lors de la soumission.');
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        showToast('Données sauvegardées localement', 'warning');
+      } else {
+        setError(e instanceof Error ? e.message : 'Erreur lors de la soumission.');
+      }
     }
   }
 

@@ -17,6 +17,7 @@ const OPEN_STATUSES = ['préparé', 'en_cours', 'clôture_en_attente'];
 export function useEventsList() {
   return useQuery({
     queryKey: ['events'],
+    staleTime: 30_000,
     queryFn: async (): Promise<Event[]> => {
       const { data, error } = await supabase
         .from('events')

@@ -7,9 +7,10 @@
  */
 
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Boxes, Clock, MessageSquare, LogOut, type LucideIcon } from 'lucide-react';
+import { Boxes, Clock, MessageSquare, LogOut, WifiOff, type LucideIcon } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '@/context/AuthContext';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
 interface TabItem {
   to: string;
@@ -26,6 +27,7 @@ const TABS: TabItem[] = [
 export function ProviderLayout() {
   const { user, responsableName, logout } = useAuth();
   const navigate = useNavigate();
+  const online = useNetworkStatus();
 
   async function handleLogout() {
     await logout();
@@ -47,12 +49,19 @@ export function ProviderLayout() {
               </p>
             )}
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1 text-sm text-slate-300 hover:text-white"
-          >
-            <LogOut className="h-4 w-4" /> Quitter
-          </button>
+          <div className="flex items-center gap-3">
+            {!online && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white">
+                <WifiOff className="h-3.5 w-3.5" /> Hors ligne
+              </span>
+            )}
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1 text-sm text-slate-300 hover:text-white"
+            >
+              <LogOut className="h-4 w-4" /> Quitter
+            </button>
+          </div>
         </div>
 
         {/* Onglets */}
