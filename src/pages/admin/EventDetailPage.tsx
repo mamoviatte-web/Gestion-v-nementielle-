@@ -6,6 +6,8 @@ import { useEvent, useEventSpaces } from '@/hooks/useEvents';
 import { EVENT_STATUS_META } from '@/lib/labels';
 import { StockDotationsTable } from '@/components/stock/StockDotationsTable';
 import { ProvidersPanel } from '@/components/providers/ProvidersPanel';
+import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
+import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Select, Spinner } from '@/components/ui';
 
@@ -100,11 +102,14 @@ export default function EventDetailPage() {
       {tab === 'prestataires' && (
         <ProvidersPanel eventId={event.event_id} spaces={spaces} />
       )}
-      {tab === 'horaires' && (
-        <Alert variant="info">Horaires staff — à venir (Phase 5).</Alert>
-      )}
+      {tab === 'horaires' &&
+        (selectedSpace ? (
+          <ScheduleAdminPanel eventId={event.event_id} spaceId={selectedSpace} />
+        ) : (
+          <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
+        ))}
       {tab === 'debriefs' && (
-        <Alert variant="info">Débriefs — à venir (Phase 5).</Alert>
+        <DebriefAdminPanel eventId={event.event_id} spaces={spaces} />
       )}
     </div>
   );
