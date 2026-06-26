@@ -85,3 +85,20 @@ export const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
 export const PROVIDER_TYPE_OPTIONS = (
   Object.keys(PROVIDER_TYPE_LABELS) as ProviderType[]
 ).map((value) => ({ value, label: PROVIDER_TYPE_LABELS[value] }));
+
+/**
+ * Tonalité d'un retard prestataire (RG-008) :
+ *   > 15 min → danger (rouge) · 1–15 min → warning (orange) · ≤ 0 → success (vert).
+ */
+export function delayTone(delay: number): StatusTone {
+  if (delay > 15) return 'danger';
+  if (delay > 0) return 'warning';
+  return 'success';
+}
+
+/** Classe de couleur texte associée au retard (pour affichage inline). */
+export function delayTextClass(delay: number): string {
+  if (delay > 15) return 'text-red-600';
+  if (delay > 0) return 'text-amber-600';
+  return 'text-emerald-600';
+}

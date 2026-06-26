@@ -47,6 +47,7 @@ export interface NewProvider {
   provider_phone?: string | null;
   planned_arrival_time?: string | null;
   planned_end_time?: string | null;
+  comment?: string | null;
 }
 
 export function useProviders(eventId: string | undefined) {
@@ -84,6 +85,7 @@ export function useProviders(eventId: string | undefined) {
         provider_phone: data.provider_phone || null,
         planned_arrival_time: data.planned_arrival_time || null,
         planned_end_time: data.planned_end_time || null,
+        comment: data.comment || null,
         status: 'prévu',
       });
       if (error) throw error;
@@ -117,6 +119,8 @@ export function useProviders(eventId: string | undefined) {
     addProvider: (data: NewProvider) => addMutation.mutateAsync(data),
     updateArrival: (id: string, actualArrival: string) =>
       updateMutation.mutateAsync({ id, fields: { actual_arrival_time: actualArrival } }),
+    updateDeparture: (id: string, actualDeparture: string) =>
+      updateMutation.mutateAsync({ id, fields: { actual_departure_time: actualDeparture } }),
     updateStatus: (id: string, fields: Partial<ProviderPresence>) =>
       updateMutation.mutateAsync({ id, fields }),
     submitting: addMutation.isPending || updateMutation.isPending,

@@ -16,7 +16,11 @@ import {
   computePresenceDuration,
   formatHours,
 } from '@/lib/calculations';
-import { PROVIDER_STATUS_META, PROVIDER_TYPE_LABELS } from '@/lib/labels';
+import {
+  PROVIDER_STATUS_META,
+  PROVIDER_TYPE_LABELS,
+  delayTextClass,
+} from '@/lib/labels';
 import type { ProviderPresence } from '@/lib/types';
 
 interface PresenceTableProps {
@@ -52,6 +56,7 @@ export function PresenceTable({
           <TH className="text-right">Durée</TH>
           <TH>Départ</TH>
           <TH>Statut</TH>
+          <TH>Observation</TH>
           <TH />
         </TR>
       </THead>
@@ -84,10 +89,11 @@ export function PresenceTable({
               <TD className="text-right">
                 {delay === null ? (
                   '—'
-                ) : delay > 15 ? (
-                  <span className="font-medium text-red-600">+{delay}</span>
                 ) : (
-                  `${delay > 0 ? '+' : ''}${delay}`
+                  <span className={`font-medium ${delayTextClass(delay)}`}>
+                    {delay > 0 ? '+' : ''}
+                    {delay}
+                  </span>
                 )}
               </TD>
               <TD className="text-right">
@@ -97,6 +103,7 @@ export function PresenceTable({
               <TD>
                 <Badge tone={meta.tone}>{meta.label}</Badge>
               </TD>
+              <TD className="max-w-[16rem] truncate" >{p.comment ?? '—'}</TD>
               <TD>
                 {editing ? (
                   <div className="flex items-center gap-1">

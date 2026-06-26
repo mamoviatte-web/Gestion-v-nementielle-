@@ -25,6 +25,7 @@ const EMPTY_FORM = {
   provider_phone: '',
   planned_arrival_time: '',
   planned_end_time: '',
+  comment: '',
 };
 
 export function ProvidersPanel({
@@ -34,7 +35,7 @@ export function ProvidersPanel({
   eventId: string;
   spaces: EventSpaceWithSpace[];
 }) {
-  const { providers, stats, addProvider, updateArrival, updateStatus, submitting } =
+  const { providers, stats, addProvider, updateArrival, updateDeparture, submitting } =
     useProviders(eventId);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -61,6 +62,7 @@ export function ProvidersPanel({
       provider_phone: form.provider_phone,
       planned_arrival_time: form.planned_arrival_time,
       planned_end_time: form.planned_end_time,
+      comment: form.comment,
     };
     try {
       await addProvider(payload);
@@ -154,6 +156,13 @@ export function ProvidersPanel({
               value={form.planned_end_time}
               onChange={(e) => setForm({ ...form, planned_end_time: e.target.value })}
             />
+            <div className="sm:col-span-2">
+              <Input
+                label="Commentaire"
+                value={form.comment}
+                onChange={(e) => setForm({ ...form, comment: e.target.value })}
+              />
+            </div>
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setShowForm(false)}>
@@ -180,9 +189,7 @@ export function ProvidersPanel({
               providers={list}
               spaceNameOf={spaceNameOf}
               onSetArrival={(id, t) => void updateArrival(id, t)}
-              onSetDeparture={(id, t) =>
-                void updateStatus(id, { actual_departure_time: t })
-              }
+              onSetDeparture={(id, t) => void updateDeparture(id, t)}
               disabled={submitting}
             />
           </div>
@@ -194,9 +201,7 @@ export function ProvidersPanel({
                 provider={p}
                 spaceName={spaceNameOf(p.space_id)}
                 onSetArrival={(id, t) => void updateArrival(id, t)}
-                onSetDeparture={(id, t) =>
-                  void updateStatus(id, { actual_departure_time: t })
-                }
+                onSetDeparture={(id, t) => void updateDeparture(id, t)}
                 disabled={submitting}
               />
             ))}

@@ -7,7 +7,11 @@ import {
   computePresenceDuration,
   formatHours,
 } from '@/lib/calculations';
-import { PROVIDER_STATUS_META, PROVIDER_TYPE_LABELS } from '@/lib/labels';
+import {
+  PROVIDER_STATUS_META,
+  PROVIDER_TYPE_LABELS,
+  delayTextClass,
+} from '@/lib/labels';
 import type { ProviderPresence } from '@/lib/types';
 
 interface ProviderCardProps {
@@ -68,10 +72,11 @@ export function ProviderCard({
           <dd>
             {delay === null ? (
               '—'
-            ) : delay > 15 ? (
-              <span className="font-medium text-red-600">+{delay} min</span>
             ) : (
-              `${delay > 0 ? '+' : ''}${delay} min`
+              <span className={`font-medium ${delayTextClass(delay)}`}>
+                {delay > 0 ? '+' : ''}
+                {delay} min
+              </span>
             )}
           </dd>
         </div>
