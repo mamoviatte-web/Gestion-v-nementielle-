@@ -99,6 +99,16 @@ npx tsx supabase/scripts/verify-rls.ts
 > ⚠ Les clés sont lues depuis l'environnement, **jamais commitées**.
 > `supabase/scripts/*.env` est exclu via `.gitignore`.
 
+## Agent Skills (outillage assistant, optionnel)
+
+Skills Supabase pour les outils d'IA. Réinstallation depuis le lockfile :
+
+```bash
+npx skills add supabase/agent-skills   # (ré)installe dans .agents/ (non versionné)
+```
+
+`skills-lock.json` est versionné ; le contenu installé (`.agents/`) ne l'est pas.
+
 ## Déploiement
 
 Voir [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) (Vercel + checklist finale).

@@ -28,3 +28,7 @@ dist-ssr
 .env.local
 .env.*.local
 supabase/scripts/*.env
+
+# Agent Skills installés (réinstallables via skills-lock.json) — on versionne
+# uniquement le lockfile, pas le contenu vendored.
+.agents/
