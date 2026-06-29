@@ -25,10 +25,12 @@ const EventDetailPage = lazy(() => import('@/pages/admin/EventDetailPage'));
 const CatalogPage = lazy(() => import('@/pages/admin/CatalogPage'));
 const SpacesPage = lazy(() => import('@/pages/admin/SpacesPage'));
 const ExportPage = lazy(() => import('@/pages/admin/ExportPage'));
+const RunnerSpaceDetail = lazy(() => import('@/pages/admin/RunnerSpaceDetail'));
 const ProviderHomePage = lazy(() => import('@/pages/provider/ProviderHomePage'));
 const StockEntryPage = lazy(() => import('@/pages/provider/StockEntryPage'));
 const SchedulePage = lazy(() => import('@/pages/provider/SchedulePage'));
 const DebriefPage = lazy(() => import('@/pages/provider/DebriefPage'));
+const RunnerTerrainView = lazy(() => import('@/pages/runner/RunnerTerrainView'));
 
 /** Redirection de la racine selon l'état d'authentification et le rôle. */
 function RootRedirect() {
@@ -49,6 +51,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
+        {/* Vue terrain runner publique (par jeton) */}
+        <Route path="/runner/:token" element={<RunnerTerrainView />} />
 
         {/* Espace Stade (ROLE_STADE) */}
         <Route
@@ -63,6 +67,7 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="events" element={<EventsPage />} />
           <Route path="events/:id" element={<EventDetailPage />} />
+          <Route path="events/:id/runner/:spaceId" element={<RunnerSpaceDetail />} />
           <Route path="catalog" element={<CatalogPage />} />
           <Route path="spaces" element={<SpacesPage />} />
           <Route path="export" element={<ExportPage />} />

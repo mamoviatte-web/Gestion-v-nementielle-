@@ -9,16 +9,20 @@ import { StockDotationsTable } from '@/components/stock/StockDotationsTable';
 import { ProvidersPanel } from '@/components/providers/ProvidersPanel';
 import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
+import { RunnerPlanningTab } from '@/components/runner/RunnerPlanningTab';
+import { RunnerGenerationModal } from '@/components/runner/RunnerGenerationModal';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
+import { Zap } from 'lucide-react';
 
-type Tab = 'stocks' | 'prestataires' | 'horaires' | 'debriefs';
+type Tab = 'stocks' | 'prestataires' | 'horaires' | 'debriefs' | 'runner';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'stocks', label: 'Stocks & Dotations' },
   { key: 'prestataires', label: 'Prestataires' },
   { key: 'horaires', label: 'Horaires Staff' },
   { key: 'debriefs', label: 'Débriefs' },
+  { key: 'runner', label: '🚀 Runner Auto' },
 ];
 
 export default function EventDetailPage() {
@@ -29,6 +33,7 @@ export default function EventDetailPage() {
   const { setStatus, updating } = useEventActions(id);
   const [tab, setTab] = useState<Tab>('stocks');
   const [spaceId, setSpaceId] = useState<string>('');
+  const [showRunnerModal, setShowRunnerModal] = useState(false);
 
   if (eventQuery.isLoading) return <Spinner fullPage label="Chargement…" />;
   const event = eventQuery.data;
@@ -80,6 +85,11 @@ export default function EventDetailPage() {
               Passer en cours
             </Button>
           )}
+          {(event.status === 'brouillon' || event.status === 'préparé') && (
+            <Button size="sm" onClick={() => setShowRunnerModal(true)}>
+              <Zap className="h-4 w-4" /> Générer les dotations runner
+            </Button>
+          )}
           {event.status !== 'clôturé' && event.status !== 'archivé' && (
             <Button
               size="sm"
@@ -91,6 +101,18 @@ export default function EventDetailPage() {
           )}
         </div>
       </div>
+
+      {showRunnerModal && (
+        <RunnerGenerationModal
+          eventId={event.event_id}
+          spaces={spaces}
+          onClose={() => setShowRunnerModal(false)}
+          onGenerated={() => {
+            setShowRunnerModal(false);
+            setTab('runner');
+          }}
+        />
+      )}
 
       {/* Onglets */}
       <div className="mb-5 flex flex-wrap gap-1 border-b border-slate-200">
@@ -110,8 +132,8 @@ export default function EventDetailPage() {
         ))}
       </div>
 
-      {/* Sélecteur d'espace (commun aux onglets par espace) */}
-      {spaces.length > 0 && (
+      {/* Sélecteur d'espace (commun aux onglets par espace, sauf Runner) */}
+      {spaces.length > 0 && tab !== 'runner' && (
         <div className="mb-4 max-w-xs">
           <Select
             label="Espace"
@@ -144,6 +166,13 @@ export default function EventDetailPage() {
         ))}
       {tab === 'debriefs' && (
         <DebriefAdminPanel eventId={event.event_id} spaces={spaces} />
+      )}
+      {tab === 'runner' && (
+        <RunnerPlanningTab
+          event={event}
+          spaces={spaces}
+          onOpenModal={() => setShowRunnerModal(true)}
+        />
       )}
     </div>
   );

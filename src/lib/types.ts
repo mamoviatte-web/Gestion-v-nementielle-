@@ -154,6 +154,11 @@ export interface Event {
   expected_attendees: number | null;
   status: EventStatus;
   created_at: string;
+  // Module Runner (colonnes ajoutées par runner_module.sql)
+  weather_type?: WeatherType | null;
+  temperature?: number | null;
+  consumption_trend?: ConsumptionTrend | null;
+  reference_event_id?: string | null;
 }
 
 /** Table `event_spaces` — espaces activés pour un événement. */
@@ -333,4 +338,137 @@ export interface SupabaseError {
   details?: string | null;
   hint?: string | null;
   code?: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* 5. MODULE RUNNER AUTO-PLANNING (ROLE_STADE)                         */
+/* ------------------------------------------------------------------ */
+
+export type WeatherType =
+  | 'normal'
+  | 'chaleur'
+  | 'forte_chaleur'
+  | 'pluie'
+  | 'froid'
+  | 'tres_favorable';
+
+export type ConsumptionTrend =
+  | 'stable'
+  | 'hausse'
+  | 'forte_hausse'
+  | 'baisse'
+  | 'surdotation'
+  | 'rupture';
+
+export type RunnerValidationStatus =
+  | 'brouillon'
+  | 'en_attente_validation'
+  | 'validé'
+  | 'transmis_runners'
+  | 'préparé'
+  | 'livré'
+  | 'retour_saisi'
+  | 'clôturé';
+
+export type AlertType = 'rupture' | 'surdotation' | 'suffisant' | null;
+
+export interface RunnerAutoPlan {
+  id: string;
+  event_id: string;
+  space_id: string;
+  product_id: string;
+  initial_area_stock: number;
+  historical_avg_consumption: number | null;
+  last_similar_event_consumption: number | null;
+  consumption_reference: number | null;
+  attendance_coefficient: number;
+  weather_coefficient: number;
+  event_type_coefficient: number;
+  trend_coefficient: number;
+  recommended_quantity: number | null;
+  quantity_to_move: number | null;
+  stock_sufficient: boolean;
+  validated_quantity: number | null;
+  stadium_manager_comment: string | null;
+  validated_by: string | null;
+  validated_at: string | null;
+  picked_quantity: number | null;
+  returned_quantity: number | null;
+  real_consumption: number | null;
+  estimated_cost_ht: number | null;
+  responsible_name: string | null;
+  validation_status: RunnerValidationStatus;
+  alert_type: AlertType;
+  terrain_token: string | null;
+  // Jointures
+  product?: Product;
+  space?: Space;
+}
+
+export interface RunnerPlanWithDetails extends RunnerAutoPlan {
+  product: Product;
+  space: Space;
+}
+
+/** Paramètres de génération des fiches runner. */
+export interface RunnerGenerationParams {
+  event_id: string;
+  space_ids: string[];
+  weather_type: WeatherType;
+  temperature: number;
+  consumption_trend: ConsumptionTrend;
+  reference_event_id?: string;
+}
+
+/** Coefficients appliqués à la consommation de référence. */
+export interface RunnerCoefficients {
+  attendance: number;
+  weather: number;
+  event_type: number;
+  trend: number;
+  total: number;
+}
+
+export interface AreaStock {
+  id: string;
+  area_id: string;
+  product_id: string;
+  current_qty: number;
+  initial_qty: number;
+  last_updated: string;
+  product?: Product;
+  space?: Space;
+}
+
+export interface EventConsumption {
+  id: string;
+  event_id: string;
+  space_id: string;
+  product_id: string;
+  initial_stock: number;
+  restock_qty: number;
+  final_stock: number;
+  consumed_qty: number;
+  unit_price_ht: number | null;
+  total_cost_ht: number | null;
+  event_type: string;
+  expected_attendance: number;
+  weather_type: string;
+}
+
+/** Vue terrain publique (sans coût) lue par jeton. */
+export interface RunnerTerrainRow {
+  id: string;
+  event_id: string;
+  space_id: string;
+  product_id: string;
+  terrain_token: string;
+  product_name: string;
+  unit: string;
+  quantity_to_move: number | null;
+  validated_quantity: number | null;
+  picked_quantity: number | null;
+  returned_quantity: number | null;
+  validation_status: RunnerValidationStatus;
+  responsible_name: string | null;
 }
