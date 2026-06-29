@@ -113,6 +113,10 @@ begin
         id, instance_id, aud, role, email,
         encrypted_password, email_confirmed_at,
         raw_app_meta_data, raw_user_meta_data,
+        -- Colonnes token : GoTrue refuse la connexion si elles sont NULL → ''
+        confirmation_token, recovery_token, email_change,
+        email_change_token_new, email_change_token_current,
+        phone_change, phone_change_token, reauthentication_token,
         created_at, updated_at
       ) values (
         gen_random_uuid(),
@@ -123,6 +127,7 @@ begin
         now(),
         '{"provider":"email","providers":["email"]}'::jsonb,
         jsonb_build_object('role', 'ROLE_STADE', 'name', acct.name),
+        '', '', '', '', '', '', '', '',
         now(), now()
       );
     end if;
