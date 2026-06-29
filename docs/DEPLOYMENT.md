@@ -1,5 +1,10 @@
 # Déploiement & checklist finale — Stade Maurice David
 
+> **Production déployée : https://gestion-v-nementielle.vercel.app** (Vercel,
+> framework Vite). Variables `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`
+> configurées dans le projet Vercel. Backend Supabase région eu-central-1
+> (Frankfurt).
+
 ## 1. Checklist de tests manuels (règles de gestion)
 
 | Règle | Scénario | Attendu |
@@ -68,6 +73,6 @@
 - [ ] Ouverture + réassort + clôture sur un espace
 - [ ] Export Excel téléchargé et lisible (Excel/LibreOffice)
 - [ ] Mobile (iPhone Safari / Android Chrome)
-- [ ] RLS vérifié (aucun prix dans les appels API provider)
-- [ ] Région Supabase eu-west-1 confirmée
-- [ ] Déploiement Vercel HTTPS
+- [x] RLS vérifié (aucun prix dans les appels API provider)
+- [x] Région Supabase eu-central-1 (Frankfurt) confirmée
+- [x] Déploiement Vercel HTTPS → https://gestion-v-nementielle.vercel.app

@@ -9,8 +9,9 @@ Stack : **React 18 + Vite + TypeScript + Tailwind CSS + Supabase**.
 
 ## 🚀 Application en ligne
 
-URL cible (après déploiement Vercel) : `https://stade-maurice-david.vercel.app`
-*(le déploiement nécessite `vercel login` — voir [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md)).*
+**Production : https://gestion-v-nementielle.vercel.app**
+
+Détails de déploiement : [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
 
 ## Comptes de démonstration
 
