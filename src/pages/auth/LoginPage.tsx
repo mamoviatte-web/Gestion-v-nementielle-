@@ -15,10 +15,14 @@ import { Button, Input, Alert } from '@/components/ui';
 
 type Mode = 'stade' | 'responsable';
 
-/** Construit l'email/mot de passe à partir d'un code espace. */
+/**
+ * Construit l'email/mot de passe à partir d'un code espace.
+ * Email en minuscules (forme canonique GoTrue), mot de passe = code en
+ * majuscules (ex: SN2026 → sn2026@stade.fr / SN2026).
+ */
 function credentialsFromCode(code: string): { email: string; password: string } {
   const normalized = code.trim().toUpperCase();
-  return { email: `${normalized}@stade.fr`, password: normalized };
+  return { email: `${normalized.toLowerCase()}@stade.fr`, password: normalized };
 }
 
 export default function LoginPage() {

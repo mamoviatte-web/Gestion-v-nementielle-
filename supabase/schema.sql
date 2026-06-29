@@ -11,12 +11,15 @@ create extension if not exists "pgcrypto";
 -- Trigger générique : maintien de updated_at
 -- ---------------------------------------------------------------------
 create or replace function set_updated_at()
-returns trigger as $$
+returns trigger
+language plpgsql
+set search_path = public
+as $$
 begin
   new.updated_at = now();
   return new;
 end;
-$$ language plpgsql;
+$$;
 
 -- =====================================================================
 -- 1. spaces — 16 espaces du stade

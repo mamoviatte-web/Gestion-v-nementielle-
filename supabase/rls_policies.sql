@@ -22,6 +22,7 @@ create or replace function app_role()
 returns text
 language sql
 stable
+set search_path = public
 as $$
   select coalesce(auth.jwt() -> 'user_metadata' ->> 'role', '');
 $$;
@@ -30,6 +31,7 @@ create or replace function app_space_id()
 returns uuid
 language sql
 stable
+set search_path = public
 as $$
   select nullif(auth.jwt() -> 'user_metadata' ->> 'space_id', '')::uuid;
 $$;
@@ -38,6 +40,7 @@ create or replace function is_stade()
 returns boolean
 language sql
 stable
+set search_path = public
 as $$
   select app_role() = 'ROLE_STADE';
 $$;
@@ -46,6 +49,7 @@ create or replace function is_responsable_of(target_space uuid)
 returns boolean
 language sql
 stable
+set search_path = public
 as $$
   select app_role() = 'ROLE_RESPONSABLE' and app_space_id() = target_space;
 $$;
