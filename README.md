@@ -7,6 +7,36 @@ runner, prestataires, horaires staff, débriefs, dashboard et export Excel.
 
 Stack : **React 18 + Vite + TypeScript + Tailwind CSS + Supabase**.
 
+## 🚀 Application en ligne
+
+URL cible (après déploiement Vercel) : `https://stade-maurice-david.vercel.app`
+*(le déploiement nécessite `vercel login` — voir [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md)).*
+
+## Comptes de démonstration
+
+### Équipe Stade (vision complète, prix & coûts)
+| Email | Mot de passe |
+|-------|--------------|
+| `mviatte@provencerugby.com` | `StadeMD2026!` |
+| `csadras@provencerugby.com` | `StadeMD2026!` |
+| `amartinez@provencerugby.com` | `StadeMD2026!` |
+
+### Responsables d'espaces (saisie terrain, sans prix)
+| Espace | Email | Mot de passe |
+|--------|-------|--------------|
+| Salon Nord | `sn2026@stade.fr` | `SN2026` |
+| Buvette 1 | `bv12026@stade.fr` | `BV12026` |
+| Le Pub | `pub2026@stade.fr` | `PUB2026` |
+| *(les 16 espaces, code en majuscules)* | `{code}@stade.fr` | `{CODE}` |
+
+### Scénario de démonstration
+1. Connexion **admin** → dashboard avec un événement **archivé** (vs Vannes,
+   données complètes) et un **en cours** (vs Montauban, partiel).
+2. « vs Vannes » → stocks + coûts + prestataires (1 en retard, 1 absent) + débrief.
+3. « vs Montauban » → stocks ouverts (en cours).
+4. Déconnexion → connexion **SN2026** → saisie du nom → stocks ouverts.
+5. Vérifier : **aucun prix** visible côté responsable (RG-003).
+
 ## Prérequis
 
 - Node.js 18+
