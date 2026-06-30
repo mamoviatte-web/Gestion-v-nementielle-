@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import type { ReactNode } from 'react';
-import { AlertTriangle, ChevronRight, CalendarDays } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { AlertTriangle, ChevronRight, CalendarDays, Trash2 } from 'lucide-react';
+import { ConfirmDeleteModal } from '@/components/events/DeleteEventModals';
 import { useEventsList, useEventSpaces } from '@/hooks/useEvents';
 import { useEventStats } from '@/hooks/useEventStats';
 import { useLateProvidersCount, useProviders } from '@/hooks/useProviders';
@@ -17,6 +18,7 @@ export default function DashboardPage() {
   const eventsQuery = useEventsList();
   const catalog = useCatalog();
   const { data: lateCount = 0 } = useLateProvidersCount();
+  const [deleteTarget, setDeleteTarget] = useState<Event | null>(null);
 
   const events = eventsQuery.data ?? [];
   const lastEvent = events[0];
@@ -45,6 +47,14 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Tableau de bord" description="Vue d'ensemble du stade." />
+
+      {deleteTarget && (
+        <ConfirmDeleteModal
+          event={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={() => setDeleteTarget(null)}
+        />
+      )}
 
       {/* Alertes */}
       {hasAlerts && (
@@ -112,7 +122,7 @@ export default function DashboardPage() {
         ) : (
           <ul className="space-y-2">
             {events.map((e) => (
-              <EventRow key={e.event_id} event={e} />
+              <EventRow key={e.event_id} event={e} onDelete={setDeleteTarget} />
             ))}
           </ul>
         )}
@@ -141,7 +151,7 @@ function KpiCard({
   );
 }
 
-function EventRow({ event }: { event: Event }) {
+function EventRow({ event, onDelete }: { event: Event; onDelete: (e: Event) => void }) {
   const spacesQuery = useEventSpaces(event.event_id);
   const stats = useEventStats(event.event_id);
   const { stats: providerStats } = useProviders(event.event_id);
@@ -149,14 +159,14 @@ function EventRow({ event }: { event: Event }) {
   const spacesTotal = spacesQuery.data?.length ?? 0;
 
   return (
-    <li>
+    <li className="flex items-center gap-2 rounded-lg border border-pr-stone bg-white p-2 pr-3 transition-colors">
       <Link
         to={`/admin/events/${event.event_id}`}
-        className="flex items-center justify-between gap-3 rounded-lg bg-white p-4 ring-1 ring-slate-200 transition-colors hover:bg-slate-50"
+        className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg p-2 hover:bg-pr-cream"
       >
         <div className="min-w-0">
-          <p className="truncate font-medium text-slate-900">{event.event_name}</p>
-          <p className="text-sm text-slate-500">
+          <p className="truncate font-medium text-pr-black">{event.event_name}</p>
+          <p className="text-sm text-pr-black-soft/60">
             {new Date(event.event_date).toLocaleDateString('fr-FR', {
               day: 'numeric',
               month: 'long',
@@ -178,11 +188,16 @@ function EventRow({ event }: { event: Event }) {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Badge tone={status.tone}>{status.label}</Badge>
-          <ChevronRight className="h-5 w-5 text-slate-400" />
-        </div>
+        <Badge tone={status.tone}>{status.label}</Badge>
       </Link>
+      <button
+        onClick={() => onDelete(event)}
+        className="p-2 text-pr-black-soft/40 hover:text-pr-rust"
+        title="Supprimer cet événement"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+      <ChevronRight className="h-5 w-5 shrink-0 text-pr-black-soft/30" />
     </li>
   );
 }
