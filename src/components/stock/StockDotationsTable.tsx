@@ -4,6 +4,8 @@
  */
 
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 import { useStock } from '@/hooks/useStock';
 import { computeConsumed, computeCost, formatEuro } from '@/lib/calculations';
 import { PRODUCT_STATE_META } from '@/lib/labels';
@@ -21,7 +23,7 @@ import {
   THead,
   TR,
 } from '@/components/ui';
-import type { RunnerStatus } from '@/lib/types';
+import type { RunnerStatus, StockContinuityRow } from '@/lib/types';
 
 interface Row {
   product_id: string;
@@ -49,6 +51,25 @@ export function StockDotationsTable({
   spaceId: string;
 }) {
   const stock = useStock(eventId, spaceId, { withPrices: true });
+
+  // Continuité des stocks vs match précédent (résilient si la vue n'existe pas).
+  const continuity = useQuery({
+    queryKey: ['continuity', eventId, spaceId],
+    queryFn: async (): Promise<StockContinuityRow[]> => {
+      const { data, error } = await supabase
+        .from('stock_continuity_check')
+        .select('*')
+        .eq('event_id', eventId)
+        .eq('space_id', spaceId);
+      if (error) return [];
+      return (data ?? []) as StockContinuityRow[];
+    },
+  });
+  const gaps = (continuity.data ?? []).filter(
+    (r) =>
+      r.continuity_status === 'ecart_positif_a_justifier' ||
+      r.continuity_status === 'ecart_negatif_a_justifier',
+  );
 
   const rows = useMemo<Row[]>(() => {
     const dotations = stock.dotations.data ?? [];
@@ -118,6 +139,17 @@ export function StockDotationsTable({
       {missingPrice.length > 0 && (
         <Alert variant="warning" title={`${missingPrice.length} produit(s) sans prix HT — RG-005`}>
           Les coûts associés sont affichés « — » et exclus du total.
+        </Alert>
+      )}
+      {gaps.length > 0 && (
+        <Alert variant="warning" title={`${gaps.length} écart(s) de continuité de stock`}>
+          {gaps
+            .map(
+              (g) =>
+                `${g.product_name} : initial déclaré ${g.current_initial_qty} ≠ final précédent ${g.previous_final_qty ?? 0} (écart ${g.stock_gap > 0 ? '+' : ''}${g.stock_gap})`,
+            )
+            .join(' · ')}{' '}
+          — vérifier un réassort non documenté ou une erreur de saisie.
         </Alert>
       )}
 

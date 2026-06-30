@@ -176,17 +176,51 @@ export function CreateEventModal({
                 </div>
               </div>
 
-              <Input label="Nom de l'événement *" value={name} onChange={(e) => setName(e.target.value)} />
-              <div className="grid grid-cols-2 gap-3">
-                <Input type="date" label="Date *" value={date} onChange={(e) => setDate(e.target.value)} />
-                <Input type="time" label="Heure de début" value={time} onChange={(e) => setTime(e.target.value)} />
-              </div>
-              <Input
-                type="number"
-                label="Spectateurs / participants attendus"
-                value={attendees}
-                onChange={(e) => setAttendees(e.target.value)}
-              />
+              {isMatch ? (
+                <>
+                  <Input
+                    label="Nom de l'événement *"
+                    placeholder="Provence Rugby vs [Adversaire]"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                  <Input type="date" label="Date du match *" value={date} onChange={(e) => setDate(e.target.value)} />
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-sm text-pr-olive-dark">
+                      + Plus d'options (optionnel)
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      <Input
+                        type="time"
+                        label="Heure de début (défaut 19:00)"
+                        value={time}
+                        onChange={(e) => setTime(e.target.value)}
+                      />
+                      <Input
+                        type="number"
+                        label="Spectateurs attendus"
+                        placeholder="Estimation automatique si vide"
+                        value={attendees}
+                        onChange={(e) => setAttendees(e.target.value)}
+                      />
+                    </div>
+                  </details>
+                </>
+              ) : (
+                <>
+                  <Input label="Nom de l'événement *" value={name} onChange={(e) => setName(e.target.value)} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input type="date" label="Date *" value={date} onChange={(e) => setDate(e.target.value)} />
+                    <Input type="time" label="Heure de début" value={time} onChange={(e) => setTime(e.target.value)} />
+                  </div>
+                  <Input
+                    type="number"
+                    label="Participants attendus"
+                    value={attendees}
+                    onChange={(e) => setAttendees(e.target.value)}
+                  />
+                </>
+              )}
             </div>
           )}
 

@@ -60,14 +60,36 @@ export function useEventCreation() {
   /** 1. Crée l'événement (+ event_spaces selon le type). */
   const createMutation = useMutation({
     mutationFn: async (draft: EventCreationDraft): Promise<{ event_id: string }> => {
+      // Match : valeurs par défaut calculées côté moteur (saisie minimale).
+      let startTime: string | null = draft.start_time || null;
+      let attendees: number | null = draft.expected_attendees || null;
+      if (draft.event_type === 'match') {
+        if (!startTime) startTime = '19:00';
+        if (!attendees) {
+          const { data: past } = await supabase
+            .from('events')
+            .select('expected_attendees')
+            .eq('event_type', 'match')
+            .not('expected_attendees', 'is', null)
+            .order('event_date', { ascending: false })
+            .limit(3);
+          const vals = (past ?? [])
+            .map((r) => r.expected_attendees as number)
+            .filter((n) => !!n);
+          attendees = vals.length
+            ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
+            : 8000;
+        }
+      }
+
       const { data: ev, error } = await supabase
         .from('events')
         .insert({
           event_name: draft.event_name.trim(),
           event_type: draft.event_type,
           event_date: draft.event_date,
-          start_time: draft.start_time || null,
-          expected_attendees: draft.expected_attendees || null,
+          start_time: startTime,
+          expected_attendees: attendees,
           status: 'préparé',
         })
         .select('event_id')

@@ -1,11 +1,38 @@
 import { useState } from 'react';
 import { Zap, X } from 'lucide-react';
-import { useEventsList } from '@/hooks/useEvents';
+import { useQuery } from '@tanstack/react-query';
 import { useRunnerPlanning } from '@/hooks/useRunnerPlanning';
+import { supabase } from '@/lib/supabase';
 import { WEATHER_LABELS, TREND_LABELS } from '@/lib/runnerCalculations';
 import { Alert, Button, Input, Select } from '@/components/ui';
 import type { ConsumptionTrend, WeatherType } from '@/lib/types';
 import type { EventSpaceWithSpace } from '@/hooks/useEvents';
+
+/** Référence automatique (match précédent via chaînage) + profondeur de chaîne. */
+function useAutoReference(eventId: string) {
+  return useQuery({
+    queryKey: ['runnerAutoRef', eventId],
+    queryFn: async (): Promise<{ previousName: string | null; chain: number }> => {
+      const { data: cur } = await supabase
+        .from('events')
+        .select('previous_event_id, event_date')
+        .eq('event_id', eventId)
+        .single();
+      if (!cur?.previous_event_id) return { previousName: null, chain: 0 };
+      const { data: prev } = await supabase
+        .from('events')
+        .select('event_name')
+        .eq('event_id', cur.previous_event_id)
+        .maybeSingle();
+      const { count } = await supabase
+        .from('events')
+        .select('*', { count: 'exact', head: true })
+        .eq('event_type', 'match')
+        .lt('event_date', cur.event_date);
+      return { previousName: prev?.event_name ?? null, chain: Math.min(count ?? 0, 5) };
+    },
+  });
+}
 
 const WEATHER_OPTIONS = (Object.keys(WEATHER_LABELS) as WeatherType[]).map((w) => ({
   value: w,
@@ -28,15 +55,11 @@ export function RunnerGenerationModal({
   onGenerated: () => void;
 }) {
   const { generateRunnerPlans, submitting } = useRunnerPlanning(eventId);
-  const events = useEventsList();
-  const archived = (events.data ?? []).filter(
-    (e) => e.event_id !== eventId && (e.status === 'archivé' || e.status === 'clôturé'),
-  );
+  const autoRef = useAutoReference(eventId);
 
   const [weather, setWeather] = useState<WeatherType>('normal');
   const [temperature, setTemperature] = useState('18');
   const [trend, setTrend] = useState<ConsumptionTrend>('stable');
-  const [referenceId, setReferenceId] = useState('');
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(spaces.map((s) => s.space_id)),
   );
@@ -63,7 +86,6 @@ export function RunnerGenerationModal({
         weather_type: weather,
         temperature: Number(temperature) || 0,
         consumption_trend: trend,
-        reference_event_id: referenceId || undefined,
       });
       onGenerated();
     } catch (e) {
@@ -106,19 +128,20 @@ export function RunnerGenerationModal({
             value={trend}
             onChange={(e) => setTrend(e.target.value as ConsumptionTrend)}
           />
-          <Select
-            label="Événement de référence (optionnel)"
-            placeholder="Aucun"
-            options={[
-              { value: '', label: 'Aucun' },
-              ...archived.map((e) => ({
-                value: e.event_id,
-                label: `${e.event_name} — ${new Date(e.event_date).toLocaleDateString('fr-FR')}`,
-              })),
-            ]}
-            value={referenceId}
-            onChange={(e) => setReferenceId(e.target.value)}
-          />
+
+          {/* Référence automatique (chaînage) — lecture seule */}
+          {autoRef.data?.previousName ? (
+            <Alert variant="success" title="📊 Référence automatique">
+              Match précédent : <strong>{autoRef.data.previousName}</strong>
+              <br />
+              Chaîne historique : {autoRef.data.chain} match(s) disponible(s) pour le calcul.
+            </Alert>
+          ) : (
+            <Alert variant="warning" title="Aucun historique disponible">
+              Les recommandations seront basées sur les modèles de base
+              (runner_templates) uniquement.
+            </Alert>
+          )}
 
           <div>
             <p className="mb-1 text-sm font-medium text-slate-700">Espaces à inclure</p>

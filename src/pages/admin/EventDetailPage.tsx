@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useEvent, useEventSpaces, useEventActions } from '@/hooks/useEvents';
+import { useEvent, useEventSpaces, useEventActions, useEventsList } from '@/hooks/useEvents';
 import { useEventStats } from '@/hooks/useEventStats';
 import { EVENT_STATUS_META } from '@/lib/labels';
 import { StockDotationsTable } from '@/components/stock/StockDotationsTable';
@@ -32,6 +32,7 @@ export default function EventDetailPage() {
   const eventQuery = useEvent(id);
   const spacesQuery = useEventSpaces(id);
   const stats = useEventStats(id);
+  const allEvents = useEventsList();
   const { setStatus, updating } = useEventActions(id);
   const [tab, setTab] = useState<Tab>('stocks');
   const [spaceId, setSpaceId] = useState<string>('');
@@ -67,6 +68,38 @@ export default function EventDetailPage() {
         description={`${new Date(event.event_date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}${event.start_time ? ` · ${event.start_time.slice(0, 5)}` : ''}${event.expected_attendees ? ` · ${event.expected_attendees} spectateurs` : ''}`}
         action={<Badge tone={status.tone}>{status.label}</Badge>}
       />
+
+      {/* Fil d'Ariane de continuité (matchs) */}
+      {event.event_type === 'match' &&
+        (() => {
+          const events = allEvents.data ?? [];
+          const prev = events.find((e) => e.event_id === event.previous_event_id);
+          const next = events.find((e) => e.previous_event_id === event.event_id);
+          return (
+            <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-pr-black-soft/70">
+              {prev ? (
+                <Link to={`/admin/events/${prev.event_id}`} className="hover:text-pr-olive hover:underline">
+                  ← {prev.event_name}
+                </Link>
+              ) : (
+                <span>← début de la série</span>
+              )}
+              <span className="text-pr-stone">•</span>
+              <span className="font-display font-bold uppercase tracking-wide text-pr-black">
+                {event.event_name}
+                {event.sequence_number ? ` · Match n°${event.sequence_number}` : ''}
+              </span>
+              <span className="text-pr-stone">•</span>
+              {next ? (
+                <Link to={`/admin/events/${next.event_id}`} className="hover:text-pr-olive hover:underline">
+                  Suivant : {next.event_name} →
+                </Link>
+              ) : (
+                <span>Suivant : —</span>
+              )}
+            </div>
+          );
+        })()}
 
       {/* Compteurs + actions de statut */}
       <div className="mb-5 flex flex-wrap items-center gap-2">

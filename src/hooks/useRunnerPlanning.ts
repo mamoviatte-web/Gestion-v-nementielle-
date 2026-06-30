@@ -76,12 +76,15 @@ export function useRunnerPlanning(eventId: string | undefined) {
       // Événement (affluence, type)
       const { data: ev, error: evErr } = await supabase
         .from('events')
-        .select('event_id, event_type, expected_attendees')
+        .select('event_id, event_type, expected_attendees, previous_event_id')
         .eq('event_id', params.event_id)
         .single();
       if (evErr) throw evErr;
       const expected = ev.expected_attendees ?? 0;
       const eventType = (ev.event_type as string) ?? 'autre';
+      // Référence automatique = match précédent (chaînage). Pas de choix manuel.
+      const autoReferenceId =
+        (ev.previous_event_id as string | null) ?? params.reference_event_id ?? null;
 
       // Catalogue (catégorie + prix)
       const { data: products, error: pErr } = await supabase
@@ -184,7 +187,7 @@ export function useRunnerPlanning(eventId: string | undefined) {
           weather_type: params.weather_type,
           temperature: params.temperature,
           consumption_trend: params.consumption_trend,
-          reference_event_id: params.reference_event_id ?? null,
+          reference_event_id: autoReferenceId,
         })
         .eq('event_id', params.event_id);
     },

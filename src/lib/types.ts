@@ -159,6 +159,26 @@ export interface Event {
   temperature?: number | null;
   consumption_trend?: ConsumptionTrend | null;
   reference_event_id?: string | null;
+  // Chaînage des matchs (runner_/match_chaining.sql)
+  previous_event_id?: string | null;
+  sequence_number?: number | null;
+}
+
+/** Ligne de la vue stock_continuity_check (écart stock entre 2 matchs). */
+export interface StockContinuityRow {
+  event_id: string;
+  space_id: string;
+  space_name: string;
+  product_id: string;
+  product_name: string;
+  current_initial_qty: number;
+  previous_final_qty: number | null;
+  stock_gap: number;
+  continuity_status:
+    | 'coherent'
+    | 'aucune_donnee_precedente'
+    | 'ecart_positif_a_justifier'
+    | 'ecart_negatif_a_justifier';
 }
 
 /** Table `event_spaces` — espaces activés pour un événement. */
