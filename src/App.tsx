@@ -16,7 +16,16 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { RequireResponsableName } from '@/components/RequireResponsableName';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { ProviderLayout } from '@/components/layout/ProviderLayout';
-import { Spinner } from '@/components/ui';
+import { Logo } from '@/components/ui';
+
+/** Écran de chargement de marque (rameau en fondu). */
+function BrandLoader() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-pr-cream">
+      <Logo variant="mark" size="lg" className="animate-pr-fade" />
+    </div>
+  );
+}
 
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'));
 const DashboardPage = lazy(() => import('@/pages/admin/DashboardPage'));
@@ -35,7 +44,7 @@ const RunnerTerrainView = lazy(() => import('@/pages/runner/RunnerTerrainView'))
 /** Redirection de la racine selon l'état d'authentification et le rôle. */
 function RootRedirect() {
   const { user, loading } = useAuth();
-  if (loading) return <Spinner fullPage label="Chargement…" />;
+  if (loading) return <BrandLoader />;
   if (!user) return <Navigate to="/login" replace />;
   return (
     <Navigate
@@ -47,7 +56,7 @@ function RootRedirect() {
 
 export default function App() {
   return (
-    <Suspense fallback={<Spinner fullPage label="Chargement…" />}>
+    <Suspense fallback={<BrandLoader />}>
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />

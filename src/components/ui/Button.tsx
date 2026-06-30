@@ -7,11 +7,11 @@ export type ButtonSize = 'sm' | 'md' | 'lg';
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary:
-    'bg-provence text-white hover:bg-provence-light focus-visible:outline-provence',
+    'bg-pr-black text-pr-white hover:bg-pr-black-soft focus-visible:outline-pr-black',
   secondary:
-    'bg-white text-provence ring-1 ring-inset ring-slate-300 hover:bg-slate-50',
-  danger: 'bg-accent text-white hover:bg-accent-dark focus-visible:outline-accent',
-  ghost: 'bg-transparent text-slate-700 hover:bg-slate-100',
+    'bg-white text-pr-black ring-1 ring-inset ring-pr-stone hover:bg-pr-cream',
+  danger: 'bg-pr-rust text-pr-white hover:opacity-90 focus-visible:outline-pr-rust',
+  ghost: 'bg-transparent text-pr-black-soft hover:bg-pr-stone/60',
 };
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {

@@ -1,4 +1,5 @@
 /** Barrel d'export des composants UI réutilisables. */
+export { Logo } from './Logo';
 export { Badge } from './Badge';
 export { Button } from './Button';
 export type { ButtonVariant, ButtonSize } from './Button';

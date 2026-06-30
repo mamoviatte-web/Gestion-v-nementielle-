@@ -73,7 +73,7 @@ export function buildStockAOA(data: EventExportData): {
   ];
 
   const aoa: Row[] = [
-    [`BILAN STOCKS — ${data.event.event_name} — ${data.event.event_date} — ${data.event.event_type ?? ''} — ${data.event.expected_attendees ?? ''} spectateurs`],
+    [`PROVENCE RUGBY — BILAN STOCKS — ${data.event.event_name} — ${data.event.event_date} — ${data.event.event_type ?? ''} — ${data.event.expected_attendees ?? ''} spectateurs`],
     [],
     header,
   ];
@@ -146,7 +146,7 @@ export function buildStockAOA(data: EventExportData): {
 export function buildScheduleAOA(data: EventExportData): Row[] {
   const spaces = spaceMap(data);
   const aoa: Row[] = [
-    [`HORAIRES STAFF — ${data.event.event_name}`],
+    [`PROVENCE RUGBY — HORAIRES STAFF — ${data.event.event_name}`],
     [],
     ['Espace', 'Nom', 'Poste', 'Arrivée prévue', 'Départ prévu', 'Départ réel', 'Heures travaillées', '✓ Employé', '✓ Responsable'],
   ];
@@ -178,7 +178,7 @@ export function buildScheduleAOA(data: EventExportData): Row[] {
 export function buildProviderAOA(data: EventExportData): Row[] {
   const spaces = spaceMap(data);
   const aoa: Row[] = [
-    [`PRESTATAIRES — ${data.event.event_name}`],
+    [`PROVENCE RUGBY — PRESTATAIRES — ${data.event.event_name}`],
     [],
     ['Société', 'Type', 'Espace', 'Arrivée prévue', 'Arrivée réelle', 'Retard (min)', 'Durée présence (h)', 'Départ site', 'Statut', 'Contact', 'Observations'],
   ];

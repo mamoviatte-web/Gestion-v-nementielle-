@@ -11,15 +11,15 @@ import {
 export type AlertVariant = 'info' | 'warning' | 'error' | 'success';
 
 const CONFIG: Record<AlertVariant, { icon: LucideIcon; classes: string }> = {
-  info: { icon: Info, classes: 'bg-blue-50 text-blue-800 ring-blue-200' },
+  info: { icon: Info, classes: 'bg-pr-stone/50 text-pr-black-soft ring-pr-stone' },
   warning: {
     icon: AlertTriangle,
-    classes: 'bg-amber-50 text-amber-800 ring-amber-200',
+    classes: 'bg-[#F5EBD2] text-[#8A6D1F] ring-[#E8D6A8]',
   },
-  error: { icon: XCircle, classes: 'bg-red-50 text-red-800 ring-red-200' },
+  error: { icon: XCircle, classes: 'bg-[#F1E0D7] text-pr-rust ring-[#E2C5B6]' },
   success: {
     icon: CheckCircle2,
-    classes: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+    classes: 'bg-[#EDEFE6] text-pr-olive-dark ring-[#D8DEC6]',
   },
 };
 

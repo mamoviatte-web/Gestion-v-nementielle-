@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Provence Rugby">
+  <defs>
+    <path id="prleaf" d="M0 0 C 2.6 -4 2.6 -13 0 -18 C -2.6 -13 -2.6 -4 0 0 Z" fill="#0A0A0A"/>
+  </defs>
+  <!-- tige courbe -->
+  <path d="M32 60 C 28 48 28 34 31 22 C 32.5 16 32 11 32 7"
+        stroke="#0A0A0A" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+  <!-- olive à la base -->
+  <ellipse cx="27.5" cy="52" rx="4.2" ry="5.2" fill="#0A0A0A"/>
+  <!-- feuilles effilées en éventail -->
+  <use href="#prleaf" transform="translate(30 46) rotate(-36) scale(0.95)"/>
+  <use href="#prleaf" transform="translate(34 43) rotate(34) scale(0.95)"/>
+  <use href="#prleaf" transform="translate(29.5 39) rotate(-28)"/>
+  <use href="#prleaf" transform="translate(34.5 36) rotate(27)"/>
+  <use href="#prleaf" transform="translate(30 31) rotate(-21)"/>
+  <use href="#prleaf" transform="translate(34 28) rotate(20)"/>
+  <use href="#prleaf" transform="translate(31 23) rotate(-13)"/>
+  <use href="#prleaf" transform="translate(33 20) rotate(12)"/>
+  <use href="#prleaf" transform="translate(32 14) rotate(0) scale(0.9)"/>
+</svg>

@@ -131,12 +131,12 @@ function KpiCard({
   hint?: ReactNode;
 }) {
   return (
-    <div className="rounded-lg bg-white p-4 ring-1 ring-slate-200">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+    <div className="rounded-xl border border-pr-stone border-t-[3px] border-t-pr-black bg-white p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-pr-olive-dark">
         {label}
       </p>
-      <p className="mt-1 text-2xl font-bold text-provence">{value}</p>
-      {hint && <p className="mt-0.5 truncate text-xs text-slate-400">{hint}</p>}
+      <p className="mt-1 font-display text-3xl font-black text-pr-black">{value}</p>
+      {hint && <p className="mt-0.5 truncate text-xs text-pr-black-soft/50">{hint}</p>}
     </div>
   );
 }

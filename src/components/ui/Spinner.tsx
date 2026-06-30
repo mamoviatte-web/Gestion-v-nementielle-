@@ -11,9 +11,9 @@ interface SpinnerProps {
 /** Indicateur de chargement. */
 export function Spinner({ className, label, fullPage = false }: SpinnerProps) {
   const spinner = (
-    <span className="inline-flex items-center gap-2 text-slate-500">
+    <span className="inline-flex items-center gap-2 text-pr-olive">
       <Loader2 className={clsx('h-5 w-5 animate-spin', className)} aria-hidden />
-      {label && <span className="text-sm">{label}</span>}
+      {label && <span className="text-sm text-pr-black-soft">{label}</span>}
     </span>
   );
 

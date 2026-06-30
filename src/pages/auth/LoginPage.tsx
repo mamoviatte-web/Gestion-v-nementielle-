@@ -3,23 +3,18 @@
  *   A. Équipe Stade (ROLE_STADE)        → email + mot de passe
  *   B. Responsable d'espace (RESPONSABLE) → code d'accès unique (ex: SN2026)
  *
- * Le code responsable sert à la fois d'identifiant et de mot de passe :
- *   email = {code}@stade.fr, password = {code}.
+ * Identité de marque Provence Rugby : fond crème, rameau d'olivier, carte
+ * blanche, bouton noir, accents olive.
  */
 
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, KeyRound, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { Button, Input, Alert } from '@/components/ui';
+import { Button, Input, Alert, Logo } from '@/components/ui';
 
 type Mode = 'stade' | 'responsable';
 
-/**
- * Construit l'email/mot de passe à partir d'un code espace.
- * Email en minuscules (forme canonique GoTrue), mot de passe = code en
- * majuscules (ex: SN2026 → sn2026@stade.fr / SN2026).
- */
 function credentialsFromCode(code: string): { email: string; password: string } {
   const normalized = code.trim().toUpperCase();
   return { email: `${normalized.toLowerCase()}@stade.fr`, password: normalized };
@@ -46,34 +41,40 @@ export default function LoginPage() {
   async function handleResponsableSubmit(e: FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-    const { email: respEmail, password: respPassword } =
-      credentialsFromCode(code);
+    const { email: respEmail, password: respPassword } = credentialsFromCode(code);
     const user = await login(respEmail, respPassword);
     setSubmitting(false);
     if (user) navigate('/provider/home', { replace: true });
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center bg-provence px-4 py-12">
-      <div className="w-full max-w-md">
-        {/* En-tête */}
-        <div className="mb-6 text-center text-white">
-          <h1 className="text-2xl font-bold">Stade Maurice David</h1>
-          <p className="mt-1 text-sm text-slate-300">
-            Gestion événementielle — Provence Rugby
+    <div className="relative flex min-h-full items-center justify-center overflow-hidden bg-pr-cream px-4 py-12">
+      {/* Filigrane discret du rameau */}
+      <div className="pointer-events-none absolute -right-16 -top-10 opacity-[0.04]">
+        <Logo variant="mark" size="lg" className="scale-[6]" />
+      </div>
+
+      <div className="relative w-full max-w-md animate-pr-fade">
+        {/* Logo + titres */}
+        <div className="mb-8 flex flex-col items-center">
+          <Logo variant="full" size="lg" />
+          <div className="mt-4 h-px w-16 bg-pr-olive" />
+          <p className="mt-3 font-display text-sm font-bold uppercase tracking-[0.15em] text-pr-black">
+            Stade Maurice David
           </p>
+          <p className="text-sm text-pr-olive-dark">Gestion opérationnelle</p>
         </div>
 
-        <div className="rounded-2xl bg-white p-6 shadow-xl">
+        <div className="rounded-2xl border border-pr-stone bg-white p-6 shadow-[0_10px_40px_-15px_rgba(10,10,10,0.25)]">
           {/* Sélecteur de mode */}
-          <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
+          <div className="mb-6 grid grid-cols-2 gap-2 rounded-lg bg-pr-cream p-1">
             <button
               type="button"
               onClick={() => setMode('stade')}
               className={`flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 mode === 'stade'
-                  ? 'bg-white text-provence shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-pr-black text-white shadow-sm'
+                  : 'text-pr-black-soft hover:bg-pr-stone/50'
               }`}
             >
               <ShieldCheck className="h-4 w-4" /> Équipe Stade
@@ -83,8 +84,8 @@ export default function LoginPage() {
               onClick={() => setMode('responsable')}
               className={`flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 mode === 'responsable'
-                  ? 'bg-white text-provence shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-pr-black text-white shadow-sm'
+                  : 'text-pr-black-soft hover:bg-pr-stone/50'
               }`}
             >
               <Building2 className="h-4 w-4" /> Responsable
@@ -97,15 +98,14 @@ export default function LoginPage() {
             </Alert>
           )}
 
-          {/* Mode A — Équipe Stade */}
           {mode === 'stade' ? (
             <form onSubmit={handleStadeSubmit} className="space-y-4">
               <Input
-                label="Email"
+                label="Identifiant"
                 name="email"
                 type="email"
                 autoComplete="username"
-                placeholder="admin@stade-mauricedavid.fr"
+                placeholder="prenom@provencerugby.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -119,12 +119,16 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
-              <Button type="submit" fullWidth loading={submitting}>
-                Connexion Équipe Stade
+              <Button
+                type="submit"
+                fullWidth
+                loading={submitting}
+                className="tracking-[0.12em]"
+              >
+                SE CONNECTER
               </Button>
             </form>
           ) : (
-            /* Mode B — Responsable d'espace */
             <form onSubmit={handleResponsableSubmit} className="space-y-4">
               <Input
                 label="Code d'accès espace"
@@ -138,26 +142,17 @@ export default function LoginPage() {
                 className="uppercase"
                 required
               />
-              <Button
-                type="submit"
-                fullWidth
-                loading={submitting}
-                variant="danger"
-              >
-                <KeyRound className="h-4 w-4" /> Accès Responsable
+              <Button type="submit" fullWidth loading={submitting} className="tracking-[0.12em]">
+                <KeyRound className="h-4 w-4" /> ACCÈS RESPONSABLE
               </Button>
             </form>
           )}
 
-          {/* Codes de démonstration (développement uniquement) */}
           {import.meta.env.DEV && (
-            <div className="mt-6 rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
-              <p className="font-semibold text-slate-600">
-                Démo (dev uniquement)
-              </p>
+            <div className="mt-6 rounded-lg bg-pr-cream p-3 text-xs text-pr-olive-dark">
+              <p className="font-semibold text-pr-black-soft">Démo (dev uniquement)</p>
               <p className="mt-1">
-                Stade : <code>admin@stade-mauricedavid.fr</code> /{' '}
-                <code>admin2026</code>
+                Stade : <code>mviatte@provencerugby.com</code> / <code>StadeMD2026!</code>
               </p>
               <p>
                 Responsable : code <code>SN2026</code>, <code>BV12026</code>…
@@ -165,6 +160,10 @@ export default function LoginPage() {
             </div>
           )}
         </div>
+
+        <p className="mt-6 text-center text-xs text-pr-olive-dark">
+          Stade Maurice-David · Aix-en-Provence
+        </p>
       </div>
     </div>
   );
