@@ -11,17 +11,19 @@ import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { RunnerPlanningTab } from '@/components/runner/RunnerPlanningTab';
 import { RunnerGenerationModal } from '@/components/runner/RunnerGenerationModal';
+import { RouteSheetPanel } from '@/components/events/RouteSheetPanel';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
 import { Zap } from 'lucide-react';
 
-type Tab = 'stocks' | 'prestataires' | 'horaires' | 'debriefs' | 'runner';
+type Tab = 'stocks' | 'prestataires' | 'horaires' | 'debriefs' | 'route' | 'runner';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'stocks', label: 'Stocks & Dotations' },
   { key: 'prestataires', label: 'Prestataires' },
   { key: 'horaires', label: 'Horaires Staff' },
   { key: 'debriefs', label: 'Débriefs' },
+  { key: 'route', label: '📄 Feuille de route' },
   { key: 'runner', label: '🚀 Runner Auto' },
 ];
 
@@ -167,6 +169,7 @@ export default function EventDetailPage() {
       {tab === 'debriefs' && (
         <DebriefAdminPanel eventId={event.event_id} spaces={spaces} />
       )}
+      {tab === 'route' && <RouteSheetPanel eventId={event.event_id} spaces={spaces} />}
       {tab === 'runner' && (
         <RunnerPlanningTab
           event={event}

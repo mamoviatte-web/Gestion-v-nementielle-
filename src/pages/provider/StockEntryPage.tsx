@@ -22,6 +22,7 @@ import {
 import { computeConsumed } from '@/lib/calculations';
 import { PRODUCT_STATE_OPTIONS, PRODUCT_STATE_META } from '@/lib/labels';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { FeuilleRouteBanner } from '@/components/events/FeuilleRouteBanner';
 import {
   Alert,
   Badge,
@@ -132,6 +133,7 @@ function StockEntryContent({
   return (
     <div>
       {header}
+      <FeuilleRouteBanner eventId={event.event_id} spaceId={spaceId} />
       {stock.phase === 'ouverture' && (
         <OpeningForm
           stock={stock}

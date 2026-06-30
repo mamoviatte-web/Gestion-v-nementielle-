@@ -5,12 +5,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, MessageSquare, Send } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MessageSquare, Send, ImagePlus, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { useOpenEventsForSpace } from '@/hooks/useEvents';
 import { useDebrief } from '@/hooks/useDebriefs';
+import { useEventCreation } from '@/hooks/useEventCreation';
 import { useAutosaveDraft } from '@/hooks/useAutosaveDraft';
+import { compressImage } from '@/lib/imageCompress';
 import {
   DEBRIEF_SECTIONS,
   emptyDebriefValues,
@@ -54,10 +56,12 @@ function DebriefContent({
   const eventsQuery = useOpenEventsForSpace(spaceId);
   const event = (eventsQuery.data ?? [])[0] ?? null;
   const { debrief, submitDebrief, submitting } = useDebrief(event?.event_id, spaceId);
+  const { uploadDebriefPhoto, uploading } = useEventCreation();
   const { showToast } = useToast();
 
   const [step, setStep] = useState(0);
   const [values, setValues] = useState<DebriefFormValues>(emptyDebriefValues);
+  const [photos, setPhotos] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Brouillon local (offline-first) — restauré au montage, effacé à la soumission.
@@ -109,10 +113,29 @@ function DebriefContent({
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
+  async function addPhotos(files: FileList | null) {
+    if (!files) return;
+    setError(null);
+    const incoming = Array.from(files).slice(0, 6 - photos.length);
+    const processed: File[] = [];
+    for (const f of incoming) {
+      if (f.size > 5 * 1024 * 1024) {
+        setError(`${f.name} dépasse 5 Mo.`);
+        continue;
+      }
+      processed.push(await compressImage(f, 1920, 0.8));
+    }
+    setPhotos((prev) => [...prev, ...processed].slice(0, 6));
+  }
+
   async function handleSubmit() {
     setError(null);
     try {
       await submitDebrief(values, responsable);
+      // Upload des photos du rapport (après soumission du débrief).
+      for (const photo of photos) {
+        await uploadDebriefPhoto(event!.event_id, spaceId, photo, responsable);
+      }
       clearDraft();
     } catch (e) {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -157,6 +180,51 @@ function DebriefContent({
         ))}
       </div>
 
+      {/* Rapport photo (dernière section) */}
+      {isLast && (
+        <div className="rounded-lg border border-pr-stone bg-white p-3">
+          <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-pr-black">
+            <ImagePlus className="h-4 w-4 text-pr-olive" /> Rapport photo (optionnel)
+          </p>
+          <p className="mb-2 text-xs text-pr-black-soft/70">
+            Jusqu'à 6 photos (état des lieux, anomalies, ambiance…), 5 Mo max.
+          </p>
+          {photos.length < 6 && (
+            <label className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-pr-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-pr-black-soft">
+              <ImagePlus className="h-3.5 w-3.5" /> Ajouter des photos
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => void addPhotos(e.target.files)}
+              />
+            </label>
+          )}
+          {photos.length > 0 && (
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {photos.map((p, i) => (
+                <div key={i} className="relative">
+                  <img
+                    src={URL.createObjectURL(p)}
+                    alt={`photo ${i + 1}`}
+                    className="h-20 w-full rounded-md object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
+                    className="absolute -right-1 -top-1 rounded-full bg-pr-rust p-0.5 text-white"
+                    aria-label="Supprimer"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-2">
         <Button
           variant="ghost"
@@ -167,7 +235,7 @@ function DebriefContent({
           <ChevronLeft className="h-5 w-5" /> Précédent
         </Button>
         {isLast ? (
-          <Button size="lg" loading={submitting} onClick={handleSubmit}>
+          <Button size="lg" loading={submitting || uploading} onClick={handleSubmit}>
             <Send className="h-5 w-5" /> Soumettre le débrief
           </Button>
         ) : (

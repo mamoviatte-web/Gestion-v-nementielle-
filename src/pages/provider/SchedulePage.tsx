@@ -12,6 +12,7 @@ import { useOpenEventsForSpace } from '@/hooks/useEvents';
 import { useSchedules } from '@/hooks/useSchedules';
 import { computeHoursWorked, formatHours } from '@/lib/calculations';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { FeuilleRouteBanner } from '@/components/events/FeuilleRouteBanner';
 import {
   Alert,
   Badge,
@@ -71,6 +72,7 @@ function ScheduleContent({ spaceId }: { spaceId: string }) {
   return (
     <div className="space-y-4">
       <PageHeader title="Horaires" description={event.event_name} />
+      <FeuilleRouteBanner eventId={event.event_id} spaceId={spaceId} />
 
       {list.length === 0 ? (
         <EmptyState

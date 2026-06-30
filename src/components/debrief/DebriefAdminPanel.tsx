@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, CheckCircle2, Circle } from 'lucide-react';
 import { useDebriefsForEvent } from '@/hooks/useDebriefs';
 import { DebriefReadonly } from './DebriefReadonly';
+import { DebriefPhotoGallery } from '@/components/events/DebriefPhotoGallery';
 import { Alert, Badge, Spinner } from '@/components/ui';
 import type { EventSpaceWithSpace } from '@/hooks/useEvents';
 import type { Debrief } from '@/lib/types';
@@ -35,6 +36,7 @@ export function DebriefAdminPanel({
           {space?.spaces?.space_name ?? selected.space_id}
         </h2>
         <DebriefReadonly debrief={selected} />
+        <DebriefPhotoGallery eventId={selected.event_id} spaceId={selected.space_id} />
       </div>
     );
   }

@@ -290,6 +290,8 @@ export interface Debrief {
   signature: boolean;
   submitted_at: string | null;
   created_at: string;
+  /** Indique qu'un rapport photo est joint (module pièces jointes). */
+  has_photo_report?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -471,4 +473,39 @@ export interface RunnerTerrainRow {
   returned_quantity: number | null;
   validation_status: RunnerValidationStatus;
   responsible_name: string | null;
+}
+
+/* ------------------------------------------------------------------ */
+/* 6. PIÈCES JOINTES ÉVÉNEMENTS (feuilles de route, photos débrief)    */
+/* ------------------------------------------------------------------ */
+
+export type AttachmentType =
+  | 'feuille_route_seminaire'
+  | 'rapport_photo_debrief'
+  | 'autre';
+
+export interface EventAttachment {
+  id: string;
+  event_id: string;
+  space_id: string | null;
+  attachment_type: AttachmentType;
+  file_name: string;
+  /** Chemin de l'objet dans le bucket Storage `event-files`. */
+  file_url: string;
+  file_size_kb: number | null;
+  mime_type: string | null;
+  uploaded_by: string;
+  uploaded_at: string;
+  comment: string | null;
+}
+
+/** Brouillon de création d'événement (parcours guidé 3 étapes). */
+export interface EventCreationDraft {
+  event_name: string;
+  event_type: EventType;
+  event_date: string;
+  start_time: string;
+  expected_attendees: number;
+  /** Espaces sélectionnés (ignoré si match = tous les espaces). */
+  selected_space_ids: string[];
 }
