@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useState, type ReactNode } from 'react';
-import { AlertTriangle, ChevronRight, CalendarDays, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronRight, CalendarDays, Trash2, Trophy, Presentation, Sparkles } from 'lucide-react';
 import { ConfirmDeleteModal } from '@/components/events/DeleteEventModals';
 import { useEventsList, useEventSpaces } from '@/hooks/useEvents';
 import { useEventStats } from '@/hooks/useEventStats';
@@ -8,9 +8,13 @@ import { useLateProvidersCount, useProviders } from '@/hooks/useProviders';
 import { useCatalog } from '@/hooks/useCatalog';
 import { formatEuro } from '@/lib/calculations';
 import { EVENT_STATUS_META } from '@/lib/labels';
+import { tabForEventType } from '@/lib/eventTypes';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, EmptyState, Spinner } from '@/components/ui';
 import type { Event } from '@/lib/types';
+
+/** Seuil au-delà duquel la liste à plat laisse place à un résumé groupé. */
+const SUMMARY_THRESHOLD = 8;
 
 const OPEN_STATUSES = ['préparé', 'en_cours', 'clôture_en_attente'];
 
@@ -119,6 +123,8 @@ export default function DashboardPage() {
         </h2>
         {events.length === 0 ? (
           <EmptyState icon={CalendarDays} title="Aucun événement" />
+        ) : events.length > SUMMARY_THRESHOLD ? (
+          <EventsSummary events={events} />
         ) : (
           <ul className="space-y-2">
             {events.map((e) => (
@@ -147,6 +153,61 @@ function KpiCard({
       </p>
       <p className="mt-1 font-display text-3xl font-black text-pr-black">{value}</p>
       {hint && <p className="mt-0.5 truncate text-xs text-pr-black-soft/50">{hint}</p>}
+    </div>
+  );
+}
+
+/** Résumé groupé des événements (volume élevé) plutôt qu'une liste à plat. */
+function EventsSummary({ events }: { events: Event[] }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isUpcoming = (e: Event) => new Date(e.event_date) >= today;
+  const sameMonth = (e: Event) => {
+    const d = new Date(e.event_date);
+    return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
+  };
+
+  const matchs = events.filter((e) => tabForEventType(e.event_type) === 'matchs');
+  const matchsUpcoming = matchs.filter((e) => isUpcoming(e) && e.status !== 'archivé');
+  const matchsArchived = matchs.filter((e) => e.status === 'archivé');
+
+  const seminaires = events.filter((e) => tabForEventType(e.event_type) === 'seminaires');
+  const seminairesMonth = seminaires.filter(sameMonth);
+
+  const autres = events.filter((e) => tabForEventType(e.event_type) === 'autres');
+  const autresUpcoming = autres.filter((e) => isUpcoming(e) && e.status !== 'archivé');
+
+  return (
+    <div className="rounded-xl border border-pr-stone bg-white p-4">
+      <ul className="space-y-3">
+        <li className="flex items-center gap-3 text-sm text-pr-black">
+          <Trophy className="h-5 w-5 shrink-0 text-pr-olive-dark" />
+          <span>
+            <strong>{matchsUpcoming.length}</strong> match(s) à venir ·{' '}
+            <strong>{matchsArchived.length}</strong> archivé(s)
+          </span>
+        </li>
+        <li className="flex items-center gap-3 text-sm text-pr-black">
+          <Presentation className="h-5 w-5 shrink-0 text-pr-olive-dark" />
+          <span>
+            <strong>{seminairesMonth.length}</strong> séminaire(s)/réunion(s) ce mois-ci ·{' '}
+            <strong>{seminaires.length}</strong> au total
+          </span>
+        </li>
+        <li className="flex items-center gap-3 text-sm text-pr-black">
+          <Sparkles className="h-5 w-5 shrink-0 text-pr-olive-dark" />
+          <span>
+            <strong>{autresUpcoming.length}</strong> autre(s) événement(s) prévu(s) ·{' '}
+            <strong>{autres.length}</strong> au total
+          </span>
+        </li>
+      </ul>
+      <Link
+        to="/admin/events"
+        className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-pr-olive-dark hover:text-pr-black"
+      >
+        Voir tous les événements <ChevronRight className="h-4 w-4" />
+      </Link>
     </div>
   );
 }

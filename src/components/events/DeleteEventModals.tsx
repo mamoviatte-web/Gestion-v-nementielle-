@@ -6,15 +6,13 @@
 
 import { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
-import { useEventDeletion, useDeletionSummary } from '@/hooks/useEventDeletion';
+import { useEventDeletion, useDeletionSummary, type DeletionSummary } from '@/hooks/useEventDeletion';
 import { useToast } from '@/context/ToastContext';
-import { Alert, Button, Input } from '@/components/ui';
+import { Alert, Button, Input, Spinner } from '@/components/ui';
 import type { Event } from '@/lib/types';
 
-function SummaryLines({ eventId }: { eventId: string }) {
-  const { data: s } = useDeletionSummary(eventId);
-  if (!s) return null;
-  const rows = (
+function summaryRows(s: DeletionSummary): [string, number][] {
+  return (
     [
       ['lignes de stock', s.stockLines],
       ['mouvements de stock', s.movements],
@@ -25,6 +23,10 @@ function SummaryLines({ eventId }: { eventId: string }) {
       ['pièces jointes', s.attachments],
     ] as [string, number][]
   ).filter(([, n]) => n > 0);
+}
+
+function SummaryLines({ summary }: { summary: DeletionSummary }) {
+  const rows = summaryRows(summary);
   if (rows.length === 0) return <p className="text-sm text-pr-black-soft/60">Aucune donnée liée.</p>;
   return (
     <ul className="list-inside list-disc text-sm text-pr-black-soft">
@@ -48,9 +50,14 @@ export function ConfirmDeleteModal({
 }) {
   const { deleteEvent, deleting } = useEventDeletion();
   const { showToast } = useToast();
+  const { data: summary, isLoading } = useDeletionSummary(event.event_id);
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const canDelete = text.trim() === event.event_name;
+
+  // Tant que le récapitulatif charge, on reste en mode strict (le plus prudent).
+  const risk = summary?.riskLevel ?? 'critical';
+  const needsName = risk === 'critical';
+  const canDelete = !needsName || text.trim() === event.event_name;
 
   async function handleDelete() {
     if (!canDelete) return;
@@ -64,13 +71,69 @@ export function ConfirmDeleteModal({
     }
   }
 
+  if (isLoading || !summary) {
+    return (
+      <Shell title="Supprimer l'événement" onClose={onClose}>
+        <div className="flex items-center justify-center py-8">
+          <Spinner label="Analyse des données liées…" />
+        </div>
+      </Shell>
+    );
+  }
+
+  // safe : événement vide → suppression immédiate en 1 clic.
+  if (risk === 'safe') {
+    return (
+      <Shell title="Supprimer l'événement" onClose={onClose}>
+        <p className="text-sm text-pr-black-soft">
+          Supprimer « <strong>{event.event_name}</strong> » ?
+        </p>
+        <p className="mt-1 text-sm text-pr-black-soft/60">
+          Aucune donnée associée — suppression immédiate possible.
+        </p>
+        {error && <Alert variant="error" className="mt-3">{error}</Alert>}
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Annuler</Button>
+          <Button variant="danger" loading={deleting} onClick={handleDelete}>
+            Supprimer
+          </Button>
+        </div>
+      </Shell>
+    );
+  }
+
+  // moderate : récapitulatif visible, confirmation classique sans saisie.
+  if (risk === 'moderate') {
+    return (
+      <Shell title="Supprimer l'événement" onClose={onClose}>
+        <p className="text-sm text-pr-black-soft">
+          Supprimer « <strong>{event.event_name}</strong> » ? Cela supprimera aussi :
+        </p>
+        <div className="my-3">
+          <SummaryLines summary={summary} />
+        </div>
+        <p className="mb-3 text-xs text-pr-black-soft/70">
+          Si un match suivant existe, son chaînage (previous_event_id) sera réinitialisé.
+        </p>
+        {error && <Alert variant="error" className="mb-3">{error}</Alert>}
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Annuler</Button>
+          <Button variant="danger" loading={deleting} onClick={handleDelete}>
+            Confirmer la suppression
+          </Button>
+        </div>
+      </Shell>
+    );
+  }
+
+  // critical : données opérationnelles réelles → confirmation stricte.
   return (
     <Shell title="Supprimer l'événement" onClose={onClose}>
       <Alert variant="error" title={`Supprimer « ${event.event_name} » ?`}>
         Action irréversible. Cela supprimera également :
       </Alert>
       <div className="my-3">
-        <SummaryLines eventId={event.event_id} />
+        <SummaryLines summary={summary} />
       </div>
       <p className="mb-3 text-xs text-pr-black-soft/70">
         Si un match suivant existe, son chaînage (previous_event_id) sera réinitialisé.

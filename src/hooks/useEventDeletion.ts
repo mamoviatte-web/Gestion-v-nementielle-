@@ -22,7 +22,17 @@ const CHILD_TABLES = [
   'event_spaces',
 ] as const;
 
-export interface DeletionSummary {
+/**
+ * Niveau de risque d'une suppression, fonction de ce qui sera réellement perdu :
+ *  - safe     : événement vide (aucune ligne liée) → suppression en 1 clic.
+ *  - moderate : dotations/fiches runner/pièces jointes planifiées, rien saisi
+ *               sur le terrain → confirmation avec récapitulatif, sans saisie.
+ *  - critical : données opérationnelles réelles (mouvements de stock, débriefs,
+ *               prestataires, horaires) → confirmation stricte (retaper le nom).
+ */
+export type DeletionRiskLevel = 'safe' | 'moderate' | 'critical';
+
+export interface DeletionCounts {
   stockLines: number;
   movements: number;
   providers: number;
@@ -30,6 +40,29 @@ export interface DeletionSummary {
   debriefs: number;
   runnerPlans: number;
   attachments: number;
+}
+
+export interface DeletionSummary extends DeletionCounts {
+  riskLevel: DeletionRiskLevel;
+}
+
+/** Détermine le niveau de friction requis selon les données liées. */
+export function computeRiskLevel(summary: DeletionCounts): DeletionRiskLevel {
+  // critical : données opérationnelles réelles déjà saisies.
+  if (
+    summary.movements > 0 ||
+    summary.debriefs > 0 ||
+    summary.providers > 0 ||
+    summary.schedules > 0
+  ) {
+    return 'critical';
+  }
+  // moderate : dotations/runner planifiés mais rien saisi sur le terrain.
+  if (summary.stockLines > 0 || summary.runnerPlans > 0 || summary.attachments > 0) {
+    return 'moderate';
+  }
+  // safe : événement vide, juste créé.
+  return 'safe';
 }
 
 async function countFor(table: string, eventId: string): Promise<number> {
@@ -57,7 +90,41 @@ export function useDeletionSummary(eventId: string | undefined, enabled = true) 
           countFor('runner_auto_planning', eventId!),
           countFor('event_attachments', eventId!),
         ]);
-      return { stockLines, movements, providers, schedules, debriefs, runnerPlans, attachments };
+      const counts = { stockLines, movements, providers, schedules, debriefs, runnerPlans, attachments };
+      return { ...counts, riskLevel: computeRiskLevel(counts) };
+    },
+  });
+}
+
+/**
+ * Carte event_id → niveau de risque pour TOUTE la liste, en ~7 requêtes
+ * (une par table enfant) plutôt que 7 × N. Sert au mode sélection multiple
+ * pour repérer instantanément les événements vides (« safe »).
+ */
+async function eventIdsWithRows(table: string): Promise<string[]> {
+  const { data, error } = await supabase.from(table).select('event_id');
+  if (error) return []; // table inexistante → aucun id
+  return (data ?? []).map((r: { event_id: string }) => r.event_id);
+}
+
+export function useEventsRiskMap(eventIds: string[]) {
+  return useQuery({
+    queryKey: ['eventsRiskMap', [...eventIds].sort()],
+    enabled: eventIds.length > 0,
+    queryFn: async (): Promise<Record<string, DeletionRiskLevel>> => {
+      const criticalTables = ['stock_movements', 'debriefs', 'provider_presence', 'schedules'];
+      const moderateTables = ['event_stock_lines', 'runner_auto_planning', 'event_attachments'];
+      const [critLists, modLists] = await Promise.all([
+        Promise.all(criticalTables.map(eventIdsWithRows)),
+        Promise.all(moderateTables.map(eventIdsWithRows)),
+      ]);
+      const critical = new Set(critLists.flat());
+      const moderate = new Set(modLists.flat());
+      const map: Record<string, DeletionRiskLevel> = {};
+      for (const id of eventIds) {
+        map[id] = critical.has(id) ? 'critical' : moderate.has(id) ? 'moderate' : 'safe';
+      }
+      return map;
     },
   });
 }
