@@ -632,6 +632,95 @@ export interface StockAlert {
   action?: string;
 }
 
+/* ------------------------------------------------------------------ */
+/* 8. MOTEUR D'ANALYSE ET D'APPRENTISSAGE (CDC Analytics)              */
+/* ------------------------------------------------------------------ */
+
+export type TrendDirection = 'forte_hausse' | 'hausse' | 'stable' | 'baisse' | 'forte_baisse';
+
+/** Table `consumption_analytics` — mémoire intelligente (ratios calculés). */
+export interface ConsumptionAnalytics {
+  id: string;
+  space_id: string;
+  product_id: string;
+  event_type: string;
+  avg_qty_per_100_pax: number | null;
+  avg_qty_per_event: number | null;
+  median_consumption: number | null;
+  std_deviation: number | null;
+  coef_chaleur_observed: number | null;
+  coef_pluie_observed: number | null;
+  coef_froid_observed: number | null;
+  coef_forte_affluence_observed: number | null;
+  coef_faible_affluence_observed: number | null;
+  trend_direction: TrendDirection | null;
+  trend_pct_change: number | null;
+  rupture_count: number;
+  surdotation_count: number;
+  return_rate_avg: number | null;
+  loss_rate_avg: number | null;
+  nb_events_analyzed: number;
+  last_event_id: string | null;
+  last_updated: string;
+  confidence_score: number | null;
+  // Jointures optionnelles pour l'UI
+  product?: Product;
+  space?: Space;
+}
+
+/** Table `event_context_log` — contexte réel d'un événement après clôture. */
+export interface EventContextLog {
+  id: string;
+  event_id: string;
+  event_type: string;
+  expected_attendance: number | null;
+  planned_weather: string | null;
+  planned_temperature: number | null;
+  real_attendance: number | null;
+  real_weather: string | null;
+  real_temperature: number | null;
+  event_start_time: string | null;
+  event_duration_hours: number | null;
+  total_consumed_value_ht: number | null;
+  avg_spend_per_pax: number | null;
+  total_ruptures: number;
+  total_surdotations: number;
+  total_losses: number;
+  global_return_rate: number | null;
+  data_quality_score: number | null;
+  is_anomaly: boolean;
+  anomaly_reason: string | null;
+  closed_at: string | null;
+  closed_by: string | null;
+}
+
+/** Table `runner_recommendations` — recommandation tracée pour un événement. */
+export interface RunnerRecommendation {
+  id: string;
+  event_id: string;
+  space_id: string;
+  product_id: string;
+  analytics_nb_events: number | null;
+  base_quantity: number | null;
+  base_per_100_pax: number | null;
+  coef_attendance: number | null;
+  coef_weather: number | null;
+  coef_event_type: number | null;
+  coef_trend: number | null;
+  coef_historical: number | null;
+  total_coefficient: number | null;
+  raw_recommended_qty: number | null;
+  recommended_qty: number | null;
+  area_initial_stock: number | null;
+  qty_to_move: number | null;
+  alert_type: string | null;
+  alert_message: string | null;
+  confidence_score: number | null;
+  validated_qty: number | null;
+  validation_delta_pct: number | null;
+  generated_at: string;
+}
+
 /** Brouillon de création d'événement (parcours guidé 3 étapes). */
 export interface EventCreationDraft {
   event_name: string;

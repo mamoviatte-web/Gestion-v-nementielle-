@@ -281,14 +281,25 @@ export function useRunnerPlanning(eventId: string | undefined) {
     onSuccess: invalidate,
   });
 
-  /* 7. Clôturer et alimenter l'historique. */
+  /* 7. Clôturer et alimenter l'historique (closeAndLearn). */
   const closeMutation = useMutation({
     mutationFn: async () => {
       const current = plans.data ?? [];
+
+      // Contexte réel de l'événement (nécessaire aux analytics : event_type/affluence/météo).
+      const { data: ev } = await supabase
+        .from('events')
+        .select('event_type, expected_attendees, weather_type')
+        .eq('event_id', eventId)
+        .single();
+      const eventType = (ev?.event_type as string | null) ?? null;
+      const expectedAttendance = (ev?.expected_attendees as number | null) ?? null;
+      const weatherType = (ev?.weather_type as string | null) ?? null;
+
       for (const p of current) {
         const picked = p.picked_quantity ?? 0;
         const returned = p.returned_quantity ?? 0;
-        // Historique : consumed_qty = picked - returned (colonne générée)
+        // Historique : consumed_qty = initial + réassort - final (colonne générée).
         await supabase.from('event_consumptions').upsert(
           {
             event_id: p.event_id,
@@ -298,11 +309,23 @@ export function useRunnerPlanning(eventId: string | undefined) {
             restock_qty: 0,
             final_stock: returned,
             unit_price_ht: p.product?.unit_price_ht ?? null,
-            event_type: p.product ? p.product.category : null,
+            event_type: eventType,
+            expected_attendance: expectedAttendance,
+            weather_type: weatherType,
           },
           { onConflict: 'event_id,space_id,product_id' },
         );
-        // Mise à jour du stock espace
+        // Écart recommandation vs validation manager (apprentissage des corrections).
+        if (p.recommended_quantity && p.validated_quantity != null) {
+          const delta = ((p.validated_quantity - p.recommended_quantity) / p.recommended_quantity) * 100;
+          await supabase
+            .from('runner_recommendations')
+            .update({ validation_delta_pct: delta })
+            .eq('event_id', p.event_id)
+            .eq('space_id', p.space_id)
+            .eq('product_id', p.product_id);
+        }
+        // Mise à jour du stock espace.
         const newQty = Math.max(0, (p.initial_area_stock ?? 0) - (picked - returned));
         await supabase
           .from('area_stocks')
@@ -310,11 +333,15 @@ export function useRunnerPlanning(eventId: string | undefined) {
           .eq('area_id', p.space_id)
           .eq('product_id', p.product_id);
       }
+
       const { error } = await supabase
         .from('runner_auto_planning')
         .update({ validation_status: 'clôturé' })
         .eq('event_id', eventId);
       if (error) throw error;
+
+      // Recalcul du moteur d'apprentissage (idempotent ; aussi déclenché par trigger).
+      await supabase.rpc('refresh_all_analytics').then(undefined, () => undefined);
     },
     onSuccess: invalidate,
   });

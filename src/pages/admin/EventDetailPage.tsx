@@ -10,13 +10,14 @@ import { ProvidersPanel } from '@/components/providers/ProvidersPanel';
 import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { RunnerPlanningTab } from '@/components/runner/RunnerPlanningTab';
+import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
 import { RunnerGenerationModal } from '@/components/runner/RunnerGenerationModal';
 import { RouteSheetPanel } from '@/components/events/RouteSheetPanel';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
 import { Zap } from 'lucide-react';
 
-type Tab = 'stocks' | 'prestataires' | 'horaires' | 'debriefs' | 'route' | 'runner';
+type Tab = 'stocks' | 'prestataires' | 'horaires' | 'debriefs' | 'route' | 'runner' | 'analyse';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'stocks', label: 'Stocks & Dotations' },
@@ -25,6 +26,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'debriefs', label: 'Débriefs' },
   { key: 'route', label: '📄 Feuille de route' },
   { key: 'runner', label: '🚀 Runner Auto' },
+  { key: 'analyse', label: '📈 Analyse conso' },
 ];
 
 export default function EventDetailPage() {
@@ -210,6 +212,7 @@ export default function EventDetailPage() {
           onOpenModal={() => setShowRunnerModal(true)}
         />
       )}
+      {tab === 'analyse' && <ConsumptionAnalysisTab event={event} spaces={spaces} />}
     </div>
   );
 }

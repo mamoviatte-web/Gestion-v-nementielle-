@@ -13,6 +13,7 @@ import {
   Download,
   LogOut,
   AlertTriangle,
+  TrendingUp,
   type LucideIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -30,6 +31,7 @@ const NAV: NavItem[] = [
   { to: '/admin/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
   { to: '/admin/events', label: 'Événements', icon: CalendarDays },
   { to: '/admin/stock', label: 'Stocks', icon: Boxes },
+  { to: '/admin/analytics', label: 'Analyses', icon: TrendingUp },
   { to: '/admin/catalog', label: 'Catalogue', icon: Package },
   { to: '/admin/spaces', label: 'Espaces', icon: Building2 },
   { to: '/admin/export', label: 'Export', icon: Download },
