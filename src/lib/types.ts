@@ -730,6 +730,88 @@ export interface RunnerRecommendation {
   generated_at: string;
 }
 
+/* ------------------------------------------------------------------ */
+/* 9. MODULE ANALYSE RH — STAFF & HORAIRES                             */
+/* ------------------------------------------------------------------ */
+
+export interface StaffAnalytics {
+  id: string;
+  space_id: string | null;
+  role_name: string;
+  event_type: string;
+  avg_planned_hours: number | null;
+  avg_actual_hours: number | null;
+  avg_overtime_hours: number | null;
+  avg_agents_per_event: number | null;
+  avg_agents_per_100pax: number | null;
+  overtime_rate: number | null;
+  overstaffing_rate: number | null;
+  understaffing_rate: number | null;
+  avg_hours_delta: number | null;
+  nb_events_analyzed: number;
+  confidence_score: number | null;
+  space?: Space;
+}
+
+export type StaffIssue =
+  | 'heures_sup_importantes'
+  | 'depart_premature'
+  | 'depart_non_saisi'
+  | 'surstaffing_espace';
+
+export interface StaffAlert {
+  space: string;
+  role: string;
+  issue: StaffIssue;
+  severity: 'info' | 'warning' | 'critical';
+  detail: string;
+}
+
+export interface StaffEventSummary {
+  id: string;
+  event_id: string;
+  event_type: string;
+  real_attendance: number | null;
+  total_agents: number;
+  total_planned_hours: number;
+  total_actual_hours: number;
+  total_overtime_hours: number;
+  total_overtime_agents: number;
+  agents_per_100pax: number | null;
+  hours_per_agent: number | null;
+  efficiency_score: number | null;
+  has_overstaffing: boolean;
+  has_understaffing: boolean;
+  has_significant_overtime: boolean;
+  alert_details: StaffAlert[] | null;
+  computed_at: string;
+  event?: Pick<Event, 'event_id' | 'event_name' | 'event_date' | 'event_type'>;
+}
+
+/** Ligne de détail horaire (retour de la RPC compute_staff_hours). */
+export interface StaffHoursDetail {
+  schedule_id: string;
+  staff_name: string;
+  role_name: string;
+  space_name: string;
+  planned_hours: number | null;
+  actual_hours: number | null;
+  delta_hours: number | null;
+  overtime_hours: number | null;
+  is_overstaffed: boolean;
+  alert_type: string | null;
+}
+
+/** Ligne schedules enrichie (jointures) pour les vues d'agrégation RH. */
+export interface ScheduleRow extends Schedule {
+  computed_hours?: number | null;
+  mission_type?: string | null;
+  is_external?: boolean | null;
+  contract_type?: string | null;
+  spaces?: Pick<Space, 'space_id' | 'space_name' | 'space_type'> | null;
+  events?: Pick<Event, 'event_id' | 'event_name' | 'event_date' | 'event_type' | 'expected_attendees' | 'status'> | null;
+}
+
 /** Brouillon de création d'événement (parcours guidé 3 étapes). */
 export interface EventCreationDraft {
   event_name: string;

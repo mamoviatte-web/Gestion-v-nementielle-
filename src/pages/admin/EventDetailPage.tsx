@@ -13,6 +13,7 @@ import { RunnerPlanningTab } from '@/components/runner/RunnerPlanningTab';
 import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
 import { SeminaireSpacesTab } from '@/components/seminaire/SeminaireSpacesTab';
 import { SeminaireBilanTab } from '@/components/seminaire/SeminaireBilanTab';
+import { StaffEventInsights } from '@/components/staff/StaffEventInsights';
 import { RunnerGenerationModal } from '@/components/runner/RunnerGenerationModal';
 import { RouteSheetPanel } from '@/components/events/RouteSheetPanel';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -224,12 +225,16 @@ export default function EventDetailPage() {
       {activeTab === 'prestataires' && (
         <ProvidersPanel eventId={event.event_id} spaces={spaces} />
       )}
-      {activeTab === 'horaires' &&
-        (selectedSpace ? (
-          <ScheduleAdminPanel eventId={event.event_id} spaceId={selectedSpace} />
-        ) : (
-          <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
-        ))}
+      {activeTab === 'horaires' && (
+        <div className="space-y-6">
+          {selectedSpace ? (
+            <ScheduleAdminPanel eventId={event.event_id} spaceId={selectedSpace} />
+          ) : (
+            <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
+          )}
+          <StaffEventInsights event={event} />
+        </div>
+      )}
       {activeTab === 'debriefs' && (
         <DebriefAdminPanel eventId={event.event_id} spaces={spaces} />
       )}
