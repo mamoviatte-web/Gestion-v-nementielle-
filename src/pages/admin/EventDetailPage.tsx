@@ -11,15 +11,27 @@ import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { RunnerPlanningTab } from '@/components/runner/RunnerPlanningTab';
 import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
+import { SeminaireSpacesTab } from '@/components/seminaire/SeminaireSpacesTab';
+import { SeminaireBilanTab } from '@/components/seminaire/SeminaireBilanTab';
 import { RunnerGenerationModal } from '@/components/runner/RunnerGenerationModal';
 import { RouteSheetPanel } from '@/components/events/RouteSheetPanel';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
 import { Zap } from 'lucide-react';
 
-type Tab = 'stocks' | 'prestataires' | 'horaires' | 'debriefs' | 'route' | 'runner' | 'analyse';
+type Tab =
+  | 'stocks'
+  | 'prestataires'
+  | 'horaires'
+  | 'debriefs'
+  | 'route'
+  | 'runner'
+  | 'analyse'
+  | 'espaces'
+  | 'bilan';
 
-const TABS: { key: Tab; label: string }[] = [
+/** Onglets complets pour un match (dotations runner, horaires staff…). */
+const MATCH_TABS: { key: Tab; label: string }[] = [
   { key: 'stocks', label: 'Stocks & Dotations' },
   { key: 'prestataires', label: 'Prestataires' },
   { key: 'horaires', label: 'Horaires Staff' },
@@ -27,6 +39,14 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'route', label: '📄 Feuille de route' },
   { key: 'runner', label: '🚀 Runner Auto' },
   { key: 'analyse', label: '📈 Analyse conso' },
+];
+
+/** Onglets simplifiés pour un séminaire / événement hors match. */
+const SEMINAIRE_TABS: { key: Tab; label: string }[] = [
+  { key: 'espaces', label: '📍 Espaces & codes' },
+  { key: 'bilan', label: '📊 Bilan' },
+  { key: 'prestataires', label: 'Prestataires' },
+  { key: 'debriefs', label: 'Débriefs' },
 ];
 
 export default function EventDetailPage() {
@@ -55,6 +75,12 @@ export default function EventDetailPage() {
   const spaces = spacesQuery.data ?? [];
   const selectedSpace = spaceId || spaces[0]?.space_id || '';
   const status = EVENT_STATUS_META[event.status];
+
+  // Adapter l'interface au type d'événement : un séminaire n'a pas besoin des
+  // dotations runner ni des horaires staff — vue simplifiée (codes espaces + bilan).
+  const isMatch = event.event_type === 'match';
+  const TABS = isMatch ? MATCH_TABS : SEMINAIRE_TABS;
+  const activeTab: Tab = TABS.some((t) => t.key === tab) ? tab : TABS[0].key;
 
   return (
     <div>
@@ -122,7 +148,7 @@ export default function EventDetailPage() {
               Passer en cours
             </Button>
           )}
-          {(event.status === 'brouillon' || event.status === 'préparé') && (
+          {isMatch && (event.status === 'brouillon' || event.status === 'préparé') && (
             <Button size="sm" onClick={() => setShowRunnerModal(true)}>
               <Zap className="h-4 w-4" /> Générer les dotations runner
             </Button>
@@ -159,7 +185,7 @@ export default function EventDetailPage() {
             onClick={() => setTab(t.key)}
             className={clsx(
               '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-              tab === t.key
+              activeTab === t.key
                 ? 'border-provence text-provence'
                 : 'border-transparent text-slate-500 hover:text-slate-700',
             )}
@@ -169,8 +195,8 @@ export default function EventDetailPage() {
         ))}
       </div>
 
-      {/* Sélecteur d'espace (commun aux onglets par espace, sauf Runner) */}
-      {spaces.length > 0 && tab !== 'runner' && (
+      {/* Sélecteur d'espace (onglets par espace uniquement) */}
+      {spaces.length > 0 && (activeTab === 'stocks' || activeTab === 'horaires') && (
         <div className="mb-4 max-w-xs">
           <Select
             label="Espace"
@@ -185,34 +211,37 @@ export default function EventDetailPage() {
       )}
 
       {/* Contenu */}
-      {tab === 'stocks' &&
+      {activeTab === 'espaces' && <SeminaireSpacesTab event={event} spaces={spaces} />}
+      {activeTab === 'bilan' && <SeminaireBilanTab event={event} spaces={spaces} />}
+
+      {activeTab === 'stocks' &&
         (selectedSpace ? (
           <StockDotationsTable eventId={event.event_id} spaceId={selectedSpace} />
         ) : (
           <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
         ))}
 
-      {tab === 'prestataires' && (
+      {activeTab === 'prestataires' && (
         <ProvidersPanel eventId={event.event_id} spaces={spaces} />
       )}
-      {tab === 'horaires' &&
+      {activeTab === 'horaires' &&
         (selectedSpace ? (
           <ScheduleAdminPanel eventId={event.event_id} spaceId={selectedSpace} />
         ) : (
           <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
         ))}
-      {tab === 'debriefs' && (
+      {activeTab === 'debriefs' && (
         <DebriefAdminPanel eventId={event.event_id} spaces={spaces} />
       )}
-      {tab === 'route' && <RouteSheetPanel eventId={event.event_id} spaces={spaces} />}
-      {tab === 'runner' && (
+      {activeTab === 'route' && <RouteSheetPanel eventId={event.event_id} spaces={spaces} />}
+      {activeTab === 'runner' && (
         <RunnerPlanningTab
           event={event}
           spaces={spaces}
           onOpenModal={() => setShowRunnerModal(true)}
         />
       )}
-      {tab === 'analyse' && <ConsumptionAnalysisTab event={event} spaces={spaces} />}
+      {activeTab === 'analyse' && <ConsumptionAnalysisTab event={event} spaces={spaces} />}
     </div>
   );
 }

@@ -42,6 +42,8 @@ const StockEntryPage = lazy(() => import('@/pages/provider/StockEntryPage'));
 const SchedulePage = lazy(() => import('@/pages/provider/SchedulePage'));
 const DebriefPage = lazy(() => import('@/pages/provider/DebriefPage'));
 const RunnerTerrainView = lazy(() => import('@/pages/runner/RunnerTerrainView'));
+const ZoneEntryPage = lazy(() => import('@/pages/zone/ZoneEntryPage'));
+const ZoneDashboard = lazy(() => import('@/pages/zone/ZoneDashboard'));
 
 /** Redirection de la racine selon l'état d'authentification et le rôle. */
 function RootRedirect() {
@@ -64,6 +66,9 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         {/* Vue terrain runner publique (par jeton) */}
         <Route path="/runner/:token" element={<RunnerTerrainView />} />
+        {/* Zone responsable séminaire — accès public par code (sans compte) */}
+        <Route path="/zone/:token" element={<ZoneEntryPage />} />
+        <Route path="/zone/:token/dashboard" element={<ZoneDashboard />} />
 
         {/* Espace Stade (ROLE_STADE) */}
         <Route

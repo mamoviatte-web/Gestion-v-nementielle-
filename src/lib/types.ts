@@ -197,6 +197,15 @@ export interface EventSpace {
   space_id: string;
   /** Nom du responsable pré-rempli (le nom effectif est saisi via RG-001). */
   responsible_default_name: string | null;
+  // ── Module séminaire : code d'accès par espace (accès sans compte) ──
+  access_token?: string | null;
+  token_expires_at?: string | null;
+  space_responsible_name?: string | null;
+  space_responsible_phone?: string | null;
+  space_actual_arrival?: string | null;
+  space_actual_departure?: string | null;
+  feuille_route_url?: string | null;
+  feuille_route_name?: string | null;
 }
 
 /** Table `runner_dotations` — fiches runner digitalisées (CDC §8). */

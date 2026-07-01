@@ -1,0 +1,18 @@
+-- ═══════════════════════════════════════════════════════════════════
+-- Module séminaire — accès responsable par code (token), sans compte.
+-- Appliqué via Supabase MCP le 2026-07-01. Idempotent.
+-- Résumé (DDL complet dans les migrations seminaire_zone_tokens / _rpc) :
+--   • event_spaces : access_token, token_expires_at, space_responsible_name/_phone,
+--     space_actual_arrival/_departure, feuille_route_url/_name + trigger de génération
+--     de token (6 car.) à l'INSERT + backfill des lignes existantes.
+--   • space_sessions : sessions responsables (RLS anon insert/select).
+--   • debriefs.photo_urls TEXT[] (photos de débrief).
+--   • Bucket Storage public `zone-files` (feuille de route + photos) : lecture
+--     publique, insert anon+authenticated.
+--   • RPC SECURITY DEFINER (GRANT anon) : validate_zone_token, get_zone_state,
+--     start_zone_session, submit_zone_initial_stock, submit_zone_final_stock,
+--     submit_zone_schedule, submit_zone_debrief.
+--     → consumed_qty reste calculé applicativement ; RG-001 (nom ≥ 2 car.) contrôlé
+--       dans start_zone_session ; les tokens expirent event_date + 2 jours.
+-- ═══════════════════════════════════════════════════════════════════
+-- Voir l'historique des migrations Supabase pour le corps exact des fonctions.
