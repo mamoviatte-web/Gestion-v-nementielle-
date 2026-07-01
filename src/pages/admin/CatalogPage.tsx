@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Plus, PowerOff, RotateCcw } from 'lucide-react';
+import { Plus, PowerOff, RotateCcw, QrCode, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { useCatalog, type NewProduct } from '@/hooks/useCatalog';
+import { useStockBalances, useReserveLocation } from '@/hooks/useStockV2';
 import { formatEuro } from '@/lib/calculations';
+import { isStockCritical } from '@/lib/stockCalculations';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
   Alert,
@@ -13,6 +15,12 @@ import {
 } from '@/components/ui';
 import type { Product, ProductCategory } from '@/lib/types';
 
+interface FormState extends NewProduct {
+  price: string;
+  minStr: string;
+  maxStr: string;
+}
+
 const CATEGORIES: ProductCategory[] = [
   'Vins',
   'Bières',
@@ -22,27 +30,42 @@ const CATEGORIES: ProductCategory[] = [
   'Matériel',
 ];
 
-const EMPTY: NewProduct = {
+const EMPTY: FormState = {
   product_name: '',
   category: 'Vins',
   unit: 'btl',
   packaging: '',
   unit_price_ht: null,
   stock_min: 0,
+  fournisseur: '',
+  is_sensitive: false,
+  packaging_qty: 1,
+  packaging_unit: '',
+  price: '',
+  minStr: '',
+  maxStr: '',
 };
 
+const PACKAGING_UNITS = ['', 'carton', 'palette', 'fût', 'boudin'];
+
 export default function CatalogPage() {
-  const { products, addProduct, setActive, submitting } = useCatalog();
+  const { products, addProduct, setActive, setQrCode, submitting } = useCatalog();
+  const reserve = useReserveLocation();
+  const { data: reserveBalances } = useStockBalances(reserve?.id);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<NewProduct & { price: string }>({
-    ...EMPTY,
-    price: '',
-  });
+  const [form, setForm] = useState<FormState>({ ...EMPTY });
   const [error, setError] = useState<string | null>(null);
 
   const list = products.data ?? [];
   const activeProducts = list.filter((p) => p.active);
   const missingPrice = activeProducts.filter((p) => p.unit_price_ht === null);
+
+  /** Quantité en réserve centrale par produit (pour le badge « critique »). */
+  const reserveQty = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const b of reserveBalances ?? []) map[b.product_id] = Number(b.current_quantity);
+    return map;
+  }, [reserveBalances]);
 
   const grouped = useMemo(() => {
     const map = new Map<ProductCategory, Product[]>();
@@ -60,18 +83,34 @@ export default function CatalogPage() {
       return;
     }
     try {
+      const min = form.minStr === '' ? 0 : Number(form.minStr);
       await addProduct({
         product_name: form.product_name,
         category: form.category,
         unit: form.unit,
         packaging: form.packaging,
         unit_price_ht: form.price === '' ? null : Number(form.price),
-        stock_min: form.stock_min,
+        stock_min: min,
+        min_stock: min,
+        max_stock: form.maxStr === '' ? null : Number(form.maxStr),
+        fournisseur: form.fournisseur,
+        is_sensitive: form.is_sensitive,
+        packaging_qty: form.packaging_qty ?? 1,
+        packaging_unit: form.packaging_unit,
       });
-      setForm({ ...EMPTY, price: '' });
+      setForm({ ...EMPTY });
       setShowForm(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de l\'ajout.');
+    }
+  }
+
+  async function handleGenerateQr(p: Product) {
+    const code = `PR-${p.category.slice(0, 3).toUpperCase()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    try {
+      await setQrCode(p.product_id, code);
+    } catch {
+      /* silencieux : la génération du code ne bloque pas l'opérationnel */
     }
   }
 
@@ -124,14 +163,44 @@ export default function CatalogPage() {
               onChange={(e) => setForm({ ...form, price: e.target.value })}
             />
             <Input
+              label="Fournisseur"
+              value={form.fournisseur ?? ''}
+              onChange={(e) => setForm({ ...form, fournisseur: e.target.value })}
+            />
+            <Input
               type="number"
-              label="Stock min."
-              value={String(form.stock_min ?? 0)}
-              onChange={(e) =>
-                setForm({ ...form, stock_min: Number(e.target.value) || 0 })
-              }
+              label="Stock minimum *"
+              value={form.minStr}
+              onChange={(e) => setForm({ ...form, minStr: e.target.value })}
+            />
+            <Input
+              type="number"
+              label="Stock maximum"
+              value={form.maxStr}
+              onChange={(e) => setForm({ ...form, maxStr: e.target.value })}
+            />
+            <Input
+              type="number"
+              label="Conditionnement — quantité"
+              value={String(form.packaging_qty ?? 1)}
+              onChange={(e) => setForm({ ...form, packaging_qty: Number(e.target.value) || 1 })}
+            />
+            <Select
+              label="Conditionnement — unité"
+              options={PACKAGING_UNITS.map((u) => ({ value: u, label: u || '—' }))}
+              value={form.packaging_unit ?? ''}
+              onChange={(e) => setForm({ ...form, packaging_unit: e.target.value })}
             />
           </div>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-pr-stone text-pr-olive focus:ring-pr-olive"
+              checked={form.is_sensitive ?? false}
+              onChange={(e) => setForm({ ...form, is_sensitive: e.target.checked })}
+            />
+            Produit sensible (coûteux ou à risque)
+          </label>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setShowForm(false)}>
               Annuler
@@ -153,40 +222,68 @@ export default function CatalogPage() {
                 {category} ({items.length})
               </h2>
               <ul className="space-y-2">
-                {items.map((p) => (
-                  <li
-                    key={p.product_id}
-                    className="flex items-center justify-between gap-3 rounded-lg bg-white p-3 ring-1 ring-slate-200"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900">
-                        {p.product_name}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {p.unit}
-                        {p.packaging ? ` · ${p.packaging}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {p.unit_price_ht === null ? (
-                        <Badge tone="warning">Prix manquant</Badge>
-                      ) : (
-                        <span className="text-sm font-medium text-slate-700">
-                          {formatEuro(p.unit_price_ht)}
-                        </span>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={submitting}
-                        onClick={() => void setActive(p.product_id, false)}
-                        title="Désactiver (RG-009)"
-                      >
-                        <PowerOff className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </li>
-                ))}
+                {items.map((p) => {
+                  const min = p.min_stock ?? p.stock_min ?? 0;
+                  const critical = p.product_id in reserveQty && isStockCritical(reserveQty[p.product_id], min);
+                  return (
+                    <li
+                      key={p.product_id}
+                      className="flex items-center justify-between gap-3 rounded-lg bg-white p-3 ring-1 ring-slate-200"
+                    >
+                      <div className="min-w-0">
+                        <p className="flex items-center gap-2 truncate font-medium text-slate-900">
+                          {p.product_name}
+                          {p.is_sensitive && (
+                            <Badge tone="danger">
+                              <ShieldAlert className="mr-1 inline h-3 w-3" /> Sensible
+                            </Badge>
+                          )}
+                          {critical && (
+                            <Badge tone="danger">
+                              <AlertTriangle className="mr-1 inline h-3 w-3" /> Stock critique
+                            </Badge>
+                          )}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {p.unit}
+                          {p.packaging ? ` · ${p.packaging}` : ''}
+                          {` · Min: ${min}${p.max_stock != null ? ` | Max: ${p.max_stock}` : ''}`}
+                          {p.fournisseur ? ` · ${p.fournisseur}` : ''}
+                          {p.qr_code ? ` · QR: ${p.qr_code}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {p.unit_price_ht === null ? (
+                          <Badge tone="warning">Prix manquant</Badge>
+                        ) : (
+                          <span className="text-sm font-medium text-slate-700">
+                            {formatEuro(p.unit_price_ht)}
+                          </span>
+                        )}
+                        {!p.qr_code && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={submitting}
+                            onClick={() => void handleGenerateQr(p)}
+                            title="Générer un code QR"
+                          >
+                            <QrCode className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={submitting}
+                          onClick={() => void setActive(p.product_id, false)}
+                          title="Désactiver (RG-009)"
+                        >
+                          <PowerOff className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           );

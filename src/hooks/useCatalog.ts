@@ -14,6 +14,13 @@ export interface NewProduct {
   packaging?: string | null;
   unit_price_ht?: number | null;
   stock_min?: number;
+  // Enrichissements CDC V2 §6
+  min_stock?: number | null;
+  max_stock?: number | null;
+  fournisseur?: string | null;
+  is_sensitive?: boolean;
+  packaging_qty?: number | null;
+  packaging_unit?: string | null;
 }
 
 export function useCatalog() {
@@ -48,8 +55,25 @@ export function useCatalog() {
         packaging: data.packaging || null,
         unit_price_ht: data.unit_price_ht ?? null,
         stock_min: data.stock_min ?? 0,
+        min_stock: data.min_stock ?? data.stock_min ?? 0,
+        max_stock: data.max_stock ?? null,
+        fournisseur: data.fournisseur || null,
+        is_sensitive: data.is_sensitive ?? false,
+        packaging_qty: data.packaging_qty ?? 1,
+        packaging_unit: data.packaging_unit || null,
         active: true,
       });
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  const qrMutation = useMutation({
+    mutationFn: async (vars: { id: string; code: string }) => {
+      const { error } = await supabase
+        .from('products')
+        .update({ qr_code: vars.code })
+        .eq('product_id', vars.id);
       if (error) throw error;
     },
     onSuccess: invalidate,
@@ -71,6 +95,7 @@ export function useCatalog() {
     addProduct: (data: NewProduct) => addMutation.mutateAsync(data),
     setActive: (id: string, active: boolean) =>
       setActiveMutation.mutateAsync({ id, active }),
-    submitting: addMutation.isPending || setActiveMutation.isPending,
+    setQrCode: (id: string, code: string) => qrMutation.mutateAsync({ id, code }),
+    submitting: addMutation.isPending || setActiveMutation.isPending || qrMutation.isPending,
   };
 }

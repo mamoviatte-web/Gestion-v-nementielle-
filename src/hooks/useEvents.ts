@@ -9,6 +9,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { applyClosureToStock, applyRunnerTransfersToStock } from '@/hooks/useStockV2';
 import type { Event, EventSpace, EventStatus, Space } from '@/lib/types';
 
 /** Statuts considérés comme « ouverts » côté Responsable. */
@@ -79,10 +80,25 @@ export function useEventActions(eventId: string | undefined) {
         .update({ status })
         .eq('event_id', eventId);
       if (error) throw error;
+
+      // Intégration stock CDC V2 (résiliente : n'empêche pas le changement de statut).
+      try {
+        if (status === 'préparé' || status === 'en_cours') {
+          await applyRunnerTransfersToStock(eventId, 'Préparation runner');
+        }
+        if (status === 'clôturé') {
+          await applyClosureToStock(eventId);
+        }
+      } catch {
+        /* le registre de stock est best-effort ; la clôture reste effective */
+      }
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['event', eventId] });
       void queryClient.invalidateQueries({ queryKey: ['events'] });
+      void queryClient.invalidateQueries({ queryKey: ['stockBalances'] });
+      void queryClient.invalidateQueries({ queryKey: ['stockMovementsJournal'] });
+      void queryClient.invalidateQueries({ queryKey: ['stockAlerts'] });
     },
   });
   return {

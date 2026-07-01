@@ -123,7 +123,7 @@ export interface User {
   created_at: string;
 }
 
-/** Table `products` — catalogue produits. */
+/** Table `products` — catalogue produits (enrichi CDC V2 §6). */
 export interface Product {
   product_id: string;
   product_name: string;
@@ -135,6 +135,15 @@ export interface Product {
   unit_price_ht: number | null;
   stock_min: number;
   active: boolean;
+  // ── Enrichissements CDC V2 (stock_v2.sql) ──
+  min_stock?: number | null;
+  max_stock?: number | null;
+  qr_code?: string | null;
+  is_sensitive?: boolean | null;
+  fournisseur?: string | null;
+  packaging_qty?: number | null;
+  packaging_unit?: string | null;
+  photo_url?: string | null;
 }
 
 /** Variante de `products` sans le prix HT (RG-003, contexte Responsable). */
@@ -222,7 +231,7 @@ export interface EventStockLine {
   submitted_at: string | null;
 }
 
-/** Table `stock_movements` — historique complet (RG-002). */
+/** Table `stock_movements` — historique complet (RG-002 + CDC V2 §7). */
 export interface StockMovement {
   movement_id: string;
   event_id: string;
@@ -232,6 +241,11 @@ export interface StockMovement {
   qty: number;
   responsable_nom: string;
   created_at: string;
+  // ── Enrichissements CDC V2 : mouvements localisés ──
+  from_location_id?: string | null;
+  to_location_id?: string | null;
+  unit_price_ht?: number | null;
+  is_anomaly?: boolean | null;
 }
 
 /** Table `provider_presence` — présence des prestataires (CDC §7 / RG-008). */
@@ -517,6 +531,105 @@ export interface EventAttachment {
   uploaded_by: string;
   uploaded_at: string;
   comment: string | null;
+}
+
+/* ------------------------------------------------------------------ */
+/* 7. MODULE STOCK CDC V2 — emplacements, soldes, inventaires          */
+/* ------------------------------------------------------------------ */
+
+/** Type d'emplacement hiérarchique (CDC §12). */
+export type LocationType =
+  | 'reserve_centrale'
+  | 'espace'
+  | 'frigo'
+  | 'bac'
+  | 'palette'
+  | 'zone_temporaire_evenement';
+
+/** 7 types de mouvements localisés (CDC §7). Distinct de `MovementType` (RG-002). */
+export type StockMovementTypeV2 =
+  | 'entrée_fournisseur'
+  | 'transfert_espace'
+  | 'réassort_événement'
+  | 'retour_réutilisable'
+  | 'consommation'
+  | 'perte_casse'
+  | 'correction';
+
+/** Table `stock_locations` — emplacements hiérarchiques. */
+export interface StockLocation {
+  id: string;
+  name: string;
+  location_type: LocationType;
+  parent_location_id: string | null;
+  /** Espace stade lié (si location_type = 'espace' / 'frigo' / 'bac'). */
+  area_id: string | null;
+  is_active: boolean;
+  description: string | null;
+  created_at: string;
+}
+
+/** Table `stock_balances` — solde courant par produit × emplacement. */
+export interface StockBalance {
+  id: string;
+  product_id: string;
+  location_id: string;
+  current_quantity: number;
+  reusable_quantity: number;
+  opened_quantity: number;
+  unit_value_ht: number | null;
+  last_movement_at: string;
+  updated_by: string | null;
+}
+
+/** Balance enrichie (jointures produit + emplacement) pour l'UI. */
+export interface StockBalanceView extends StockBalance {
+  product?: Product;
+  location?: StockLocation;
+}
+
+/** Table `inventory_counts` — comptages physiques périodiques. */
+export interface InventoryCount {
+  id: string;
+  location_id: string;
+  product_id: string;
+  theoretical_qty: number | null;
+  real_qty: number | null;
+  /** Colonne générée : real_qty - theoretical_qty. */
+  variance: number | null;
+  responsible_name: string;
+  comment: string | null;
+  counted_at: string;
+  validated_by: string | null;
+  validated_at: string | null;
+  inventory_session_id: string | null;
+}
+
+/** Mouvement de stock enrichi (jointures) pour le journal. */
+export interface StockMovementView extends StockMovement {
+  product?: Product;
+  from_location?: StockLocation | null;
+  to_location?: StockLocation | null;
+  event?: Pick<Event, 'event_id' | 'event_name'> | null;
+}
+
+/** Sévérité d'une alerte dashboard (CDC §10). */
+export type AlertSeverity = 'error' | 'warning' | 'info';
+
+/** Alerte de stock calculée (8 types — CDC §10). */
+export interface StockAlert {
+  type:
+    | 'critique'
+    | 'surdotation'
+    | 'rupture'
+    | 'perte_casse'
+    | 'dormant'
+    | 'ecart_inventaire'
+    | 'hausse_consommation'
+    | 'meteo_chaude';
+  severity: AlertSeverity;
+  message: string;
+  action?: string;
 }
 
 /** Brouillon de création d'événement (parcours guidé 3 étapes). */

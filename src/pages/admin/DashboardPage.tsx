@@ -6,6 +6,7 @@ import { useEventsList, useEventSpaces } from '@/hooks/useEvents';
 import { useEventStats } from '@/hooks/useEventStats';
 import { useLateProvidersCount, useProviders } from '@/hooks/useProviders';
 import { useCatalog } from '@/hooks/useCatalog';
+import { useStockAlerts } from '@/hooks/useStockAlerts';
 import { formatEuro } from '@/lib/calculations';
 import { EVENT_STATUS_META } from '@/lib/labels';
 import { tabForEventType } from '@/lib/eventTypes';
@@ -22,6 +23,7 @@ export default function DashboardPage() {
   const eventsQuery = useEventsList();
   const catalog = useCatalog();
   const { data: lateCount = 0 } = useLateProvidersCount();
+  const { data: stockAlerts = [] } = useStockAlerts();
   const [deleteTarget, setDeleteTarget] = useState<Event | null>(null);
 
   const events = eventsQuery.data ?? [];
@@ -44,7 +46,12 @@ export default function DashboardPage() {
     missingPrice.length > 0 ||
     lateCount > 0 ||
     stats.negatives.length > 0 ||
-    finishedNotAllClosed;
+    finishedNotAllClosed ||
+    stockAlerts.length > 0;
+
+  // Regroupement des alertes de stock CDC V2 §10 par sévérité (aperçu dashboard).
+  const stockErrors = stockAlerts.filter((a) => a.severity === 'error');
+  const stockWarnings = stockAlerts.filter((a) => a.severity === 'warning');
 
   if (eventsQuery.isLoading) return <Spinner fullPage label="Chargement…" />;
 
@@ -82,6 +89,26 @@ export default function DashboardPage() {
             <Alert variant="warning" title="Inventaires de clôture incomplets">
               {stats.spacesClosed}/{stats.spacesTotal} espaces clôturés sur le
               dernier événement terminé.
+            </Alert>
+          )}
+          {stockErrors.length > 0 && (
+            <Alert variant="error" title={`${stockErrors.length} alerte(s) de stock critique — CDC §10`}>
+              <ul className="list-inside list-disc">
+                {stockErrors.slice(0, 5).map((a, i) => (
+                  <li key={i}>
+                    {a.message}
+                    {a.action ? ` → ${a.action}` : ''}
+                  </li>
+                ))}
+              </ul>
+              <Link to="/admin/stock" className="mt-1 inline-block font-medium underline">
+                Voir le module Stocks
+              </Link>
+            </Alert>
+          )}
+          {stockWarnings.length > 0 && (
+            <Alert variant="warning" title={`${stockWarnings.length} alerte(s) de stock à surveiller`}>
+              {stockWarnings.slice(0, 4).map((a) => a.message).join(' · ')}
             </Alert>
           )}
         </div>

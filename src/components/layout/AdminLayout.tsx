@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   CalendarDays,
   Package,
+  Boxes,
   Building2,
   Download,
   LogOut,
@@ -28,6 +29,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: '/admin/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
   { to: '/admin/events', label: 'Événements', icon: CalendarDays },
+  { to: '/admin/stock', label: 'Stocks', icon: Boxes },
   { to: '/admin/catalog', label: 'Catalogue', icon: Package },
   { to: '/admin/spaces', label: 'Espaces', icon: Building2 },
   { to: '/admin/export', label: 'Export', icon: Download },
