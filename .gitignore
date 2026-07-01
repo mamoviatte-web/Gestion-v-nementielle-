@@ -32,3 +32,6 @@ supabase/scripts/*.env
 # Agent Skills installés (réinstallables via skills-lock.json) — on versionne
 # uniquement le lockfile, pas le contenu vendored.
 .agents/
+.vercel
+.env*
+!.env.example
