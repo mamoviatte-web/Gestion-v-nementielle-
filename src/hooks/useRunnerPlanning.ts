@@ -73,6 +73,7 @@ export function useRunnerPlanning(eventId: string | undefined) {
   /* 1. Génération automatique. */
   const generateMutation = useMutation({
     mutationFn: async (params: RunnerGenerationParams) => {
+     try {
       // Événement (affluence, type)
       const { data: ev, error: evErr } = await supabase
         .from('events')
@@ -190,6 +191,18 @@ export function useRunnerPlanning(eventId: string | undefined) {
           reference_event_id: autoReferenceId,
         })
         .eq('event_id', params.event_id);
+     } catch (err) {
+        // Diagnostic détaillé (code / message / details / hint Supabase).
+        const e = err as { code?: string; message?: string; details?: string; hint?: string };
+        console.error('[Runner] Échec de génération des fiches', {
+          code: e?.code,
+          message: e?.message,
+          details: e?.details,
+          hint: e?.hint,
+          params,
+        });
+        throw err;
+     }
     },
     onSuccess: invalidate,
   });
