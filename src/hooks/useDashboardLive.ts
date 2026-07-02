@@ -83,7 +83,66 @@ function toMinutes(t: string | null): number | null {
   return Number(h) * 60 + Number(m);
 }
 
+/** Forme brute renvoyée par la RPC get_dashboard_live (agrégats nullables). */
+interface RpcPayload {
+  today_events: TodayEvent[] | null;
+  kpis: DashboardKpis | null;
+  stock_alerts: DashboardStockAlert[] | null;
+  provider_alerts: DashboardProviderAlert[] | null;
+  spaces_status: DashboardSpaceStatus[] | null;
+}
+
+const EMPTY_KPIS: DashboardKpis = {
+  active_events: 0,
+  total_pax_today: 0,
+  critical_alerts: 0,
+  debriefs_pending: 0,
+};
+
+/** Normalise le JSON de la RPC en DashboardData (arrays → [], nombres coercés). */
+function normalizeRpc(p: RpcPayload): DashboardData {
+  const k = p.kpis ?? EMPTY_KPIS;
+  return {
+    today_events: (p.today_events ?? []).map((e) => ({
+      ...e,
+      pax: e.pax == null ? null : Number(e.pax),
+      spaces_count: Number(e.spaces_count),
+      stocks_submitted: Number(e.stocks_submitted),
+    })),
+    kpis: {
+      active_events: Number(k.active_events),
+      total_pax_today: Number(k.total_pax_today),
+      critical_alerts: Number(k.critical_alerts),
+      debriefs_pending: Number(k.debriefs_pending),
+    },
+    stock_alerts: (p.stock_alerts ?? []).map((a) => ({
+      ...a,
+      current_qty: Number(a.current_qty),
+      min_stock: Number(a.min_stock),
+    })),
+    provider_alerts: (p.provider_alerts ?? []).map((a) => ({
+      ...a,
+      delay_min: Number(a.delay_min),
+    })),
+    spaces_status: p.spaces_status ?? [],
+  };
+}
+
+/**
+ * Tente d'abord la fonction agrégée get_dashboard_live() (1 seul appel) ;
+ * repli automatique sur la composition côté client si elle est absente/échoue.
+ */
 async function fetchDashboardData(): Promise<DashboardData> {
+  try {
+    const { data, error } = await supabase.rpc('get_dashboard_live');
+    if (!error && data) return normalizeRpc(data as RpcPayload);
+  } catch {
+    /* fonction absente ou indisponible → repli client */
+  }
+  return composeClientSide();
+}
+
+async function composeClientSide(): Promise<DashboardData> {
   const today = todayISO();
 
   const [
