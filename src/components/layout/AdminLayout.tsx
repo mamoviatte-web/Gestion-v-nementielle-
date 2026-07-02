@@ -20,6 +20,8 @@ import {
 import { clsx } from 'clsx';
 import { useAuth } from '@/context/AuthContext';
 import { useLateProvidersCount } from '@/hooks/useProviders';
+import { useCriticalStatus } from '@/hooks/useDashboardLive';
+import { AlertBanner } from '@/components/admin/AlertBanner';
 import { Logo } from '@/components/ui';
 
 interface NavItem {
@@ -43,6 +45,8 @@ export function AdminLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { data: lateCount = 0 } = useLateProvidersCount();
+  const { data: critStatus } = useCriticalStatus();
+  const criticalAlerts = critStatus?.criticalAlerts ?? 0;
 
   async function handleLogout() {
     await logout();
@@ -86,6 +90,11 @@ export function AdminLayout() {
             >
               <Icon className="h-5 w-5" />
               {label}
+              {to === '/admin/dashboard' && criticalAlerts > 0 && (
+                <span className="ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-pr-rust px-1.5 py-0.5 text-[11px] font-bold text-white">
+                  {criticalAlerts}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -118,6 +127,8 @@ export function AdminLayout() {
             </button>
           </div>
         </header>
+
+        <AlertBanner />
 
         <main className="flex-1 px-4 py-5 pb-24 md:px-8 md:pb-8">
           <Outlet />
