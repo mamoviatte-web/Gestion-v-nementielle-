@@ -8,6 +8,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Send } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useRunnerPlanning } from '@/hooks/useRunnerPlanning';
+import { useLiveBalanceMap } from '@/hooks/useDepots';
 import {
   getRunnerRowColor,
   RUNNER_ROW_CLASSES,
@@ -32,6 +33,7 @@ export default function RunnerSpaceDetail() {
   const { id, spaceId } = useParams<{ id: string; spaceId: string }>();
   const { plans, validateLine, validateSpace, transmitToRunners, submitting } =
     useRunnerPlanning(id);
+  const { map: liveBalance } = useLiveBalanceMap();
   const [edits, setEdits] = useState<Record<string, { qty: string; comment: string }>>({});
 
   if (plans.isLoading) return <Spinner fullPage label="Chargement…" />;
@@ -39,6 +41,19 @@ export default function RunnerSpaceDetail() {
   const rows = (plans.data ?? []).filter((p) => p.space_id === spaceId);
   const spaceName = rows[0]?.space?.space_name ?? 'Espace';
   const status = rows[0]?.validation_status ?? 'brouillon';
+
+  /** Quantité qui sera dispatchée (validée sinon reco / à-monter). */
+  const dispatchQty = (p: {
+    validated_quantity: number | null;
+    recommended_quantity: number | null;
+    quantity_to_move: number | null;
+  }): number => p.validated_quantity ?? p.quantity_to_move ?? p.recommended_quantity ?? 0;
+
+  // Pré-dispatch : produits dont la quantité dépasse le stock dépôt disponible.
+  const warnings = rows.filter((p) => {
+    const depot = liveBalance.get(p.product_id)?.qty_total_depot ?? 0;
+    return dispatchQty(p) > depot;
+  });
 
   function editVal(p: { id: string; recommended_quantity: number | null; validated_quantity: number | null }) {
     return (
@@ -61,6 +76,36 @@ export default function RunnerSpaceDetail() {
         description={`${rows.length} produit(s)`}
         action={<Badge tone="info">{RUNNER_STATUS_LABELS[status]}</Badge>}
       />
+
+      {/* Encadré pré-dispatch : contrôle stock dépôt avant transmission */}
+      {rows.length > 0 && (
+        <div
+          className={clsx(
+            'mb-4 rounded-xl border p-4',
+            warnings.length > 0 ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50',
+          )}
+        >
+          <h4 className="mb-1 text-sm font-medium text-slate-800">
+            {warnings.length > 0
+              ? `⚠️ ${warnings.length} produit(s) avec stock dépôt insuffisant`
+              : '✅ Stock dépôt suffisant pour toutes les lignes'}
+          </h4>
+          {warnings.length > 0 ? (
+            <ul className="space-y-0.5">
+              {warnings.map((w) => (
+                <li key={w.id} className="text-xs text-amber-700">
+                  • {w.product?.product_name} : {dispatchQty(w)} requis,{' '}
+                  {liveBalance.get(w.product_id)?.qty_total_depot ?? 0} disponible en dépôt
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-emerald-700">
+              La transmission déduira automatiquement les quantités des dépôts AUC / Stock EST / Stockage Fûts.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Button size="sm" loading={submitting} onClick={() => spaceId && void validateSpace(spaceId)}>
@@ -91,6 +136,7 @@ export default function RunnerSpaceDetail() {
               <TH className="text-right">Coeff.</TH>
               <TH className="text-right">Reco.</TH>
               <TH className="text-right">À monter</TH>
+              <TH className="text-right">Stock dépôt</TH>
               <TH>Validée</TH>
               <TH>Alerte</TH>
               <TH />
@@ -119,6 +165,30 @@ export default function RunnerSpaceDetail() {
                   <TD className="text-right">×{coeff.toFixed(2)}</TD>
                   <TD className="text-right font-semibold">{p.recommended_quantity ?? '—'}</TD>
                   <TD className="text-right">{p.quantity_to_move ?? '—'}</TD>
+                  <TD className="text-right">
+                    {(() => {
+                      const lb = liveBalance.get(p.product_id);
+                      const depotQty = lb?.qty_total_depot ?? 0;
+                      const need = dispatchQty(p);
+                      return (
+                        <div>
+                          <div
+                            className={clsx(
+                              'font-medium',
+                              depotQty === 0
+                                ? 'text-red-600'
+                                : depotQty < need
+                                  ? 'text-amber-600'
+                                  : 'text-emerald-700',
+                            )}
+                          >
+                            {depotQty} en dépôt
+                          </div>
+                          <div className="text-[11px] text-slate-400">{lb?.source_depot ?? '—'}</div>
+                        </div>
+                      );
+                    })()}
+                  </TD>
                   <TD>
                     <Input
                       type="number"

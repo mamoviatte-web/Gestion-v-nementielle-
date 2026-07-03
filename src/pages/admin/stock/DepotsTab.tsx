@@ -27,6 +27,7 @@ import {
   useDepotDeliveries,
   useDepotDispatch,
   useDepotProductScope,
+  useLiveBalanceMap,
   type Delivery,
 } from '@/hooks/useDepots';
 
@@ -159,6 +160,7 @@ export default function DepotsTab() {
 
 function DepotStockView({ depotId }: { depotId: string | null }) {
   const balances = useDepotBalances(depotId ?? undefined);
+  const { map: liveBalance } = useLiveBalanceMap();
 
   const { rows, totalQty, totalValue } = useMemo(() => {
     const data = (balances.data ?? []).filter((b) => b.current_quantity !== 0);
@@ -192,18 +194,24 @@ function DepotStockView({ depotId }: { depotId: string | null }) {
             <tr className="border-b border-pr-stone text-left text-xs uppercase tracking-wide text-pr-black-soft/60">
               <th className="px-4 py-2.5 font-semibold">Produit</th>
               <th className="px-4 py-2.5 font-semibold">Famille</th>
-              <th className="px-4 py-2.5 text-right font-semibold">Quantité</th>
+              <th className="px-4 py-2.5 text-right font-semibold">Qté dépôt</th>
+              <th className="px-4 py-2.5 text-right font-semibold">En espace</th>
               <th className="px-4 py-2.5 text-right font-semibold">PU HT</th>
               <th className="px-4 py-2.5 text-right font-semibold">Valeur HT</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-pr-stone">
-            {rows.map((b) => (
+            {rows.map((b) => {
+              const inEvent = liveBalance.get(b.product_id)?.qty_in_event ?? 0;
+              return (
               <tr key={b.product_id} className="hover:bg-pr-cream/40">
                 <td className="px-4 py-2.5 font-medium text-pr-black">{b.product_name}</td>
                 <td className="px-4 py-2.5 text-pr-black-soft/70">{b.category}</td>
                 <td className="px-4 py-2.5 text-right tabular-nums text-pr-black">
                   {b.current_quantity.toLocaleString('fr-FR')} {b.unit}
+                </td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-sky-600">
+                  {inEvent > 0 ? `${inEvent.toLocaleString('fr-FR')} ${b.unit}` : '—'}
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums text-pr-black-soft/70">
                   {b.unit_value_ht == null ? '—' : formatEuro(b.unit_value_ht)}
@@ -212,7 +220,8 @@ function DepotStockView({ depotId }: { depotId: string | null }) {
                   {b.unit_value_ht == null ? '—' : formatEuro(b.current_quantity * b.unit_value_ht)}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

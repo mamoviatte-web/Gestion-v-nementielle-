@@ -338,6 +338,57 @@ export function useRecordDelivery() {
   };
 }
 
+/* ------------------------------------------------------------------ */
+/* Balance temps réel (vue stock_live_balance)                         */
+/* ------------------------------------------------------------------ */
+
+export interface LiveBalanceRow {
+  product_id: string;
+  product_name: string;
+  category: string;
+  unit: string;
+  unit_price_ht: number | null;
+  min_stock: number | null;
+  qty_auc: number | null;
+  qty_est: number | null;
+  qty_futs: number | null;
+  qty_total_depot: number;
+  qty_in_event: number;
+  valeur_depot_ht: number;
+  alert_status: 'rupture' | 'critique' | 'ok';
+  source_depot: string | null;
+}
+
+/** Balance temps réel par produit (dépôts + en espace). */
+export function useStockLiveBalance() {
+  return useQuery({
+    queryKey: ['stockLiveBalance'],
+    staleTime: 15_000,
+    queryFn: async (): Promise<LiveBalanceRow[]> => {
+      const { data, error } = await supabase.from('stock_live_balance').select('*');
+      if (error) throw error;
+      return ((data ?? []) as LiveBalanceRow[]).map((r) => ({
+        ...r,
+        qty_total_depot: Number(r.qty_total_depot ?? 0),
+        qty_in_event: Number(r.qty_in_event ?? 0),
+        valeur_depot_ht: Number(r.valeur_depot_ht ?? 0),
+        unit_price_ht: r.unit_price_ht == null ? null : Number(r.unit_price_ht),
+      }));
+    },
+  });
+}
+
+/** Carte product_id → balance temps réel (pour lookups rapides). */
+export function useLiveBalanceMap() {
+  const q = useStockLiveBalance();
+  const map = useMemo(() => {
+    const m = new Map<string, LiveBalanceRow>();
+    for (const r of q.data ?? []) m.set(r.product_id, r);
+    return m;
+  }, [q.data]);
+  return { map, isLoading: q.isLoading };
+}
+
 /** Utilitaire : familles de produits éligibles à un dépôt donné (par son nom). */
 export function useDepotProductScope(depotName: string | undefined) {
   return useMemo(() => {
