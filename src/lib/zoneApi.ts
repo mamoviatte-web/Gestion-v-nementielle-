@@ -229,6 +229,28 @@ export async function uploadFeuilleRoute(
   return supabase.storage.from('zone-files').getPublicUrl(path).data.publicUrl;
 }
 
+/**
+ * Régénère un code d'accès zone (admin) : nouveau token + expiration robuste
+ * (max de date_événement + 2 j et maintenant + 30 j). Renvoie le nouveau token.
+ */
+export async function regenerateZoneToken(
+  eventId: string,
+  spaceId: string,
+  eventDate: string,
+): Promise<string> {
+  const token = crypto.randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase();
+  const expiry = new Date(
+    Math.max(new Date(eventDate).getTime() + 2 * 86_400_000, Date.now() + 30 * 86_400_000),
+  ).toISOString();
+  const { error } = await supabase
+    .from('event_spaces')
+    .update({ access_token: token, token_expires_at: expiry })
+    .eq('event_id', eventId)
+    .eq('space_id', spaceId);
+  if (error) throw error;
+  return token;
+}
+
 /** Enregistre l'URL de la feuille de route sur l'event_space (admin). */
 export async function saveFeuilleRoute(
   eventId: string,

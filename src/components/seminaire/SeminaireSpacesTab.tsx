@@ -7,11 +7,13 @@ import {
   ExternalLink,
   CheckCircle2,
   Clock,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button, Badge, EmptyState, Spinner } from '@/components/ui';
 import { useToast } from '@/context/ToastContext';
 import { supabase } from '@/lib/supabase';
-import { uploadFeuilleRoute, saveFeuilleRoute } from '@/lib/zoneApi';
+import { uploadFeuilleRoute, saveFeuilleRoute, regenerateZoneToken } from '@/lib/zoneApi';
 import type { Event } from '@/lib/types';
 import type { EventSpaceWithSpace } from '@/hooks/useEvents';
 
@@ -52,7 +54,21 @@ export function SeminaireSpacesTab({
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
+  const [regenerating, setRegenerating] = useState<Record<string, boolean>>({});
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const handleRegenerate = async (spaceId: string) => {
+    setRegenerating((prev) => ({ ...prev, [spaceId]: true }));
+    try {
+      const token = await regenerateZoneToken(event.event_id, spaceId, event.event_date);
+      showToast(`Nouveau lien généré (${token}).`, 'success');
+      await queryClient.invalidateQueries({ queryKey: ['eventSpaces', event.event_id] });
+    } catch {
+      showToast('Échec de la régénération du lien.', 'warning');
+    } finally {
+      setRegenerating((prev) => ({ ...prev, [spaceId]: false }));
+    }
+  };
 
   const { data: status = EMPTY_STATUS, isLoading } = useQuery<SpaceStatusMaps>({
     queryKey: ['seminaireSpaceStatus', event.event_id],
@@ -153,6 +169,10 @@ export function SeminaireSpacesTab({
             const name = es.spaces?.space_name ?? es.space_id;
             const token = es.access_token ?? '';
             const link = buildLink(es.access_token);
+            const expired = es.token_expires_at
+              ? new Date(es.token_expires_at).getTime() < Date.now()
+              : false;
+            const isRegen = regenerating[es.space_id] ?? false;
             const initial = status.hasInitial[es.space_id] ?? false;
             const final = status.hasFinal[es.space_id] ?? false;
             const debrief = status.hasDebrief[es.space_id] ?? false;
@@ -217,6 +237,26 @@ export function SeminaireSpacesTab({
                     >
                       <Copy className="h-4 w-4" aria-hidden />
                       Copier le lien
+                    </Button>
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    {expired ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-pr-rust">
+                        <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> Lien expiré
+                      </span>
+                    ) : es.token_expires_at ? (
+                      <span className="text-xs text-pr-black-soft/70">
+                        Valide jusqu'au{' '}
+                        {new Date(es.token_expires_at).toLocaleDateString('fr-FR')}
+                      </span>
+                    ) : null}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={isRegen}
+                      onClick={() => void handleRegenerate(es.space_id)}
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Régénérer
                     </Button>
                   </div>
                 </div>
