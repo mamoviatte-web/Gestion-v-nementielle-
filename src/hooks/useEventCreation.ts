@@ -114,6 +114,16 @@ export function useEventCreation() {
         spaceIds = draft.selected_space_ids;
       }
 
+      // RG buvettes : les buvettes ne s'activent QUE sur les matchs.
+      if (draft.event_type !== 'match' && spaceIds.length > 0) {
+        const { data: buv } = await supabase
+          .from('spaces')
+          .select('space_id')
+          .eq('space_type', 'Buvette');
+        const buvetteIds = new Set((buv ?? []).map((s) => s.space_id));
+        spaceIds = spaceIds.filter((id) => !buvetteIds.has(id));
+      }
+
       if (spaceIds.length > 0) {
         const { error: esErr } = await supabase
           .from('event_spaces')

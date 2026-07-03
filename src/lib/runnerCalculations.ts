@@ -47,6 +47,52 @@ export function getWeatherCoeff(weather: WeatherType, category: string): number 
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Calibrage buvettes (5 matchs historiques : Angoulême, Barrage,      */
+/* Colomiers, Mont-de-Marsan, Vannes)                                  */
+/* ------------------------------------------------------------------ */
+
+export interface BuvetteRatio {
+  per100: number;
+  type: 'soft_50cl' | 'fut';
+}
+
+/** Ratios de référence par 100 spectateurs du match (répartis sur ~9 buvettes). */
+export const BUVETTE_REFERENCE_RATIOS: Record<string, BuvetteRatio> = {
+  'Cristaline 50cl': { per100: 1.42, type: 'soft_50cl' },
+  'Pepsi 50cl': { per100: 1.1, type: 'soft_50cl' },
+  'Ice Tea 50cl': { per100: 0.92, type: 'soft_50cl' },
+  'San Pellegrino 50cl': { per100: 0.73, type: 'soft_50cl' },
+  'Orangina 50cl': { per100: 0.67, type: 'soft_50cl' },
+  'Fût BUD': { per100: 0.22, type: 'fut' },
+  'Fût LEFFE': { per100: 0.13, type: 'fut' },
+  'Fût Goose Island IPA': { per100: 0.13, type: 'fut' },
+  'Fût Hoegaarden Blanche': { per100: 0.11, type: 'fut' },
+};
+
+/** Coefficient météo calibré buvettes — softs 50cl très sensibles à la chaleur. */
+export function getBuvetteWeatherCoeff(weather: WeatherType, productType: string): number {
+  if (productType !== 'soft_50cl') return getWeatherCoeff(weather, 'Soft');
+  switch (weather) {
+    case 'forte_chaleur':
+      return 1.4;
+    case 'chaleur':
+      return 1.2;
+    case 'pluie':
+      return 0.85;
+    case 'froid':
+      return 0.9;
+    default:
+      return 1.0;
+  }
+}
+
+/**
+ * Tendance haussière constatée sur les 5 matchs (softs +223 % Pepsi, +250 %
+ * Cristaline). Par défaut, majorer légèrement les dotations buvettes.
+ */
+export const BUVETTE_TREND_COEFF = 1.15;
+
 /** Coefficient type d'événement. */
 export function getEventTypeCoeff(eventType: string): number {
   const coeffs: Record<string, number> = {

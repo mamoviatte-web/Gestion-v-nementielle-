@@ -29,6 +29,7 @@ import {
   useProductHistory,
 } from '@/hooks/useConsumptionAnalytics';
 import { confidenceBars, TREND_META } from '@/lib/analyticsEngine';
+import { BuvetteAnalyticsSection } from '@/components/buvette/BuvetteAnalyticsSection';
 import type { ConsumptionAnalytics } from '@/lib/types';
 
 /* ─── Référentiels ──────────────────────────────────────────────────── */
@@ -225,6 +226,10 @@ export default function AnalyticsPage() {
         description="Moteur d'apprentissage — précision croissante à chaque événement clôturé."
         action={refreshButton}
       />
+
+      <div className="mb-6">
+        <BuvetteAnalyticsSection />
+      </div>
 
       {rows.length === 0 ? (
         <EmptyState

@@ -17,12 +17,14 @@ import { StaffEventInsights } from '@/components/staff/StaffEventInsights';
 import { DebriefScoresGrid } from '@/components/debrief/DebriefScoresGrid';
 import { RunnerGenerationModal } from '@/components/runner/RunnerGenerationModal';
 import { RouteSheetPanel } from '@/components/events/RouteSheetPanel';
+import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
 import { Zap } from 'lucide-react';
 
 type Tab =
   | 'stocks'
+  | 'buvettes'
   | 'prestataires'
   | 'horaires'
   | 'debriefs'
@@ -35,6 +37,7 @@ type Tab =
 /** Onglets complets pour un match (dotations runner, horaires staff…). */
 const MATCH_TABS: { key: Tab; label: string }[] = [
   { key: 'stocks', label: 'Stocks & Dotations' },
+  { key: 'buvettes', label: '🍺 Buvettes' },
   { key: 'prestataires', label: 'Prestataires' },
   { key: 'horaires', label: 'Horaires Staff' },
   { key: 'debriefs', label: 'Débriefs' },
@@ -221,6 +224,8 @@ export default function EventDetailPage() {
         ) : (
           <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
         ))}
+
+      {activeTab === 'buvettes' && <BuvetteGroupsTab />}
 
       {activeTab === 'prestataires' && (
         <ProvidersPanel eventId={event.event_id} spaces={spaces} />
