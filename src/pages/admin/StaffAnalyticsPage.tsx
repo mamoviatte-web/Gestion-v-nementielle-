@@ -30,6 +30,7 @@ import {
   TH,
   TD,
 } from '@/components/ui';
+import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useToast } from '@/context/ToastContext';
 import {
@@ -959,6 +960,14 @@ export default function StaffAnalyticsPage() {
       <PageHeader
         title="Staff & Horaires"
         description="Analyse RH — dimensionnement, heures supplémentaires, efficacité."
+        action={
+          <Link
+            to="/admin/analytics/staff/monthly"
+            className="inline-flex items-center gap-1 rounded-lg bg-pr-black px-3 py-2 text-sm font-medium text-white hover:bg-pr-black-soft"
+          >
+            📅 Rapports mensuels
+          </Link>
+        }
       />
 
       {/* Onglets par type d'événement */}

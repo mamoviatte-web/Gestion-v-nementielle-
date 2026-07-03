@@ -14,6 +14,7 @@ import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalys
 import { SeminaireSpacesTab } from '@/components/seminaire/SeminaireSpacesTab';
 import { SeminaireBilanTab } from '@/components/seminaire/SeminaireBilanTab';
 import { StaffEventInsights } from '@/components/staff/StaffEventInsights';
+import { DebriefScoresGrid } from '@/components/debrief/DebriefScoresGrid';
 import { RunnerGenerationModal } from '@/components/runner/RunnerGenerationModal';
 import { RouteSheetPanel } from '@/components/events/RouteSheetPanel';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -236,7 +237,10 @@ export default function EventDetailPage() {
         </div>
       )}
       {activeTab === 'debriefs' && (
-        <DebriefAdminPanel eventId={event.event_id} spaces={spaces} />
+        <div className="space-y-6">
+          <DebriefScoresGrid eventId={event.event_id} spaces={spaces} />
+          <DebriefAdminPanel eventId={event.event_id} spaces={spaces} />
+        </div>
       )}
       {activeTab === 'route' && <RouteSheetPanel eventId={event.event_id} spaces={spaces} />}
       {activeTab === 'runner' && (

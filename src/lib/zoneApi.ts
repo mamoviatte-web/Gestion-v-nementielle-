@@ -42,6 +42,24 @@ export interface ZoneDebrief {
   suggestions_generales: string | null;
   photo_urls: string[] | null;
   submitted_at: string | null;
+  // Débrief enrichi (scores ménage / technique / signalement)
+  overall_rating: string | null;
+  service_score: number | null;
+  cleaning_score: number | null;
+  cleaning_before_ok: boolean | null;
+  cleaning_after_ok: boolean | null;
+  cleaning_issues: string[] | null;
+  cleaning_comment: string | null;
+  technical_score: number | null;
+  tech_fridge_ok: boolean | null;
+  tech_equipment_ok: boolean | null;
+  tech_lighting_ok: boolean | null;
+  tech_plumbing_ok: boolean | null;
+  tech_hvac_ok: boolean | null;
+  tech_issues: string[] | null;
+  technical_comment: string | null;
+  has_urgent_issue: boolean | null;
+  urgent_issue_detail: string | null;
 }
 
 export interface ZoneStatus {
@@ -57,9 +75,31 @@ export interface ZoneState {
   stock_lines: ZoneStockLine[];
   arrival: string | null;
   departure: string | null;
+  staff_name: string | null;
   planned_start: string | null;
   debrief: ZoneDebrief | null;
   status: ZoneStatus;
+}
+
+/** Charge utile du débrief enrichi (envoyée en JSONB à la RPC). */
+export interface DebriefPayload {
+  overall_rating?: string | null;
+  service_score?: number | null;
+  cleaning_score?: number | null;
+  cleaning_before_ok?: boolean | null;
+  cleaning_after_ok?: boolean | null;
+  cleaning_issues?: string[];
+  cleaning_comment?: string | null;
+  technical_score?: number | null;
+  tech_fridge_ok?: boolean | null;
+  tech_equipment_ok?: boolean | null;
+  tech_lighting_ok?: boolean | null;
+  tech_plumbing_ok?: boolean | null;
+  tech_hvac_ok?: boolean | null;
+  tech_issues?: string[];
+  technical_comment?: string | null;
+  has_urgent_issue?: boolean;
+  urgent_issue_detail?: string | null;
 }
 
 async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
@@ -128,12 +168,14 @@ export async function submitSchedule(
   name: string,
   arrival: string | null,
   departure: string | null,
+  staffName?: string | null,
 ): Promise<void> {
   const r = await rpc<{ success: boolean; error?: string }>('submit_zone_schedule', {
     p_token: token,
     p_responsible_name: name,
     p_arrival: arrival,
     p_departure: departure,
+    p_staff_name: staffName ?? null,
   });
   if (!r.success) throw new Error(r.error ?? 'Erreur lors de la saisie des horaires.');
 }
@@ -145,6 +187,7 @@ export async function submitDebrief(
   stocksOk: string,
   notes: string,
   photoUrls: string[],
+  payload: DebriefPayload = {},
 ): Promise<void> {
   const r = await rpc<{ success: boolean; error?: string }>('submit_zone_debrief', {
     p_token: token,
@@ -153,6 +196,7 @@ export async function submitDebrief(
     p_stocks_ok: stocksOk,
     p_notes: notes,
     p_photo_urls: photoUrls,
+    p_payload: payload,
   });
   if (!r.success) throw new Error(r.error ?? 'Erreur lors de la soumission du débrief.');
 }
