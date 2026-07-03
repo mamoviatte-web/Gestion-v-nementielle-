@@ -19,14 +19,13 @@ import {
   Table,
   TBody,
   TD,
-  TFoot,
   TH,
   THead,
   TR,
 } from '@/components/ui';
 import { useToast } from '@/context/ToastContext';
-import { formatEuro } from '@/lib/calculations';
 import { supabase } from '@/lib/supabase';
+import { BilanCostTable } from '@/components/seminaire/BilanCostTable';
 import type { Event } from '@/lib/types';
 import type { EventSpaceWithSpace } from '@/hooks/useEvents';
 
@@ -363,52 +362,15 @@ export function SeminaireBilanTab({
         )}
       </section>
 
-      {/* 2 — Synthèse stocks ---------------------------------------------- */}
+      {/* 2 — Synthèse des coûts (prix U × consommé) ----------------------- */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
-          Synthèse des stocks
+          Synthèse des coûts F&amp;B
         </h3>
-        {displayedLines.length === 0 ? (
-          <p className="text-sm text-slate-500">Aucune saisie de stock pour l'instant.</p>
-        ) : (
-          <Table>
-            <THead>
-              <TR>
-                <TH>Produit</TH>
-                <TH>Espace</TH>
-                <TH className="text-right">Initial</TH>
-                <TH className="text-right">Final</TH>
-                <TH className="text-right">Consommé</TH>
-                <TH className="text-right">Coût HT</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {displayedLines.map((l, i) => {
-                const cost = computeLineCost(l);
-                return (
-                  <TR key={`${l.space_id}-${l.product_id}-${i}`}>
-                    <TD>{l.product?.product_name ?? l.product_id}</TD>
-                    <TD>{nameOf(l.space_id)}</TD>
-                    <TD className="text-right">{l.initial_qty}</TD>
-                    <TD className="text-right">{l.final_qty ?? '—'}</TD>
-                    <TD className="text-right">{computeConsumed(l)}</TD>
-                    <TD className="text-right">{cost !== null ? formatEuro(cost) : '—'}</TD>
-                  </TR>
-                );
-              })}
-            </TBody>
-            <TFoot>
-              <TR>
-                <TD className="font-semibold">Coût total estimé</TD>
-                <TD />
-                <TD />
-                <TD />
-                <TD />
-                <TD className="text-right font-semibold">{formatEuro(totalCost)}</TD>
-              </TR>
-            </TFoot>
-          </Table>
-        )}
+        <p className="text-xs text-slate-400">
+          Coût = prix unitaire HT × consommé (initial + réassort − final). Survolez un produit pour la formule.
+        </p>
+        <BilanCostTable eventId={event.event_id} />
       </section>
 
       {/* 3 — Horaires terrain --------------------------------------------- */}

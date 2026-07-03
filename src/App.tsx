@@ -34,6 +34,7 @@ const EventDetailPage = lazy(() => import('@/pages/admin/EventDetailPage'));
 const CatalogPage = lazy(() => import('@/pages/admin/CatalogPage'));
 const StockPage = lazy(() => import('@/pages/admin/stock/StockPage'));
 const AnalyticsPage = lazy(() => import('@/pages/admin/AnalyticsPage'));
+const CostControlPage = lazy(() => import('@/pages/admin/CostControlPage'));
 const StaffAnalyticsPage = lazy(() => import('@/pages/admin/StaffAnalyticsPage'));
 const MonthlyStaffReportsPage = lazy(() => import('@/pages/admin/MonthlyStaffReportsPage'));
 const SpacesPage = lazy(() => import('@/pages/admin/SpacesPage'));
@@ -88,6 +89,7 @@ export default function App() {
           <Route path="events/:id/runner/:spaceId" element={<RunnerSpaceDetail />} />
           <Route path="stock" element={<StockPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="analytics/costs" element={<CostControlPage />} />
           <Route path="analytics/staff" element={<StaffAnalyticsPage />} />
           <Route path="analytics/staff/monthly" element={<MonthlyStaffReportsPage />} />
           <Route path="catalog" element={<CatalogPage />} />
