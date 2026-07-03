@@ -20,6 +20,7 @@ import {
 import { Badge, Button, EmptyState, Spinner } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import { DeliveryModal } from '@/components/stock/DeliveryModal';
+import KegStorageTab from './KegStorageTab';
 import {
   useDepots,
   useDepotBalances,
@@ -60,6 +61,7 @@ export default function DepotsTab() {
     [depots.data, depotId],
   );
   const scope = useDepotProductScope(currentDepot?.name);
+  const isKeg = /f[uû]ts/i.test(currentDepot?.name ?? '');
 
   if (depots.isLoading) return <Spinner fullPage label="Chargement des dépôts…" />;
   if (!depots.data || depots.data.length === 0) {
@@ -98,41 +100,49 @@ export default function DepotsTab() {
           })}
         </div>
 
-        <Button onClick={() => setModalOpen(true)} disabled={!currentDepot}>
-          <Truck className="h-4 w-4" /> Enregistrer une livraison
-        </Button>
+        {!isKeg && (
+          <Button onClick={() => setModalOpen(true)} disabled={!currentDepot}>
+            <Truck className="h-4 w-4" /> Enregistrer une livraison
+          </Button>
+        )}
       </div>
 
       {currentDepot?.description && (
         <p className="text-sm text-pr-black-soft/60">{currentDepot.description}</p>
       )}
 
-      {/* Sous-vues */}
-      <div className="flex gap-1 overflow-x-auto border-b border-pr-stone">
-        {VIEWS.map((v) => {
-          const active = view === v.key;
-          return (
-            <button
-              key={v.key}
-              onClick={() => setView(v.key)}
-              className={clsx(
-                'flex shrink-0 items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors',
-                active
-                  ? 'border-pr-black text-pr-black'
-                  : 'border-transparent text-pr-black-soft/50 hover:text-pr-black',
-              )}
-            >
-              <v.Icon className="h-4 w-4" /> {v.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* Dépôt Fûts : gestion pleins/vides dédiée. Autres dépôts : 3 vues génériques. */}
+      {isKeg ? (
+        <KegStorageTab />
+      ) : (
+        <>
+          <div className="flex gap-1 overflow-x-auto border-b border-pr-stone">
+            {VIEWS.map((v) => {
+              const active = view === v.key;
+              return (
+                <button
+                  key={v.key}
+                  onClick={() => setView(v.key)}
+                  className={clsx(
+                    'flex shrink-0 items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors',
+                    active
+                      ? 'border-pr-black text-pr-black'
+                      : 'border-transparent text-pr-black-soft/50 hover:text-pr-black',
+                  )}
+                >
+                  <v.Icon className="h-4 w-4" /> {v.label}
+                </button>
+              );
+            })}
+          </div>
 
-      {view === 'stock' && <DepotStockView depotId={depotId} />}
-      {view === 'livraisons' && <DepotDeliveriesView depotId={depotId} />}
-      {view === 'dispatch' && <DepotDispatchView depotId={depotId} />}
+          {view === 'stock' && <DepotStockView depotId={depotId} />}
+          {view === 'livraisons' && <DepotDeliveriesView depotId={depotId} />}
+          {view === 'dispatch' && <DepotDispatchView depotId={depotId} />}
+        </>
+      )}
 
-      {modalOpen && currentDepot && (
+      {modalOpen && currentDepot && !isKeg && (
         <DeliveryModal
           depotId={currentDepot.id}
           depotName={currentDepot.name}
