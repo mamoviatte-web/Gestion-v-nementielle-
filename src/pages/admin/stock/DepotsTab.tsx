@@ -158,73 +158,130 @@ export default function DepotsTab() {
 
 /* ─────────────────────────── Vue Stock actuel ─────────────────────────── */
 
+/** Sous-groupe « format » d'un produit (softs 50cl / grande bouteille / verre…). */
+function formatGroup(name: string, unit: string, category: string): string {
+  if (unit === 'verre') return 'Verre service';
+  if (/50cl/i.test(name)) return 'Format 50cl (buvettes)';
+  if (/grande|1L/i.test(name) || (category === 'Soft' && unit === 'btl')) return 'Grande bouteille (salons)';
+  if (category === 'Sirops') return 'Sirops';
+  if (category === 'Bières') return 'Bières';
+  if (category === 'Vins') return 'Vins & champagnes';
+  if (category === 'Spiritueux') return 'Spiritueux';
+  if (category === 'Matériel') return 'Matériel';
+  return category;
+}
+
+/** Espaces cibles indicatifs selon le format/catégorie. */
+function espacesCibles(name: string, unit: string, category: string): string {
+  if (/50cl/i.test(name)) return 'Buvettes · PMR · Bodega';
+  if (unit === 'verre') return 'Comptoir · Salons · Bars';
+  if (/grande|1L/i.test(name)) return 'Salons VIP · Loges · Bars';
+  if (category === 'Spiritueux') return 'Salons VIP · Loges · Bars';
+  if (category === 'Vins') return 'Salons VIP · Loges';
+  return 'Tous espaces';
+}
+
+const GROUP_ORDER = [
+  'Format 50cl (buvettes)',
+  'Grande bouteille (salons)',
+  'Verre service',
+  'Vins & champagnes',
+  'Spiritueux',
+  'Sirops',
+  'Bières',
+  'Matériel',
+];
+
 function DepotStockView({ depotId }: { depotId: string | null }) {
   const balances = useDepotBalances(depotId ?? undefined);
   const { map: liveBalance } = useLiveBalanceMap();
 
-  const { rows, totalQty, totalValue } = useMemo(() => {
-    const data = (balances.data ?? []).filter((b) => b.current_quantity !== 0);
-    const totalValue = data.reduce((s, b) => s + b.current_quantity * (b.unit_value_ht ?? 0), 0);
-    const totalQty = data.reduce((s, b) => s + b.current_quantity, 0);
-    return { rows: data, totalQty, totalValue };
+  const { groups, totalQty, totalValue, refCount } = useMemo(() => {
+    const data = balances.data ?? [];
+    const byGroup = new Map<string, typeof data>();
+    for (const b of data) {
+      const g = formatGroup(b.product_name, b.unit, b.category);
+      const arr = byGroup.get(g) ?? [];
+      arr.push(b);
+      byGroup.set(g, arr);
+    }
+    const ordered = [...byGroup.keys()].sort((a, b) => {
+      const ia = GROUP_ORDER.indexOf(a);
+      const ib = GROUP_ORDER.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+    return {
+      groups: ordered.map((g) => ({ name: g, rows: byGroup.get(g)! })),
+      totalValue: data.reduce((s, b) => s + b.current_quantity * (b.unit_value_ht ?? 0), 0),
+      totalQty: data.reduce((s, b) => s + b.current_quantity, 0),
+      refCount: data.length,
+    };
   }, [balances.data]);
 
   if (balances.isLoading) return <Spinner label="Chargement du stock…" />;
-  if (rows.length === 0) {
+  if (refCount === 0) {
     return (
       <EmptyState
         icon={Boxes}
         title="Dépôt vide"
-        message="Aucun produit en stock dans ce dépôt. Enregistrez une livraison pour l'approvisionner."
+        message="Aucun produit référencé dans ce dépôt. Enregistrez une livraison pour l'approvisionner."
       />
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <MiniKpi label="Références en stock" value={String(rows.length)} />
+        <MiniKpi label="Références" value={String(refCount)} />
         <MiniKpi label="Quantité totale" value={totalQty.toLocaleString('fr-FR')} />
         <MiniKpi label="Valorisation HT" value={formatEuro(totalValue)} />
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-pr-stone bg-white">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-pr-stone text-left text-xs uppercase tracking-wide text-pr-black-soft/60">
-              <th className="px-4 py-2.5 font-semibold">Produit</th>
-              <th className="px-4 py-2.5 font-semibold">Famille</th>
-              <th className="px-4 py-2.5 text-right font-semibold">Qté dépôt</th>
-              <th className="px-4 py-2.5 text-right font-semibold">En espace</th>
-              <th className="px-4 py-2.5 text-right font-semibold">PU HT</th>
-              <th className="px-4 py-2.5 text-right font-semibold">Valeur HT</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-pr-stone">
-            {rows.map((b) => {
-              const inEvent = liveBalance.get(b.product_id)?.qty_in_event ?? 0;
-              return (
-              <tr key={b.product_id} className="hover:bg-pr-cream/40">
-                <td className="px-4 py-2.5 font-medium text-pr-black">{b.product_name}</td>
-                <td className="px-4 py-2.5 text-pr-black-soft/70">{b.category}</td>
-                <td className="px-4 py-2.5 text-right tabular-nums text-pr-black">
-                  {b.current_quantity.toLocaleString('fr-FR')} {b.unit}
-                </td>
-                <td className="px-4 py-2.5 text-right tabular-nums text-sky-600">
-                  {inEvent > 0 ? `${inEvent.toLocaleString('fr-FR')} ${b.unit}` : '—'}
-                </td>
-                <td className="px-4 py-2.5 text-right tabular-nums text-pr-black-soft/70">
-                  {b.unit_value_ht == null ? '—' : formatEuro(b.unit_value_ht)}
-                </td>
-                <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-pr-black">
-                  {b.unit_value_ht == null ? '—' : formatEuro(b.current_quantity * b.unit_value_ht)}
-                </td>
-              </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {groups.map((group) => {
+        const gQty = group.rows.reduce((s, b) => s + b.current_quantity, 0);
+        const gVal = group.rows.reduce((s, b) => s + b.current_quantity * (b.unit_value_ht ?? 0), 0);
+        return (
+          <div key={group.name}>
+            <div className="mb-2 flex items-center justify-between border-b-2 border-pr-black py-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-pr-black-soft/60">{group.name}</span>
+              <span className="text-xs text-pr-black-soft/50">
+                {gQty.toLocaleString('fr-FR')} u · {formatEuro(gVal)}
+              </span>
+            </div>
+            <div className="overflow-x-auto rounded-xl border border-pr-stone bg-white">
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-pr-stone">
+                  {group.rows.map((b) => {
+                    const inEvent = liveBalance.get(b.product_id)?.qty_in_event ?? 0;
+                    return (
+                      <tr key={b.product_id} className="hover:bg-pr-cream/40">
+                        <td className="px-4 py-2 font-medium text-pr-black">{b.product_name}</td>
+                        <td className="px-4 py-2 text-[11px] text-pr-black-soft/50">
+                          {espacesCibles(b.product_name, b.unit, b.category)}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums">
+                          <span className={b.current_quantity === 0 ? 'text-pr-rust' : 'text-pr-black'}>
+                            {b.current_quantity.toLocaleString('fr-FR')} {b.unit}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums text-sky-600">
+                          {inEvent > 0 ? `${inEvent.toLocaleString('fr-FR')}` : '—'}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums text-pr-black-soft/60">
+                          {b.unit_value_ht == null ? '—' : formatEuro(b.unit_value_ht)}
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums font-medium text-pr-black">
+                          {b.unit_value_ht == null ? '—' : formatEuro(b.current_quantity * b.unit_value_ht)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
