@@ -36,10 +36,22 @@ export function useStockLocations() {
   });
 }
 
-/** Emplacement de la réserve centrale (source des transferts). */
+/**
+ * Réserve générale AUC — source des transferts vers les espaces et destination
+ * des retours réutilisables. Il existe 2 dépôts `reserve_centrale` (AUC + Stock
+ * EST — cave vins) : on cible explicitement AUC (préfixe du nom), avec repli sur
+ * le premier dépôt central si le nommage change.
+ */
+export function pickAucReserve<T extends { name: string; location_type: string }>(
+  locations: T[],
+): T | null {
+  const reserves = locations.filter((l) => l.location_type === 'reserve_centrale');
+  return reserves.find((l) => /^AUC/i.test(l.name)) ?? reserves[0] ?? null;
+}
+
 export function useReserveLocation() {
   const { data: locations } = useStockLocations();
-  return (locations ?? []).find((l) => l.location_type === 'reserve_centrale') ?? null;
+  return pickAucReserve(locations ?? []);
 }
 
 /* ------------------------------------------------------------------ */
@@ -228,13 +240,14 @@ export function useRecordMovement() {
 async function resolveLocationMap(): Promise<{ bySpace: Record<string, string>; reserveId: string | null }> {
   const { data } = await supabase
     .from('stock_locations')
-    .select('id, area_id, location_type');
+    .select('id, name, area_id, location_type');
+  const rows = (data ?? []) as { id: string; name: string; area_id: string | null; location_type: string }[];
   const bySpace: Record<string, string> = {};
-  let reserveId: string | null = null;
-  for (const l of (data ?? []) as { id: string; area_id: string | null; location_type: string }[]) {
+  for (const l of rows) {
     if (l.location_type === 'espace' && l.area_id) bySpace[l.area_id] = l.id;
-    if (l.location_type === 'reserve_centrale') reserveId = l.id;
   }
+  // Transferts/retours ciblent la réserve générale AUC (pas la cave EST).
+  const reserveId = pickAucReserve(rows)?.id ?? null;
   return { bySpace, reserveId };
 }
 

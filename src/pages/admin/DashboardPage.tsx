@@ -12,6 +12,7 @@ import {
   Presentation,
   Trophy,
   Users,
+  Warehouse,
   type LucideIcon,
 } from 'lucide-react';
 import { Badge, EmptyState, Spinner } from '@/components/ui';
@@ -23,6 +24,8 @@ import {
   type DashboardStockAlert,
   type TodayEvent,
 } from '@/hooks/useDashboardLive';
+import { useDepotsSummary, type DepotSummary } from '@/hooks/useDepots';
+import { formatEuro } from '@/lib/calculations';
 import type { StatusTone } from '@/lib/types';
 
 /* ─────────────────────────── Helpers ─────────────────────────── */
@@ -145,6 +148,7 @@ function buildAlerts(data: DashboardData): MergedAlert[] {
 
 export default function DashboardPage() {
   const { data, loading } = useDashboardLive();
+  const depots = useDepotsSummary();
   const navigate = useNavigate();
 
   const sortedEvents = useMemo(() => {
@@ -311,6 +315,18 @@ export default function DashboardPage() {
         </section>
       </div>
 
+      {/* Dépôts centraux */}
+      {(depots.data ?? []).length > 0 && (
+        <section>
+          <SectionTitle>Dépôts centraux</SectionTitle>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {(depots.data ?? []).map((d) => (
+              <DepotCard key={d.id} depot={d} onOpen={() => navigate('/admin/stock')} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Activité par espace */}
       <section>
         <SectionTitle>Activité par espace</SectionTitle>
@@ -409,6 +425,35 @@ function KpiCard({
       <p className="mt-1 font-display text-3xl font-black text-pr-black">{value}</p>
       <p className="mt-0.5 truncate text-xs text-pr-black-soft/50">{sub}</p>
     </div>
+  );
+}
+
+/* ─────────────────────────── DepotCard ─────────────────────────── */
+
+function frShortDate(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+}
+
+function DepotCard({ depot, onOpen }: { depot: DepotSummary; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex items-center gap-3 rounded-xl border border-t-[3px] border-pr-stone border-t-pr-olive bg-white p-4 text-left transition-colors hover:bg-pr-cream"
+    >
+      <Warehouse className="h-6 w-6 shrink-0 text-pr-olive-dark" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium text-pr-black">{depot.name}</p>
+        <p className="mt-0.5 text-xs text-pr-black-soft/60">
+          {depot.product_lines} référence(s) · dernière livraison {frShortDate(depot.last_delivery_date)}
+        </p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="font-display text-xl font-black text-pr-black">{formatEuro(depot.total_value_ht)}</p>
+        <p className="text-xs text-pr-black-soft/50">{depot.total_qty.toLocaleString('fr-FR')} u.</p>
+      </div>
+    </button>
   );
 }
 

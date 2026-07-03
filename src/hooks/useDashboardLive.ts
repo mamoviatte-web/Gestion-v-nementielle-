@@ -160,7 +160,7 @@ async function composeClientSide(): Promise<DashboardData> {
     supabase.from('spaces').select('space_id, space_name, space_type').eq('active', true),
     supabase.from('products').select('product_id, product_name, category, min_stock, stock_min, active').eq('active', true),
     supabase.from('stock_balances').select('product_id, location_id, current_quantity'),
-    supabase.from('stock_locations').select('id, area_id'),
+    supabase.from('stock_locations').select('id, area_id, location_type'),
     supabase.from('event_spaces').select('event_id, space_id'),
     supabase.from('provider_presence').select('event_id, space_id, provider_company, planned_arrival_time, actual_arrival_time, status'),
     supabase.from('debriefs').select('event_id, space_id, submitted_at'),
@@ -172,7 +172,11 @@ async function composeClientSide(): Promise<DashboardData> {
   const allSpaces = (spaces ?? []) as { space_id: string; space_name: string; space_type: string }[];
   const allProducts = (products ?? []) as { product_id: string; product_name: string; category: string; min_stock: number | null; stock_min: number | null }[];
   const allBalances = (balances ?? []) as { product_id: string; location_id: string; current_quantity: number }[];
-  const locById = new Map(((locations ?? []) as { id: string; area_id: string | null }[]).map((l) => [l.id, l.area_id]));
+  const allLocations = (locations ?? []) as { id: string; area_id: string | null; location_type: string }[];
+  const locById = new Map(allLocations.map((l) => [l.id, l.area_id]));
+  // ÉTAPE 8 : dépôts centraux (AUC + Stock EST) exclus des soldes opérationnels.
+  const reserveLocIds = new Set(allLocations.filter((l) => l.location_type === 'reserve_centrale').map((l) => l.id));
+  const operationalBalances = allBalances.filter((b) => !reserveLocIds.has(b.location_id));
   const allEventSpaces = (eventSpaces ?? []) as { event_id: string; space_id: string }[];
   const allProviders = (providers ?? []) as { event_id: string; space_id: string | null; provider_company: string; planned_arrival_time: string | null; actual_arrival_time: string | null; status: string }[];
   const allDebriefs = (debriefs ?? []) as { event_id: string; space_id: string; submitted_at: string | null }[];
@@ -212,14 +216,14 @@ async function composeClientSide(): Promise<DashboardData> {
     }))
     .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''));
 
-  // ── Stock : total par produit + alertes ──
+  // ── Stock : total par produit + alertes (soldes opérationnels uniquement) ──
   const totalByProduct = new Map<string, number>();
-  for (const b of allBalances) totalByProduct.set(b.product_id, (totalByProduct.get(b.product_id) ?? 0) + Number(b.current_quantity));
+  for (const b of operationalBalances) totalByProduct.set(b.product_id, (totalByProduct.get(b.product_id) ?? 0) + Number(b.current_quantity));
 
   // Espace du solde le plus bas pour un produit (pour le libellé d'alerte)
   const lowestSpaceByProduct = new Map<string, string | null>();
   const spaceNameById = new Map(allSpaces.map((s) => [s.space_id, s.space_name]));
-  const sortedBalances = [...allBalances].sort((a, b) => Number(a.current_quantity) - Number(b.current_quantity));
+  const sortedBalances = [...operationalBalances].sort((a, b) => Number(a.current_quantity) - Number(b.current_quantity));
   for (const b of sortedBalances) {
     if (!lowestSpaceByProduct.has(b.product_id)) {
       const areaId = locById.get(b.location_id) ?? null;
@@ -264,7 +268,7 @@ async function composeClientSide(): Promise<DashboardData> {
   // Espaces en alerte stock (un solde sous le min du produit)
   const productMinById = new Map(allProducts.map((p) => [p.product_id, p.min_stock ?? 0]));
   const alertSpaces = new Set<string>();
-  for (const b of allBalances) {
+  for (const b of operationalBalances) {
     const min = productMinById.get(b.product_id);
     const areaId = locById.get(b.location_id);
     if (min != null && min > 0 && areaId && Number(b.current_quantity) < min) alertSpaces.add(areaId);
@@ -352,13 +356,21 @@ export function useCriticalStatus() {
     refetchInterval: 90_000,
     queryFn: async (): Promise<{ criticalAlerts: number; activeEvents: number }> => {
       const today = todayISO();
-      const [{ data: products }, { data: balances }, { data: events }] = await Promise.all([
+      const [{ data: products }, { data: balances }, { data: locations }, { data: events }] = await Promise.all([
         supabase.from('products').select('product_id, min_stock').eq('active', true),
-        supabase.from('stock_balances').select('product_id, current_quantity'),
+        supabase.from('stock_balances').select('product_id, location_id, current_quantity'),
+        supabase.from('stock_locations').select('id, location_type'),
         supabase.from('events').select('event_id, event_date, status'),
       ]);
+      // ÉTAPE 8 : exclure les dépôts centraux (AUC + Stock EST) du total opérationnel.
+      const reserveIds = new Set(
+        ((locations ?? []) as { id: string; location_type: string }[])
+          .filter((l) => l.location_type === 'reserve_centrale')
+          .map((l) => l.id),
+      );
       const total = new Map<string, number>();
-      for (const b of (balances ?? []) as { product_id: string; current_quantity: number }[]) {
+      for (const b of (balances ?? []) as { product_id: string; location_id: string; current_quantity: number }[]) {
+        if (reserveIds.has(b.location_id)) continue;
         total.set(b.product_id, (total.get(b.product_id) ?? 0) + Number(b.current_quantity));
       }
       const criticalAlerts = ((products ?? []) as { product_id: string; min_stock: number | null }[]).filter(
