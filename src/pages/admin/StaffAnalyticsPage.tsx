@@ -43,6 +43,7 @@ import {
   VERDICT_META,
   type StaffVerdict,
 } from '@/lib/staffTargets';
+import { computeHours, computeOvertimeHours } from '@/lib/scheduleCalculations';
 import type {
   ScheduleRow,
   StaffEventSummary,
@@ -59,28 +60,19 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** 'HH:MM' ou 'HH:MM:SS' → minutes depuis minuit. */
-function toMin(t: string): number {
-  const [h, m] = t.split(':');
-  return Number(h) * 60 + Number(m);
-}
-
-/** Heures prévues d'une ligne planning. */
+/** Heures prévues d'une ligne planning (passage minuit géré). */
 function plannedH(row: ScheduleRow): number | null {
-  if (!row.planned_arrival || !row.planned_departure) return null;
-  return (toMin(row.planned_departure) - toMin(row.planned_arrival)) / 60;
+  return computeHours(row.planned_arrival, row.planned_departure);
 }
 
-/** Heures réelles (arrivée prévue → départ réel). */
+/** Heures réelles (arrivée prévue → départ réel, passage minuit géré). */
 function actualH(row: ScheduleRow): number | null {
-  if (!row.actual_departure || !row.planned_arrival) return null;
-  return (toMin(row.actual_departure) - toMin(row.planned_arrival)) / 60;
+  return computeHours(row.planned_arrival, row.actual_departure);
 }
 
-/** Heures supplémentaires (départ réel au-delà du départ prévu). */
+/** Heures supplémentaires (au-delà du prévu). */
 function overtimeH(row: ScheduleRow): number {
-  if (!row.actual_departure || !row.planned_departure) return 0;
-  return Math.max(0, (toMin(row.actual_departure) - toMin(row.planned_departure)) / 60);
+  return computeOvertimeHours(plannedH(row), actualH(row));
 }
 
 function pct(v: number): string {

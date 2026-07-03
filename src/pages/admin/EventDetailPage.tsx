@@ -43,11 +43,10 @@ const MATCH_TABS: { key: Tab; label: string }[] = [
   { key: 'analyse', label: '📈 Analyse conso' },
 ];
 
-/** Onglets simplifiés pour un séminaire / événement hors match. */
+/** Onglets simplifiés pour un séminaire / événement hors match (sans Prestataires ni Runner). */
 const SEMINAIRE_TABS: { key: Tab; label: string }[] = [
   { key: 'espaces', label: '📍 Espaces & codes' },
   { key: 'bilan', label: '📊 Bilan' },
-  { key: 'prestataires', label: 'Prestataires' },
   { key: 'debriefs', label: 'Débriefs' },
 ];
 

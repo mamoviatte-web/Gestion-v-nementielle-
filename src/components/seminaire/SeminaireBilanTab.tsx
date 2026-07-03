@@ -9,23 +9,12 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { BarChart3, Download, Image, Clock } from 'lucide-react';
-import {
-  Alert,
-  Badge,
-  Button,
-  EmptyState,
-  Spinner,
-  Table,
-  TBody,
-  TD,
-  TH,
-  THead,
-  TR,
-} from '@/components/ui';
+import { BarChart3, Download, Image } from 'lucide-react';
+import { Alert, Badge, Button, EmptyState, Spinner } from '@/components/ui';
 import { useToast } from '@/context/ToastContext';
 import { supabase } from '@/lib/supabase';
 import { BilanCostTable } from '@/components/seminaire/BilanCostTable';
+import { BilanRegisseur } from '@/components/seminaire/BilanRegisseur';
 import type { Event } from '@/lib/types';
 import type { EventSpaceWithSpace } from '@/hooks/useEvents';
 
@@ -373,59 +362,8 @@ export function SeminaireBilanTab({
         <BilanCostTable eventId={event.event_id} />
       </section>
 
-      {/* 3 — Horaires terrain --------------------------------------------- */}
-      <section className="space-y-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-600">
-          <Clock className="h-4 w-4" aria-hidden />
-          Horaires terrain
-        </h3>
-        {spaces.length === 0 ? (
-          <p className="text-sm text-slate-500">Aucun espace activé.</p>
-        ) : (
-          <Table>
-            <THead>
-              <TR>
-                <TH>Espace</TH>
-                <TH>Responsable</TH>
-                <TH>Prévu</TH>
-                <TH>Arrivée réelle</TH>
-                <TH>Départ réel</TH>
-                <TH>Écart</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {spaces.map((s) => {
-                const t = s as EventSpaceWithSpace & EventSpaceTiming;
-                const planned = hm(event.start_time);
-                const arrival = t.space_actual_arrival ?? null;
-                const gap =
-                  event.start_time && arrival
-                    ? toMinutes(arrival.slice(0, 5)) - toMinutes(planned)
-                    : null;
-                return (
-                  <TR key={s.space_id}>
-                    <TD>{nameOf(s.space_id)}</TD>
-                    <TD>{t.space_responsible_name ?? '—'}</TD>
-                    <TD>{planned}</TD>
-                    <TD>{hm(arrival)}</TD>
-                    <TD>{hm(t.space_actual_departure)}</TD>
-                    <TD>
-                      {gap === null ? (
-                        '⏳'
-                      ) : (
-                        <Badge tone={gap > 15 ? 'danger' : gap <= 0 ? 'success' : 'warning'}>
-                          {gap >= 0 ? '+' : ''}
-                          {gap}min
-                        </Badge>
-                      )}
-                    </TD>
-                  </TR>
-                );
-              })}
-            </TBody>
-          </Table>
-        )}
-      </section>
+      {/* 3 — Horaires régisseur + charges RH ------------------------------ */}
+      <BilanRegisseur event={event} />
 
       {/* 4 — Débriefs & photos -------------------------------------------- */}
       <section className="space-y-3">

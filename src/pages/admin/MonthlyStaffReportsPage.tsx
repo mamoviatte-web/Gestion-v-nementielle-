@@ -45,8 +45,8 @@ interface EventDetail {
   event_name: string;
   event_date: string;
   space_name: string;
-  planned_h: number;
-  actual_h: number;
+  planned_h: number | null;
+  actual_h: number | null;
   confirmed: boolean;
 }
 
@@ -199,6 +199,45 @@ export default function MonthlyStaffReportsPage() {
 
   const reports = reportsQuery.data ?? [];
 
+  /* -------- Taux horaires par (agent × espace) pour le coût RH -------- */
+  const ratesQuery = useQuery({
+    queryKey: ['staffRates', month],
+    enabled: month !== '',
+    queryFn: async (): Promise<Map<string, number>> => {
+      const start = month; // YYYY-MM-01
+      const end = new Date(new Date(month).getFullYear(), new Date(month).getMonth() + 1, 1)
+        .toISOString()
+        .slice(0, 10);
+      const { data, error } = await supabase
+        .from('schedules')
+        .select('staff_name, space_id, hourly_rate, events!inner(event_date)')
+        .not('hourly_rate', 'is', null)
+        .gte('events.event_date', start)
+        .lt('events.event_date', end);
+      if (error) throw error;
+      const map = new Map<string, number>();
+      for (const r of (data ?? []) as { staff_name: string; space_id: string; hourly_rate: number }[]) {
+        const key = `${r.staff_name}|${r.space_id}`;
+        const rate = Number(r.hourly_rate);
+        map.set(key, Math.max(map.get(key) ?? 0, rate));
+      }
+      return map;
+    },
+  });
+
+  /** Taux horaire d'un rapport (agent × espace), null si non renseigné. */
+  function rateFor(report: MonthlyReport): number | null {
+    if (!report.space_id) return null;
+    return ratesQuery.data?.get(`${report.staff_name}|${report.space_id}`) ?? null;
+  }
+
+  /** Coût RH d'un rapport = heures réelles × taux. */
+  function costFor(report: MonthlyReport): number | null {
+    const rate = rateFor(report);
+    if (rate == null) return null;
+    return (report.total_actual_h ?? 0) * rate;
+  }
+
   /** Résout le nom d'espace via le join, sinon la carte de secours. */
   function resolveSpaceName(report: MonthlyReport): string {
     return (
@@ -238,66 +277,90 @@ export default function MonthlyStaffReportsPage() {
 
     const wb = XLSX.utils.book_new();
 
+    // ═══ Feuille Synthèse : heures + taux + coût RH + totaux ═══
     const synth: (string | number)[][] = [
-      [`PROVENCE RUGBY — RAPPORT HORAIRES MENSUEL — ${label}`],
+      [`PROVENCE RUGBY — RAPPORT HORAIRES MENSUEL — ${label.toUpperCase()}`],
       [],
-      ['Agent', 'Espace', 'Événements', 'H prévues', 'H réelles', 'H sup'],
+      ['Agent', 'Espace', 'Événements', 'H prévues', 'H réelles', 'H sup', 'Taux/h', 'Coût RH'],
     ];
     reports.forEach((r) => {
+      const rate = rateFor(r);
+      const cost = costFor(r);
       synth.push([
         r.staff_name,
         resolveSpaceName(r),
         r.total_events,
-        Number((r.total_planned_h ?? 0).toFixed(1)),
-        Number((r.total_actual_h ?? 0).toFixed(1)),
-        Number((r.total_overtime_h ?? 0).toFixed(1)),
+        `${(r.total_planned_h ?? 0).toFixed(1)}h`,
+        `${(r.total_actual_h ?? 0).toFixed(1)}h`,
+        `${(r.total_overtime_h ?? 0).toFixed(1)}h`,
+        rate != null ? `${rate.toFixed(2)} €/h` : 'Non renseigné',
+        cost != null ? `${cost.toFixed(2)} €` : '—',
       ]);
     });
+    synth.push([]);
+    synth.push([
+      '',
+      '',
+      'TOTAUX',
+      `${reports.reduce((s, r) => s + (r.total_planned_h ?? 0), 0).toFixed(1)}h`,
+      `${reports.reduce((s, r) => s + (r.total_actual_h ?? 0), 0).toFixed(1)}h`,
+      `${reports.reduce((s, r) => s + (r.total_overtime_h ?? 0), 0).toFixed(1)}h`,
+      '',
+      `${reports.reduce((s, r) => s + (costFor(r) ?? 0), 0).toFixed(2)} €`,
+    ]);
     const wsSynth = XLSX.utils.aoa_to_sheet(synth);
     wsSynth['!cols'] = [
-      { wch: 24 },
-      { wch: 18 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 12 },
-      { wch: 10 },
+      { wch: 24 }, { wch: 18 }, { wch: 12 }, { wch: 12 },
+      { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
     ];
     XLSX.utils.book_append_sheet(wb, wsSynth, 'Synthèse');
 
+    // ═══ Feuille par agent : détail événement par événement ═══
     const usedNames = new Set<string>();
     reports.forEach((r) => {
       const detail = r.events_detail ?? [];
+      const rate = rateFor(r);
       const aoa: (string | number)[][] = [
         [`Agent : ${r.staff_name} — ${resolveSpaceName(r)}`],
         [],
-        ['Événement', 'Date', 'Espace', 'H prévues', 'H réelles', 'Confirmé'],
-        ...detail.map((d): (string | number)[] => [
-          d.event_name,
-          formatDate(d.event_date),
-          d.space_name,
-          Number(d.planned_h.toFixed(1)),
-          Number(d.actual_h.toFixed(1)),
-          d.confirmed ? 'Oui' : 'Non',
-        ]),
+        ['Événement', 'Date', 'Espace', 'H prévues', 'H réelles', 'H sup', 'Taux/h', 'Coût RH'],
+        ...detail.map((d): (string | number)[] => {
+          const overtime = Math.max(0, (d.actual_h ?? 0) - (d.planned_h ?? 0));
+          const cost = rate != null && d.actual_h != null ? d.actual_h * rate : null;
+          return [
+            d.event_name,
+            formatDate(d.event_date),
+            d.space_name,
+            `${(d.planned_h ?? 0).toFixed(1)}h`,
+            d.actual_h != null ? `${d.actual_h.toFixed(1)}h` : '—',
+            `${overtime.toFixed(1)}h`,
+            rate != null ? `${rate.toFixed(2)} €/h` : '—',
+            cost != null ? `${cost.toFixed(2)} €` : '—',
+          ];
+        }),
       ];
+      aoa.push([]);
+      aoa.push([
+        'TOTAL', '', '',
+        `${(r.total_planned_h ?? 0).toFixed(1)}h`,
+        `${(r.total_actual_h ?? 0).toFixed(1)}h`,
+        `${(r.total_overtime_h ?? 0).toFixed(1)}h`,
+        '',
+        costFor(r) != null ? `${costFor(r)!.toFixed(2)} €` : '—',
+      ]);
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       ws['!cols'] = [
-        { wch: 28 },
-        { wch: 12 },
-        { wch: 18 },
-        { wch: 12 },
-        { wch: 12 },
-        { wch: 10 },
+        { wch: 28 }, { wch: 12 }, { wch: 18 }, { wch: 10 },
+        { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 12 },
       ];
-      XLSX.utils.book_append_sheet(
-        wb,
-        ws,
-        sanitizeSheetName(r.staff_name, usedNames),
-      );
+      XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(r.staff_name, usedNames));
     });
 
-    XLSX.writeFile(wb, `Rapport_horaires_${month}.xlsx`);
-    showToast('Export Excel généré.', 'success');
+    // Nom fichier : Paie_2026-07_Juillet.xlsx
+    const monthName = new Date(month).toLocaleDateString('fr-FR', { month: 'long' });
+    const monthCap = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+    XLSX.writeFile(wb, `Paie_${month.slice(0, 7)}_${monthCap}.xlsx`);
+    showToast('Export paie généré.', 'success');
   }
 
   /* -------- Export PDF (impression navigateur) -------- */
@@ -385,6 +448,8 @@ export default function MonthlyStaffReportsPage() {
                 <TH className="text-right">H prévues</TH>
                 <TH className="text-right">H réelles</TH>
                 <TH className="text-right">H sup.</TH>
+                <TH className="text-right">Taux/h</TH>
+                <TH className="text-right">Coût RH</TH>
               </TR>
             </THead>
             <TBody>
@@ -393,6 +458,8 @@ export default function MonthlyStaffReportsPage() {
                 const isHigh = overtime > 5;
                 const isExpanded = expandedId === r.id;
                 const detail = r.events_detail ?? [];
+                const rate = rateFor(r);
+                const cost = costFor(r);
                 return (
                   <Fragment key={r.id}>
                     <tr
@@ -418,10 +485,16 @@ export default function MonthlyStaffReportsPage() {
                           {isHigh && ' ⚠️'}
                         </Badge>
                       </TD>
+                      <TD className="text-right text-slate-500">
+                        {rate != null ? `${rate.toFixed(2)} €/h` : '—'}
+                      </TD>
+                      <TD className="text-right font-medium">
+                        {cost != null ? `${cost.toFixed(2)} €` : '—'}
+                      </TD>
                     </tr>
                     {isExpanded && (
                       <tr className="bg-slate-50/60">
-                        <td colSpan={6} className="px-3 py-3">
+                        <td colSpan={8} className="px-3 py-3">
                           {detail.length === 0 ? (
                             <p className="text-sm text-slate-500">
                               Aucun événement détaillé pour cet agent.
