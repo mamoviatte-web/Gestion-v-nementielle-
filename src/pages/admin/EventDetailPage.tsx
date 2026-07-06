@@ -11,6 +11,7 @@ import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { RunnerPlanningTab } from '@/components/runner/RunnerPlanningTab';
 import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
+import { MatchConsumptionReport } from '@/components/analytics/MatchConsumptionReport';
 import { SeminaireSpacesTab } from '@/components/seminaire/SeminaireSpacesTab';
 import { SeminaireBilanTab } from '@/components/seminaire/SeminaireBilanTab';
 import { StaffEventInsights } from '@/components/staff/StaffEventInsights';
@@ -32,6 +33,7 @@ type Tab =
   | 'route'
   | 'runner'
   | 'analyse'
+  | 'gpvip'
   | 'espaces'
   | 'bilan'
   | 'rapport';
@@ -46,6 +48,7 @@ const MATCH_TABS: { key: Tab; label: string }[] = [
   { key: 'route', label: '📄 Feuille de route' },
   { key: 'runner', label: '🚀 Runner Auto' },
   { key: 'analyse', label: '📈 Analyse conso' },
+  { key: 'gpvip', label: '⭐ GP / VIP' },
 ];
 
 /** Onglets simplifiés pour un séminaire / événement hors match (sans Prestataires ni Runner). */
@@ -259,6 +262,7 @@ export default function EventDetailPage() {
         />
       )}
       {activeTab === 'analyse' && <ConsumptionAnalysisTab event={event} spaces={spaces} />}
+      {activeTab === 'gpvip' && <MatchConsumptionReport eventId={event.event_id} />}
     </div>
   );
 }

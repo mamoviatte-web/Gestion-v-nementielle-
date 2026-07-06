@@ -125,10 +125,25 @@ export function useEventCreation() {
       }
 
       if (spaceIds.length > 0) {
-        const { error: esErr } = await supabase
-          .from('event_spaces')
-          .insert(spaceIds.map((space_id) => ({ event_id: eventId, space_id })));
-        if (esErr) throw esErr;
+        const pax = draft.space_pax ?? {};
+        // Enrichi (expected_pax) si des pax ont été saisis ; repli si les
+        // colonnes ne sont pas encore provisionnées en base.
+        const enriched = spaceIds.map((space_id) => ({
+          event_id: eventId,
+          space_id,
+          ...(pax[space_id] != null ? { expected_pax: pax[space_id] } : {}),
+        }));
+        const { error: esErr } = await supabase.from('event_spaces').insert(enriched);
+        if (esErr) {
+          if (/expected_pax|service_mode|column/i.test(esErr.message)) {
+            const { error: retryErr } = await supabase
+              .from('event_spaces')
+              .insert(spaceIds.map((space_id) => ({ event_id: eventId, space_id })));
+            if (retryErr) throw retryErr;
+          } else {
+            throw esErr;
+          }
+        }
       }
       return { event_id: eventId };
     },

@@ -41,6 +41,7 @@ export function CreateEventModal({
   const [attendees, setAttendees] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [feuilles, setFeuilles] = useState<Record<string, FeuilleEntry>>({});
+  const [paxBySpace, setPaxBySpace] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
 
   const isMatch = type === 'match';
@@ -82,6 +83,7 @@ export function CreateEventModal({
         start_time: time,
         expected_attendees: Number(attendees) || 0,
         selected_space_ids: [...selected],
+        space_pax: isMatch ? paxBySpace : undefined,
       });
       // Upload des feuilles de route jointes (non-match).
       if (!isMatch) {
@@ -251,6 +253,45 @@ export function CreateEventModal({
                     </button>
                   </div>
                   <SpaceGrid spaces={spaces} selected={selected} onToggle={toggle} />
+
+                  {/* Pax attendus par espace VIP / Bar activé (capacité fixe). */}
+                  {(() => {
+                    const vipBar = spaces.filter(
+                      (s) => s.space_type !== 'Buvette' && selected.has(s.space_id),
+                    );
+                    if (vipBar.length === 0) return null;
+                    return (
+                      <div className="rounded-lg border border-pr-stone bg-pr-cream/40 p-3">
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-pr-olive-dark">
+                          Pax attendus par espace (VIP / Bar)
+                        </p>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {vipBar.map((s) => (
+                            <div key={s.space_id} className="flex items-center justify-between gap-2 text-sm">
+                              <span className="truncate text-pr-black">
+                                {s.space_name}
+                                {s.max_pax != null && (
+                                  <span className="ml-1 text-xs text-pr-black-soft/50">/ {s.max_pax}</span>
+                                )}
+                              </span>
+                              <input
+                                type="number"
+                                min={0}
+                                max={s.max_pax ?? undefined}
+                                value={paxBySpace[s.space_id] ?? s.max_pax ?? ''}
+                                placeholder="pax"
+                                onChange={(e) => {
+                                  const v = parseInt(e.target.value, 10);
+                                  setPaxBySpace((prev) => ({ ...prev, [s.space_id]: Number.isFinite(v) ? v : 0 }));
+                                }}
+                                className="w-24 rounded border border-pr-stone px-2 py-1 text-right text-sm"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </>
               ) : (
                 <>

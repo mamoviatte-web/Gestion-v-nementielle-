@@ -251,3 +251,86 @@ export const WEATHER_LABELS: Record<WeatherType, string> = {
   froid: 'Froid',
   tres_favorable: 'Très favorable',
 };
+
+/* ─── Dotation par type de service (Grand Public / VIP / Bar) ───────────── */
+
+/**
+ * Ratios de base VIP par produit (unités / 100 pax de l'espace).
+ * Utilisés en repli quand l'historique consumption_analytics est absent.
+ */
+export const VIP_BASE_RATIOS: Record<string, number> = {
+  'MUMM CORDON ROUGE': 2.5,
+  'Mumm Cordon Rouge': 2.5,
+  'Mumm Blanc de Blanc': 1.5,
+  'Rosé Miraval': 3.5,
+  'Rosé Réal': 3.0,
+  'Whisky Jameson': 1.0,
+  'Lillet Blanc': 1.5,
+  'Lillet Rosé': 1.0,
+  'Ricard classique': 1.2,
+  'Pepsi bouteille': 4.0,
+  Schweppes: 2.5,
+  'Jus de fruits': 3.0,
+  'Sirop de pêche': 0.8,
+  'Sirop de grenadine': 0.6,
+};
+
+export function getVIPBaseRatio(productName: string): number {
+  return VIP_BASE_RATIOS[productName] ?? 0;
+}
+
+/** Ratio de base bar (repli) — moitié du ratio VIP par défaut. */
+export function getBarBaseRatio(productName: string): number {
+  return getVIPBaseRatio(productName) * 0.7;
+}
+
+export interface SpaceDotationInput {
+  serviceType: 'vip' | 'bar' | 'buvette';
+  productName: string;
+  productCategory: string;
+  /** Affluence totale du match (spectateurs). */
+  eventPax: number;
+  /** Pax attendus dans cet espace (VIP/Bar) — null pour buvettes. */
+  expectedSpacePax: number | null;
+  /** max_pax de l'espace (repli si expectedSpacePax null). */
+  spaceMaxPax: number | null;
+  /** Ratio historique /100 pax (consumption_analytics) si disponible. */
+  historicalRatio: number | null;
+  weather: WeatherType;
+  trend: ConsumptionTrend;
+}
+
+export interface SpaceDotationResult {
+  qty: number;
+  source: 'ratio_grand_public' | 'ratio_vip_capacite' | 'ratio_bar';
+}
+
+/**
+ * Calcule la dotation d'un produit pour un espace selon son type de service.
+ *  - buvette : ratio /100 pax du stade × affluence totale (Grand Public)
+ *  - vip     : ratio /100 pax × pax attendus de l'espace (capacité fixe)
+ *  - bar     : hybride, basé sur les pax de l'espace
+ */
+export function computeSpaceDotation(input: SpaceDotationInput): SpaceDotationResult {
+  const pax = input.expectedSpacePax ?? input.spaceMaxPax ?? 100;
+
+  if (input.serviceType === 'buvette') {
+    const ref = BUVETTE_REFERENCE_RATIOS[input.productName];
+    const base = input.historicalRatio ?? ref?.per100 ?? 0;
+    const coefWeather = getBuvetteWeatherCoeff(input.weather, ref?.type ?? 'fut');
+    const coefTrend = getTrendCoeff(input.trend);
+    const qty = Math.ceil((input.eventPax / 100) * base * coefWeather * coefTrend);
+    return { qty, source: 'ratio_grand_public' };
+  }
+
+  if (input.serviceType === 'vip') {
+    const base = input.historicalRatio ?? getVIPBaseRatio(input.productName);
+    const coefWeather = getWeatherCoeff(input.weather, input.productCategory);
+    const qty = Math.ceil((pax / 100) * base * coefWeather);
+    return { qty, source: 'ratio_vip_capacite' };
+  }
+
+  const base = input.historicalRatio ?? getBarBaseRatio(input.productName);
+  const qty = Math.ceil((pax / 100) * base);
+  return { qty, source: 'ratio_bar' };
+}

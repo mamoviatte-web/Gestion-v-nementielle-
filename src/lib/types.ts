@@ -109,7 +109,17 @@ export interface Space {
   capacity: number | null;
   active: boolean;
   created_at: string;
+  /** Capacité maximale de service (pax) — renseignée pour VIP/Bars. */
+  max_pax?: number | null;
+  /** Dimension de service pilotant les dotations : vip / bar / buvette. */
+  service_type?: ServiceType | null;
 }
+
+/** Mode de service d'un espace (dotations match Grand Public / VIP). */
+export type ServiceType = 'vip' | 'bar' | 'buvette';
+
+/** Mode de service d'un espace sur un match donné (event_spaces). */
+export type ServiceMode = 'vip' | 'bar' | 'buvette' | 'fermé' | 'auto';
 
 /** Table `users` — registre applicatif des comptes. */
 export interface User {
@@ -197,6 +207,10 @@ export interface EventSpace {
   space_id: string;
   /** Nom du responsable pré-rempli (le nom effectif est saisi via RG-001). */
   responsible_default_name: string | null;
+  /** Mode de service pour ce match (VIP / bar / buvette / fermé / auto). */
+  service_mode?: ServiceMode | null;
+  /** Pax attendus dans cet espace pour ce match (VIP : peut être < max_pax). */
+  expected_pax?: number | null;
   // ── Module séminaire : code d'accès par espace (accès sans compte) ──
   access_token?: string | null;
   token_expires_at?: string | null;
@@ -821,4 +835,6 @@ export interface EventCreationDraft {
   expected_attendees: number;
   /** Espaces sélectionnés (ignoré si match = tous les espaces). */
   selected_space_ids: string[];
+  /** Pax attendus par espace (matchs VIP/Bar) — clé = space_id. */
+  space_pax?: Record<string, number>;
 }
