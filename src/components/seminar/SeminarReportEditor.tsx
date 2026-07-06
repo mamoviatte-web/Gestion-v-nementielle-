@@ -444,7 +444,12 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
         <Row label="Client"><InlineEditable value={draft.client_name} onSave={(v) => updateDraft({ client_name: v })} /></Row>
         <Row label="PAX"><InlineEditable type="number" value={draft.pax} onSave={(v) => updateDraft({ pax: v ? Number(v) : null })} /></Row>
         <Row label="Responsable comm."><InlineEditable value={draft.responsable_commercial} onSave={(v) => updateDraft({ responsable_commercial: v })} /></Row>
-        <Row label="CA HT (€)"><InlineEditable type="number" value={draft.ca_ht} onSave={(v) => updateDraft({ ca_ht: Number(v) || 0 })} /></Row>
+        <Row label="CA HT (€)">
+          <InlineEditable type="number" value={draft.ca_ht} onSave={(v) => updateDraft({ ca_ht: Number(v) || 0 })} />
+          {(!draft.ca_ht || Number(draft.ca_ht) === 0) && (
+            <span className="text-xs text-pr-olive-dark">— {draft.ca_note || draft.ca_type || 'partenariat'}</span>
+          )}
+        </Row>
         <Row label="Type CA">
           <select
             value={draft.ca_type ?? 'payant'}

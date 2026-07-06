@@ -168,6 +168,51 @@ export function useSeminarReportDraft(event: Event) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event.event_id]);
 
+  // Recalcul systématique des coûts à l'ouverture : jamais de « — » si des
+  // données existent. RPC get_event_costs si disponible, sinon calcul client
+  // (event_cost_summary pour le F&B + schedules pour le RH).
+  const costsDone = useRef(false);
+  useEffect(() => {
+    if (loading || costsDone.current) return;
+    costsDone.current = true;
+    (async () => {
+      let fb = 0;
+      let rh = 0;
+      const { data: rpc, error } = await supabase.rpc('get_event_costs', { p_event_id: event.event_id });
+      if (!error && rpc) {
+        fb = Number((rpc as { fb_cost_ht: number }).fb_cost_ht) || 0;
+        rh = Number((rpc as { rh_cost: number }).rh_cost) || 0;
+      } else {
+        const { data: fbRow } = await supabase
+          .from('event_cost_summary')
+          .select('total_fb_cost_ht')
+          .eq('event_id', event.event_id)
+          .maybeSingle();
+        fb = fbRow?.total_fb_cost_ht != null ? Number(fbRow.total_fb_cost_ht) : 0;
+        const { data: sched } = await supabase
+          .from('schedules')
+          .select('computed_hours, hourly_rate')
+          .eq('event_id', event.event_id);
+        rh = ((sched ?? []) as { computed_hours: number | null; hourly_rate: number | null }[]).reduce(
+          (s, r) => s + (r.hourly_rate != null && r.computed_hours != null ? Number(r.computed_hours) * Number(r.hourly_rate) : 0),
+          0,
+        );
+      }
+      setDraft((prev) => {
+        const total = fb + rh;
+        const ca = Number(prev.ca_ht ?? 0);
+        return {
+          ...prev,
+          total_fb_cost_ht: fb,
+          total_rh_cost: rh,
+          total_cost_ht: total,
+          gain_net_ht: ca - total,
+          marge_pct: ca > 0 ? ((ca - total) / ca) * 100 : null,
+        };
+      });
+    })();
+  }, [loading, event.event_id]);
+
   const persist = useCallback(
     async (current: SeminarReportDraft) => {
       if (!provisioned) return;
