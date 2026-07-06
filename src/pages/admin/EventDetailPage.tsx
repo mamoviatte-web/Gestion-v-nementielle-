@@ -18,6 +18,7 @@ import { DebriefScoresGrid } from '@/components/debrief/DebriefScoresGrid';
 import { RunnerGenerationModal } from '@/components/runner/RunnerGenerationModal';
 import { RouteSheetPanel } from '@/components/events/RouteSheetPanel';
 import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
+import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
 import { Zap } from 'lucide-react';
@@ -32,7 +33,8 @@ type Tab =
   | 'runner'
   | 'analyse'
   | 'espaces'
-  | 'bilan';
+  | 'bilan'
+  | 'rapport';
 
 /** Onglets complets pour un match (dotations runner, horaires staff…). */
 const MATCH_TABS: { key: Tab; label: string }[] = [
@@ -51,6 +53,7 @@ const SEMINAIRE_TABS: { key: Tab; label: string }[] = [
   { key: 'espaces', label: '📍 Espaces & codes' },
   { key: 'bilan', label: '📊 Bilan' },
   { key: 'debriefs', label: 'Débriefs' },
+  { key: 'rapport', label: '📄 Rapport' },
 ];
 
 export default function EventDetailPage() {
@@ -217,6 +220,7 @@ export default function EventDetailPage() {
       {/* Contenu */}
       {activeTab === 'espaces' && <SeminaireSpacesTab event={event} spaces={spaces} />}
       {activeTab === 'bilan' && <SeminaireBilanTab event={event} spaces={spaces} />}
+      {activeTab === 'rapport' && <SeminarReportEditor event={event} />}
 
       {activeTab === 'stocks' &&
         (selectedSpace ? (
