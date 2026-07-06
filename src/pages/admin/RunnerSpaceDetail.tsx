@@ -28,6 +28,7 @@ import {
   THead,
   TR,
 } from '@/components/ui';
+import { getRecommendation } from '@/lib/runnerFallbackRatios';
 
 export default function RunnerSpaceDetail() {
   const { id, spaceId } = useParams<{ id: string; spaceId: string }>();
@@ -81,9 +82,15 @@ export default function RunnerSpaceDetail() {
       {rows.length > 0 &&
         (() => {
           const expectedPax = rows[0]?.space?.max_pax ?? null;
-          const nbWithReco = rows.filter((p) => (p.recommended_quantity ?? 0) > 0).length;
+          const effReco = (p: (typeof rows)[number]): number => {
+            if ((p.recommended_quantity ?? 0) > 0) return p.recommended_quantity as number;
+            const c =
+              p.attendance_coefficient * p.weather_coefficient * p.event_type_coefficient * p.trend_coefficient;
+            return getRecommendation(p.product?.product_name ?? '', p.historical_avg_consumption ?? null, c, 1).qty;
+          };
+          const nbWithReco = rows.filter((p) => effReco(p) > 0).length;
           const totalToMove = rows.reduce(
-            (s, p) => s + Math.max(0, (p.recommended_quantity ?? 0) - (p.initial_area_stock ?? 0)),
+            (s, p) => s + Math.max(0, effReco(p) - (p.initial_area_stock ?? 0)),
             0,
           );
           const depotIssue = warnings.length > 0;
@@ -196,6 +203,16 @@ export default function RunnerSpaceDetail() {
                 p.weather_coefficient *
                 p.event_type_coefficient *
                 p.trend_coefficient;
+              // Repli fallback si la reco moteur est nulle (analytics vide).
+              const fallback = getRecommendation(
+                p.product?.product_name ?? '',
+                p.historical_avg_consumption ?? null,
+                coeff,
+                1,
+              );
+              const reco =
+                (p.recommended_quantity ?? 0) > 0 ? (p.recommended_quantity as number) : fallback.qty;
+              const toMove = Math.max(0, reco - (p.initial_area_stock ?? 0));
               return (
                 <TR key={p.id} className={RUNNER_ROW_CLASSES[color]}>
                   <TD className="font-medium text-slate-900">{p.product?.product_name}</TD>
@@ -210,25 +227,29 @@ export default function RunnerSpaceDetail() {
                   <TD className="text-right">{p.consumption_reference?.toFixed(1) ?? '—'}</TD>
                   <TD className="text-right">×{coeff.toFixed(2)}</TD>
                   <TD className="text-right">
-                    {(p.recommended_quantity ?? 0) > 0 ? (
-                      <span className="rounded bg-pr-olive/15 px-2 py-0.5 font-semibold text-pr-olive-dark">
-                        {p.recommended_quantity}
+                    {reco > 0 ? (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="rounded bg-pr-olive/15 px-2 py-0.5 font-semibold text-pr-olive-dark">
+                          {reco}
+                        </span>
+                        {fallback.source === 'fallback' && (p.recommended_quantity ?? 0) === 0 && (
+                          <span className="rounded-full bg-amber-100 px-1.5 text-[10px] text-amber-700" title="Estimé depuis les ratios S-1 (analytics vide)">
+                            est.
+                          </span>
+                        )}
                       </span>
                     ) : (
                       <span className="text-slate-300">0</span>
                     )}
                   </TD>
                   <TD className="text-right">
-                    {(() => {
-                      const toMove = Math.max(0, (p.recommended_quantity ?? 0) - (p.initial_area_stock ?? 0));
-                      if (toMove > 0)
-                        return (
-                          <span className="rounded bg-pr-black px-2 py-0.5 font-semibold text-white">{toMove}</span>
-                        );
-                      if ((p.recommended_quantity ?? 0) > 0)
-                        return <span className="text-xs text-emerald-600">✓ Suffisant</span>;
-                      return <span className="text-slate-200">—</span>;
-                    })()}
+                    {toMove > 0 ? (
+                      <span className="rounded bg-pr-black px-2 py-0.5 font-semibold text-white">{toMove}</span>
+                    ) : reco > 0 ? (
+                      <span className="text-xs text-emerald-600">✓ Suffisant</span>
+                    ) : (
+                      <span className="text-slate-200">—</span>
+                    )}
                   </TD>
                   <TD className="text-right">
                     {(() => {
