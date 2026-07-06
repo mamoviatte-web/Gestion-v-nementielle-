@@ -500,8 +500,12 @@ function ProductGroupedTable({
             : null;
           return (
             <Fragment key={g.productId}>
-              <TR className="cursor-pointer hover:bg-pr-cream/60" onClick={() => onToggle(g.productId)}>
-                <TD className="font-medium text-pr-black">{g.productName}</TD>
+              <TR className="cursor-pointer hover:bg-pr-cream/60">
+                <TD className="font-medium text-pr-black">
+                  <button type="button" className="text-left" onClick={() => onToggle(g.productId)}>
+                    {g.productName}
+                  </button>
+                </TD>
                 <TD className="text-pr-black-soft">{g.category}</TD>
                 <TD className="text-right tabular-nums">
                   {g.nbEspaces} espace{g.nbEspaces > 1 ? 's' : ''}
@@ -537,7 +541,11 @@ function ProductGroupedTable({
                     <span className="text-pr-olive-dark">—</span>
                   )}
                 </TD>
-                <TD className="text-right text-pr-black-soft/40">{isOpen ? '▲' : '▼'}</TD>
+                <TD className="text-right text-pr-black-soft/40">
+                  <button type="button" onClick={() => onToggle(g.productId)} aria-label="Détail par espace">
+                    {isOpen ? '▲' : '▼'}
+                  </button>
+                </TD>
               </TR>
               {isOpen &&
                 g.spaceRows.map((r) => {

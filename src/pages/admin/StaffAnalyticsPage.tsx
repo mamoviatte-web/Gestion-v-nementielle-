@@ -6,6 +6,7 @@
 
 import { useMemo, useState } from 'react';
 import {
+  Plus,
   Users,
   Clock,
   TrendingUp,
@@ -45,6 +46,7 @@ import {
 } from '@/lib/staffTargets';
 import { computeHours, computeOvertimeHours } from '@/lib/scheduleCalculations';
 import { AgentCumulativeView } from '@/components/staff/AgentCumulativeView';
+import { OccasionalHoursModal } from '@/components/staff/OccasionalHoursModal';
 import type {
   ScheduleRow,
   StaffEventSummary,
@@ -894,6 +896,7 @@ function ExportView({
 export default function StaffAnalyticsPage() {
   const [activeTab, setActiveTab] = useState<'match' | 'séminaire'>('match');
   const [activeView, setActiveView] = useState<ViewKey>('synthese');
+  const [showAddHours, setShowAddHours] = useState(false);
 
   const { data: allSummaries, isLoading: loadingSummaries } = useStaffSummaries();
   const { data: schedules, isLoading: loadingSchedules } = useStaffSchedules(activeTab);
@@ -957,14 +960,25 @@ export default function StaffAnalyticsPage() {
         title="Staff & Horaires"
         description="Analyse RH — dimensionnement, heures supplémentaires, efficacité."
         action={
-          <Link
-            to="/admin/analytics/staff/monthly"
-            className="inline-flex items-center gap-1 rounded-lg bg-pr-black px-3 py-2 text-sm font-medium text-white hover:bg-pr-black-soft"
-          >
-            📅 Rapports mensuels
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAddHours(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-pr-black px-3 py-2 text-sm font-medium text-white hover:bg-pr-black-soft"
+            >
+              <Plus className="h-4 w-4" /> Ajouter des heures
+            </button>
+            <Link
+              to="/admin/analytics/staff/monthly"
+              className="inline-flex items-center gap-1 rounded-lg border border-pr-stone px-3 py-2 text-sm font-medium text-pr-black-soft hover:bg-pr-cream"
+            >
+              📅 Rapports mensuels
+            </Link>
+          </div>
         }
       />
+
+      {showAddHours && <OccasionalHoursModal onClose={() => setShowAddHours(false)} />}
 
       {/* Onglets par type d'événement */}
       <div className="mb-4 flex flex-wrap gap-2">
