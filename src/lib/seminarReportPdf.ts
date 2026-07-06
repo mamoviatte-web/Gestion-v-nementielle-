@@ -6,6 +6,7 @@
 
 import jsPDF from 'jspdf';
 import { drawScoreCircles, formatScoreText } from '@/lib/scoreRenderer';
+import { addImageToPDF, imageForPdf } from '@/lib/storageUtils';
 import type { SeminarReportDraft, ReportPhoto } from '@/hooks/useSeminarReportDraft';
 
 const W = 297;
@@ -23,29 +24,6 @@ function frDate(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
-}
-
-/** Charge une image distante en dataURL (via canvas). Null si échec. */
-async function loadImage(url: string): Promise<{ data: string; w: number; h: number } | null> {
-  try {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    const loaded = new Promise<void>((res, rej) => {
-      img.onload = () => res();
-      img.onerror = () => rej(new Error('img'));
-    });
-    img.src = url;
-    await loaded;
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    ctx.drawImage(img, 0, 0);
-    return { data: canvas.toDataURL('image/jpeg', 0.85), w: img.naturalWidth, h: img.naturalHeight };
-  } catch {
-    return null;
-  }
 }
 
 function background(doc: jsPDF) {
@@ -88,18 +66,7 @@ async function photoGrid(doc: jsPDF, photos: ReportPhoto[], cols: number, startY
     doc.setFillColor('#FFFFFF');
     doc.setDrawColor('#DDD9CE');
     doc.roundedRect(x, y, cellW, cellH, 2, 2, 'FD');
-    const img = await loadImage(photos[i].url);
-    if (img) {
-      const ratio = Math.min(cellW / img.w, cellH / img.h);
-      const iw = img.w * ratio;
-      const ih = img.h * ratio;
-      doc.addImage(img.data, 'JPEG', x + (cellW - iw) / 2, y + (cellH - ih) / 2, iw, ih, '', 'FAST');
-    } else {
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(8);
-      doc.setTextColor('#999');
-      doc.text('photo indisponible', x + cellW / 2, y + cellH / 2, { align: 'center' });
-    }
+    await addImageToPDF(doc, photos[i].url, x + 1.5, y + 1.5, cellW - 3, cellH - 3);
     if (photos[i].caption) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
@@ -127,10 +94,10 @@ export async function exportSeminarReportPDF(draft: SeminarReportDraft): Promise
   doc.setLineWidth(1.5);
   doc.line(W / 2 - 45, 66, W / 2 + 45, 66);
   if (draft.client_logo_url) {
-    const logo = await loadImage(draft.client_logo_url);
+    const logo = await imageForPdf(draft.client_logo_url);
     if (logo) {
       const ratio = Math.min(70 / logo.w, 55 / logo.h);
-      doc.addImage(logo.data, 'JPEG', W / 2 - (logo.w * ratio) / 2, 80, logo.w * ratio, logo.h * ratio, '', 'FAST');
+      doc.addImage(logo.data, logo.format, W / 2 - (logo.w * ratio) / 2, 80, logo.w * ratio, logo.h * ratio, undefined, 'FAST');
     }
   }
   doc.setFont('helvetica', 'normal');
