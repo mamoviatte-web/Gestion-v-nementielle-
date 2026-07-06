@@ -44,6 +44,7 @@ import {
   type StaffVerdict,
 } from '@/lib/staffTargets';
 import { computeHours, computeOvertimeHours } from '@/lib/scheduleCalculations';
+import { AgentCumulativeView } from '@/components/staff/AgentCumulativeView';
 import type {
   ScheduleRow,
   StaffEventSummary,
@@ -107,13 +108,14 @@ const ISSUE_LABELS: Record<StaffAlert['issue'], string> = {
   surstaffing_espace: 'Sur-staffing espace',
 };
 
-type ViewKey = 'synthese' | 'agent' | 'espace' | 'evenement' | 'alertes' | 'export';
+type ViewKey = 'synthese' | 'agent' | 'espace' | 'evenement' | 'cumul' | 'alertes' | 'export';
 
 const VIEWS: { key: ViewKey; label: string }[] = [
   { key: 'synthese', label: 'Synthèse' },
   { key: 'agent', label: 'Par agent' },
   { key: 'espace', label: 'Par espace' },
   { key: 'evenement', label: 'Par événement' },
+  { key: 'cumul', label: 'Cumul agents' },
   { key: 'alertes', label: 'Alertes' },
   { key: 'export', label: 'Export' },
 ];
@@ -930,6 +932,8 @@ export default function StaffAnalyticsPage() {
         return <EspaceView schedules={scheduleRows} eventType={activeTab} />;
       case 'evenement':
         return <EvenementView summaries={summaries} />;
+      case 'cumul':
+        return <AgentCumulativeView />;
       case 'alertes':
         return <AlertesView summaries={summaries} />;
       case 'export':
