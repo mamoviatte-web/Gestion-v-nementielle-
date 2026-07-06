@@ -116,6 +116,13 @@ export default function RunnerSpaceDetail() {
           );
         })()}
 
+      {/* Contexte nouvelle saison : espaces à 0 → À monter = Recommandé */}
+      {rows.length > 0 && rows.every((p) => (p.initial_area_stock ?? 0) === 0) && (
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+          📋 Base : saison précédente · Espaces à 0 — « À monter » = Recommandé
+        </div>
+      )}
+
       {/* Encadré pré-dispatch : contrôle stock dépôt avant transmission */}
       {rows.length > 0 && (
         <div

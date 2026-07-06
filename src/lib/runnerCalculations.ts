@@ -418,3 +418,41 @@ export function computeRunnerRecommendation(input: RunnerRecommendationInput): R
     input.historicalConfidence != null ? `${Math.round(input.historicalConfidence * 100)}%` : '—';
   return { qty, source, confidence };
 }
+
+/* ─── Nouvelle saison : espaces à 0 → À monter = Recommandé ──────────────── */
+
+/**
+ * Coefficient de tendance issu des analytics saison précédente.
+ * (Distinct de getTrendCoeff qui prend un ConsumptionTrend typé.)
+ */
+export function getSeasonTrendCoeff(trend: string | null): number {
+  return trend === 'hausse' ? 1.1 : trend === 'baisse' ? 0.92 : 1.0;
+}
+
+/**
+ * Règle nouvelle saison : chaque espace démarre à 0.
+ *   À monter = Recommandé = avg_S-1 × coeff_météo × coeff_tendance
+ * Une fois l'inventaire physique saisi (stockInSpace > 0), le moteur recalcule
+ *   À monter = max(0, Recommandé − stockInSpace).
+ */
+export function computeRunnerNewSeason(params: {
+  avgLastSeason: number;
+  weatherCoeff: number;
+  trendCoeff: number;
+  stockInSpace: number;
+  nbRefMatches: number;
+}): { recommended: number; toMove: number; label: string } {
+  const { avgLastSeason, weatherCoeff, trendCoeff, stockInSpace, nbRefMatches } = params;
+  if (!avgLastSeason || avgLastSeason <= 0) {
+    return { recommended: 0, toMove: 0, label: 'Aucune référence' };
+  }
+  const recommended = Math.ceil(avgLastSeason * weatherCoeff * trendCoeff);
+  const toMove = Math.max(0, recommended - stockInSpace);
+  const label =
+    nbRefMatches >= 4
+      ? `Basé sur ${nbRefMatches} matchs S-1`
+      : nbRefMatches >= 2
+        ? `Estimé (${nbRefMatches} réf.)`
+        : 'Référence partielle';
+  return { recommended, toMove, label };
+}
