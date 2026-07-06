@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   AlertTriangle,
@@ -13,6 +14,7 @@ import {
   Trophy,
   Users,
   Warehouse,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { Badge, EmptyState, Spinner } from '@/components/ui';
@@ -25,8 +27,18 @@ import {
   type TodayEvent,
 } from '@/hooks/useDashboardLive';
 import { useDepotsSummary, type DepotSummary } from '@/hooks/useDepots';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { formatEuro } from '@/lib/calculations';
 import type { StatusTone } from '@/lib/types';
+
+/** Rend une clé d'alerte stable (indépendante de l'ordre) pour la persistance. */
+function slug(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gi, '_')
+    .replace(/^_|_$/g, '');
+}
 
 /* ─────────────────────────── Helpers ─────────────────────────── */
 
@@ -100,9 +112,9 @@ function buildAlerts(data: DashboardData): MergedAlert[] {
 
   data.stock_alerts
     .filter((a) => a.severity === 'rupture')
-    .forEach((a, i) => {
+    .forEach((a) => {
       alerts.push({
-        key: `rupture-${i}`,
+        key: `rupture_${slug(a.product_name)}_${slug(a.space_name ?? 'all')}`,
         tone: 'danger',
         title: `Rupture — ${a.product_name}${a.space_name ? ' · ' + a.space_name : ''}`,
         detail: `${a.current_qty} restant(s) — réassort urgent`,
@@ -112,9 +124,9 @@ function buildAlerts(data: DashboardData): MergedAlert[] {
 
   data.stock_alerts
     .filter((a) => a.severity === 'critique')
-    .forEach((a, i) => {
+    .forEach((a) => {
       alerts.push({
-        key: `critique-${i}`,
+        key: `critique_${slug(a.product_name)}`,
         tone: 'warning',
         title: `Stock critique — ${a.product_name}`,
         detail: `${a.current_qty} restants · min ${a.min_stock}`,
@@ -122,9 +134,9 @@ function buildAlerts(data: DashboardData): MergedAlert[] {
       });
     });
 
-  data.provider_alerts.forEach((p: DashboardProviderAlert, i) => {
+  data.provider_alerts.forEach((p: DashboardProviderAlert) => {
     alerts.push({
-      key: `provider-${i}`,
+      key: `provider_${slug(p.company)}`,
       tone: 'warning',
       title: `Prestataire en retard — ${p.company}`,
       detail: `+${Math.round(p.delay_min)} min · prévu ${p.planned_time?.slice(0, 5) ?? '—'}`,
@@ -144,12 +156,45 @@ function buildAlerts(data: DashboardData): MergedAlert[] {
   return alerts;
 }
 
+/**
+ * Alertes ignorées (table dismissed_alerts, expiration auto 7 j). Résilient :
+ * si la table n'est pas encore provisionnée, dégrade en « aucune ignorée ».
+ */
+function useDismissedAlerts() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const q = useQuery({
+    queryKey: ['dismissedAlerts'],
+    staleTime: 30_000,
+    queryFn: async (): Promise<Set<string>> => {
+      const { data, error } = await supabase
+        .from('dismissed_alerts')
+        .select('alert_key')
+        .gt('expires_at', new Date().toISOString());
+      if (error) return new Set();
+      return new Set((data ?? []).map((d) => (d as { alert_key: string }).alert_key));
+    },
+  });
+
+  const dismiss = async (keys: string[]) => {
+    if (keys.length === 0) return;
+    const by = user?.email ?? user?.name ?? null;
+    await supabase
+      .from('dismissed_alerts')
+      .upsert(keys.map((k) => ({ alert_key: k, dismissed_by: by })), { onConflict: 'alert_key' });
+    await qc.invalidateQueries({ queryKey: ['dismissedAlerts'] });
+  };
+
+  return { dismissedKeys: q.data ?? new Set<string>(), dismiss };
+}
+
 /* ─────────────────────────── Page ─────────────────────────── */
 
 export default function DashboardPage() {
   const { data, loading } = useDashboardLive();
   const depots = useDepotsSummary();
   const navigate = useNavigate();
+  const { dismissedKeys, dismiss } = useDismissedAlerts();
 
   const sortedEvents = useMemo(() => {
     if (!data) return [];
@@ -160,7 +205,23 @@ export default function DashboardPage() {
     });
   }, [data]);
 
-  const mergedAlerts = useMemo(() => (data ? buildAlerts(data) : []), [data]);
+  const mergedAlerts = useMemo(
+    () => (data ? buildAlerts(data).filter((a) => !dismissedKeys.has(a.key)) : []),
+    [data, dismissedKeys],
+  );
+
+  // Regroupement des événements : en cours · aujourd'hui · 7 prochains jours.
+  const { inProcess, todayEvents, upcoming } = useMemo(() => {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const all = sortedEvents;
+    const inProcess = all.filter((e) => e.status === 'en_cours');
+    const rest = all.filter((e) => e.status !== 'en_cours');
+    return {
+      inProcess,
+      todayEvents: rest.filter((e) => !e.event_date || e.event_date <= todayStr),
+      upcoming: rest.filter((e) => e.event_date && e.event_date > todayStr),
+    };
+  }, [sortedEvents]);
 
   const activeEventsSub = useMemo(() => {
     if (!data) return 'Aucun en cours';
@@ -262,15 +323,21 @@ export default function DashboardPage() {
       {/* Événements du jour + Alertes actives */}
       <div className="grid gap-4 lg:grid-cols-2">
         <section>
-          <SectionTitle>Événements du jour</SectionTitle>
-          {sortedEvents.length === 0 ? (
-            <EmptyState icon={Trophy} title="Aucun événement aujourd'hui" />
+          <SectionTitle>Événements actifs &amp; à venir</SectionTitle>
+          {inProcess.length === 0 && todayEvents.length === 0 && upcoming.length === 0 ? (
+            <EmptyState icon={Trophy} title="Aucun événement cette semaine" />
           ) : (
-            <ul className="space-y-2">
-              {sortedEvents.map((e) => (
-                <EventRow key={e.event_id} event={e} onOpen={() => navigate(`/admin/events/${e.event_id}`)} />
-              ))}
-            </ul>
+            <div className="space-y-4">
+              {inProcess.length > 0 && (
+                <EventGroup label="En cours" events={inProcess} onOpen={navigate} />
+              )}
+              {todayEvents.length > 0 && (
+                <EventGroup label="Aujourd'hui" events={todayEvents} onOpen={navigate} />
+              )}
+              {upcoming.length > 0 && (
+                <EventGroup label="À venir — 7 prochains jours" events={upcoming} onOpen={navigate} />
+              )}
+            </div>
           )}
         </section>
 
@@ -282,11 +349,20 @@ export default function DashboardPage() {
               Aucune alerte active ✅
             </div>
           ) : (
-            <ul className="space-y-2">
-              {mergedAlerts.map((a) => (
-                <AlertRow key={a.key} alert={a} />
-              ))}
-            </ul>
+            <div className="rounded-xl border border-pr-stone bg-white">
+              <ul className="divide-y divide-pr-stone/60">
+                {mergedAlerts.map((a) => (
+                  <AlertRow key={a.key} alert={a} onDismiss={() => void dismiss([a.key])} />
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={() => void dismiss(mergedAlerts.map((a) => a.key))}
+                className="w-full border-t border-pr-stone/60 py-2 text-xs text-pr-black-soft/50 transition-colors hover:text-pr-black-soft"
+              >
+                Ignorer toutes les alertes actives
+              </button>
+            </div>
           )}
         </section>
       </div>
@@ -518,10 +594,10 @@ const ALERT_ICON: Record<AlertTone, LucideIcon> = {
   info: ClipboardList,
 };
 
-function AlertRow({ alert }: { alert: MergedAlert }) {
+function AlertRow({ alert, onDismiss }: { alert: MergedAlert; onDismiss: () => void }) {
   const Icon = ALERT_ICON[alert.tone];
-  const content = (
-    <div className="flex items-center gap-3 rounded-lg border border-pr-stone bg-white p-3">
+  const inner = (
+    <div className="flex min-w-0 flex-1 items-center gap-3">
       <span className={`h-9 w-1 shrink-0 rounded-full ${ALERT_BAR[alert.tone]}`} />
       <Icon
         className={`h-5 w-5 shrink-0 ${
@@ -536,7 +612,48 @@ function AlertRow({ alert }: { alert: MergedAlert }) {
     </div>
   );
 
-  return <li>{alert.to ? <Link to={alert.to}>{content}</Link> : content}</li>;
+  return (
+    <li className="group flex items-center gap-1 p-3">
+      {alert.to ? (
+        <Link to={alert.to} className="flex min-w-0 flex-1">
+          {inner}
+        </Link>
+      ) : (
+        inner
+      )}
+      <button
+        type="button"
+        onClick={onDismiss}
+        title="Ignorer cette alerte"
+        className="-mr-1 shrink-0 p-1 text-pr-black-soft/30 opacity-0 transition-opacity hover:text-pr-black-soft group-hover:opacity-100"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </li>
+  );
+}
+
+/* ─────────────────────────── EventGroup ─────────────────────────── */
+
+function EventGroup({
+  label,
+  events,
+  onOpen,
+}: {
+  label: string;
+  events: TodayEvent[];
+  onOpen: (path: string) => void;
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-xs uppercase tracking-wide text-pr-black-soft/40">{label}</p>
+      <ul className="space-y-2">
+        {events.map((e) => (
+          <EventRow key={e.event_id} event={e} onOpen={() => onOpen(`/admin/events/${e.event_id}`)} />
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 /* ─────────────────────────── StockAlertRow + StockBar ─────────────────────────── */

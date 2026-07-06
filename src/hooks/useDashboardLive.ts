@@ -22,6 +22,7 @@ export interface TodayEvent {
   event_name: string;
   event_type: string | null;
   status: string;
+  event_date: string;
   start_time: string | null;
   pax: number | null;
   spaces_count: number;
@@ -105,6 +106,7 @@ function normalizeRpc(p: RpcPayload): DashboardData {
   return {
     today_events: (p.today_events ?? []).map((e) => ({
       ...e,
+      event_date: e.event_date ?? '',
       pax: e.pax == null ? null : Number(e.pax),
       spaces_count: Number(e.spaces_count),
       stocks_submitted: Number(e.stocks_submitted),
@@ -209,6 +211,7 @@ async function composeClientSide(): Promise<DashboardData> {
       event_name: e.event_name,
       event_type: e.event_type,
       status: e.status,
+      event_date: e.event_date,
       start_time: e.start_time,
       pax: e.expected_attendees,
       spaces_count: spacesCountByEvent.get(e.event_id) ?? 0,
