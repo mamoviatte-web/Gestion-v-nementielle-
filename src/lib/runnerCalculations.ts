@@ -334,3 +334,87 @@ export function computeSpaceDotation(input: SpaceDotationInput): SpaceDotationRe
   const qty = Math.ceil((pax / 100) * base);
   return { qty, source: 'ratio_bar' };
 }
+
+/* ─── Recommandation runner : historique réel → fallback calibré ────────── */
+
+/**
+ * Ratios de base VIP Salon Nord (unités / 100 pax de l'espace), calibrés sur
+ * la moyenne des 5 matchs réels. Repli quand consumption_analytics est vide.
+ */
+export const VIP_BASE_RATIOS_SALON_NORD: Record<string, number> = {
+  'Mumm Cordon Rouge': 3.13,
+  'Mumm Blanc de Blanc': 7.75,
+  'Rosé Miraval': 2.8,
+  'Rosé Réal': 1.0,
+  'Rouge Les Alexandrins': 1.55,
+  'Rouge Grand Boise': 1.3,
+  'Blanc Galiniere': 3.55,
+  'Blanc du Seuil': 0.8,
+  'Blanc Montaurone': 2.5,
+  'Fût BUD': 0.8,
+  'Fût LEFFE': 0.6,
+  'Pepsi bouteille': 4.5,
+  'Pepsi Max bouteille': 1.15,
+  'Perrier grande bouteille': 6.88,
+  Schweppes: 1.6,
+  'Jus de fruits': 1.5,
+  'Whisky Jameson': 0.85,
+  'GET 27': 2.0,
+  'Lillet Blanc': 1.18,
+  'Lillet Rosé': 0.42,
+  'Ricard classique': 0.5,
+  'Sirop de pêche': 0.25,
+};
+
+/** Ratios génériques par type de service (repli global, /100 pax). */
+export const SERVICE_TYPE_BASE_RATIOS: Record<'vip' | 'bar' | 'buvette', Record<string, number>> = {
+  vip: { Vins: 3.5, Spiritueux: 1.0, Bières: 0.8, Soft: 5.0, Sirops: 0.3 },
+  bar: { Vins: 2.0, Spiritueux: 0.5, Bières: 1.5, Soft: 6.0, Sirops: 0.5 },
+  buvette: { Soft: 20.0, Bières: 4.0, Sirops: 1.0 },
+};
+
+export interface RunnerRecommendationInput {
+  productName: string;
+  productCategory: string;
+  serviceType: 'vip' | 'bar' | 'buvette';
+  expectedPax: number;
+  historicalRatioPer100: number | null;
+  historicalNbEvents: number | null;
+  historicalConfidence: number | null;
+  weatherCoeff: number;
+  trendCoeff: number;
+}
+
+export interface RunnerRecommendationResult {
+  qty: number;
+  source: string;
+  confidence: string;
+}
+
+/**
+ * Recommandation runner : priorité aux données historiques réelles, repli sur
+ * les ratios VIP calibrés (Salon Nord), puis sur les ratios génériques par type.
+ * Garantit une reco ≥ 0 non triviale dès qu'un ratio est disponible.
+ */
+export function computeRunnerRecommendation(input: RunnerRecommendationInput): RunnerRecommendationResult {
+  let base: number;
+  let source: string;
+
+  if (input.historicalRatioPer100 != null && input.historicalRatioPer100 > 0) {
+    base = input.historicalRatioPer100;
+    const n = input.historicalNbEvents ?? 0;
+    source = `Historique (${n} match${n > 1 ? 's' : ''})`;
+  } else if (input.serviceType === 'vip' && VIP_BASE_RATIOS_SALON_NORD[input.productName]) {
+    base = VIP_BASE_RATIOS_SALON_NORD[input.productName];
+    source = 'Ratio base VIP calibré';
+  } else {
+    base = SERVICE_TYPE_BASE_RATIOS[input.serviceType]?.[input.productCategory] ?? 0;
+    source = 'Ratio générique';
+  }
+
+  const raw = (input.expectedPax / 100) * base * input.weatherCoeff * input.trendCoeff;
+  const qty = Math.max(0, Math.ceil(raw));
+  const confidence =
+    input.historicalConfidence != null ? `${Math.round(input.historicalConfidence * 100)}%` : '—';
+  return { qty, source, confidence };
+}

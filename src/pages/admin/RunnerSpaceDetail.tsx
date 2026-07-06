@@ -77,6 +77,45 @@ export default function RunnerSpaceDetail() {
         action={<Badge tone="info">{RUNNER_STATUS_LABELS[status]}</Badge>}
       />
 
+      {/* Barre de synthèse opérationnelle */}
+      {rows.length > 0 &&
+        (() => {
+          const expectedPax = rows[0]?.space?.max_pax ?? null;
+          const nbWithReco = rows.filter((p) => (p.recommended_quantity ?? 0) > 0).length;
+          const totalToMove = rows.reduce(
+            (s, p) => s + Math.max(0, (p.recommended_quantity ?? 0) - (p.initial_area_stock ?? 0)),
+            0,
+          );
+          const depotIssue = warnings.length > 0;
+          return (
+            <div
+              className={clsx(
+                'mb-4 grid grid-cols-2 gap-4 rounded-xl border p-4 text-center sm:grid-cols-4',
+                depotIssue ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50',
+              )}
+            >
+              <div>
+                <p className="font-display text-2xl font-black text-slate-800">{expectedPax ?? '—'}</p>
+                <p className="text-xs text-slate-500">Pax attendus</p>
+              </div>
+              <div>
+                <p className="font-display text-2xl font-black text-slate-800">{nbWithReco}</p>
+                <p className="text-xs text-slate-500">Produits recommandés</p>
+              </div>
+              <div>
+                <p className="font-display text-2xl font-black text-slate-900">{totalToMove}</p>
+                <p className="text-xs text-slate-500">Unités à monter</p>
+              </div>
+              <div className="flex flex-col justify-center">
+                <p className={clsx('text-sm font-medium', depotIssue ? 'text-red-600' : 'text-emerald-700')}>
+                  {depotIssue ? '⚠️ Stocks dépôt insuffisants' : '✅ Stock dépôt suffisant'}
+                </p>
+                <p className="text-xs text-slate-400">La transmission déduira les dépôts automatiquement</p>
+              </div>
+            </div>
+          );
+        })()}
+
       {/* Encadré pré-dispatch : contrôle stock dépôt avant transmission */}
       {rows.length > 0 && (
         <div
@@ -163,8 +202,27 @@ export default function RunnerSpaceDetail() {
                   </TD>
                   <TD className="text-right">{p.consumption_reference?.toFixed(1) ?? '—'}</TD>
                   <TD className="text-right">×{coeff.toFixed(2)}</TD>
-                  <TD className="text-right font-semibold">{p.recommended_quantity ?? '—'}</TD>
-                  <TD className="text-right">{p.quantity_to_move ?? '—'}</TD>
+                  <TD className="text-right">
+                    {(p.recommended_quantity ?? 0) > 0 ? (
+                      <span className="rounded bg-pr-olive/15 px-2 py-0.5 font-semibold text-pr-olive-dark">
+                        {p.recommended_quantity}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300">0</span>
+                    )}
+                  </TD>
+                  <TD className="text-right">
+                    {(() => {
+                      const toMove = Math.max(0, (p.recommended_quantity ?? 0) - (p.initial_area_stock ?? 0));
+                      if (toMove > 0)
+                        return (
+                          <span className="rounded bg-pr-black px-2 py-0.5 font-semibold text-white">{toMove}</span>
+                        );
+                      if ((p.recommended_quantity ?? 0) > 0)
+                        return <span className="text-xs text-emerald-600">✓ Suffisant</span>;
+                      return <span className="text-slate-200">—</span>;
+                    })()}
+                  </TD>
                   <TD className="text-right">
                     {(() => {
                       const lb = liveBalance.get(p.product_id);
