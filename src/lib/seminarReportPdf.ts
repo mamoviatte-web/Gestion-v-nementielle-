@@ -5,6 +5,7 @@
  */
 
 import jsPDF from 'jspdf';
+import { drawScoreCircles, formatScoreText } from '@/lib/scoreRenderer';
 import type { SeminarReportDraft, ReportPhoto } from '@/hooks/useSeminarReportDraft';
 
 const W = 297;
@@ -107,11 +108,6 @@ async function photoGrid(doc: jsPDF, photos: ReportPhoto[], cols: number, startY
     }
     if (r >= rows) break;
   }
-}
-
-function stars(n: number | null): string {
-  const s = Math.max(0, Math.min(5, n ?? 0));
-  return '★'.repeat(s) + '☆'.repeat(5 - s);
 }
 
 /** Génère et télécharge le PDF. Renvoie le nom de fichier. */
@@ -235,8 +231,12 @@ export async function exportSeminarReportPDF(draft: SeminarReportDraft): Promise
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(OLIVE);
-  doc.text(`Ménage : ${stars(draft.cleaning_score)} (${draft.cleaning_score ?? 0}/5)`, 22, scoreY + 2);
-  doc.text(`Technique : ${stars(draft.technical_score)} (${draft.technical_score ?? 0}/5)`, W / 2 + 10, scoreY + 2);
+  doc.text('Ménage :', 22, scoreY + 2);
+  drawScoreCircles(doc, draft.cleaning_score, 48, scoreY + 1);
+  doc.text(`(${formatScoreText(draft.cleaning_score)})`, 84, scoreY + 2);
+  doc.text('Technique :', W / 2 + 10, scoreY + 2);
+  drawScoreCircles(doc, draft.technical_score, W / 2 + 42, scoreY + 1);
+  doc.text(`(${formatScoreText(draft.technical_score)})`, W / 2 + 78, scoreY + 2);
   footerBar(doc);
 
   // ── PAGE — SATISFACTION CLIENT ─────────────────────────

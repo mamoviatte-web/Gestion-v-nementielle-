@@ -7,6 +7,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { renderScoreCircles } from '@/lib/scoreRenderer';
 import {
   ClipboardList,
   AlertTriangle,
@@ -49,16 +50,18 @@ interface DebriefScoreRow {
 const SELECT_COLUMNS =
   'space_id, submitted_at, overall_rating, service_score, cleaning_score, technical_score, stocks_suffisants, has_urgent_issue, urgent_issue_detail, cleaning_issues, tech_issues, cleaning_comment, technical_comment';
 
-/** Cellule de notation en étoiles (0–5) ou « — » si absente. */
+/** Cellule de notation en cercles (0–5) ou « — » si absente. */
 function StarCell({ score }: { score: number | null }) {
   if (score === null || score === undefined) {
     return <span className="text-slate-400">—</span>;
   }
   const n = Math.max(0, Math.min(5, Math.round(score)));
   return (
-    <span className="whitespace-nowrap text-amber-500" aria-label={`${n} sur 5`}>
-      {'★'.repeat(n) + '☆'.repeat(5 - n)}
-    </span>
+    <span
+      className="whitespace-nowrap"
+      aria-label={`${n} sur 5`}
+      dangerouslySetInnerHTML={{ __html: renderScoreCircles(n) }}
+    />
   );
 }
 

@@ -17,6 +17,7 @@ import {
   type SeminarReportDraft,
 } from '@/hooks/useSeminarReportDraft';
 import { exportSeminarReportPDF } from '@/lib/seminarReportPdf';
+import { renderScoreCircles, formatScoreText } from '@/lib/scoreRenderer';
 import type { Event } from '@/lib/types';
 
 /* ─────────────── Champ éditable inline ─────────────── */
@@ -85,11 +86,15 @@ function ScoreEditor({ label, value, onChange }: { label: string; value: number 
   return (
     <div className="flex items-center gap-2">
       <span className="text-sm text-pr-black-soft/70">{label}</span>
-      <span className="flex">
+      <span className="flex items-center gap-1">
         {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} onClick={() => onChange(n)} className="text-lg leading-none" aria-label={`${label} ${n}/5`}>
-            <span className={n <= (value ?? 0) ? 'text-pr-gold' : 'text-pr-stone'}>★</span>
-          </button>
+          <button
+            key={n}
+            onClick={() => onChange(n)}
+            aria-label={`${label} ${n}/5`}
+            className="h-3.5 w-3.5 rounded-full transition-colors"
+            style={{ backgroundColor: n <= (value ?? 0) ? '#C9A646' : '#E8E4DA' }}
+          />
         ))}
       </span>
       <span className="text-xs text-pr-black-soft/50">({value ?? 0}/5)</span>
@@ -299,7 +304,14 @@ function PreviewModal({ draft, onClose }: { draft: SeminarReportDraft; onClose: 
           {(draft.debrief_bullets ?? []).map((b, i) => (
             <p key={i} className={b.is_issue ? 'text-pr-rust' : ''}>{b.is_issue ? '▸' : '•'} {b.text}</p>
           ))}
-          <p className="pt-2 text-pr-olive-dark">Ménage {draft.cleaning_score ?? 0}/5 · Technique {draft.technical_score ?? 0}/5</p>
+          <div className="flex flex-wrap gap-6 pt-2 text-pr-olive-dark">
+            <span className="inline-flex items-center gap-1">
+              Ménage <span dangerouslySetInnerHTML={{ __html: renderScoreCircles(draft.cleaning_score) }} /> ({formatScoreText(draft.cleaning_score)})
+            </span>
+            <span className="inline-flex items-center gap-1">
+              Technique <span dangerouslySetInnerHTML={{ __html: renderScoreCircles(draft.technical_score) }} /> ({formatScoreText(draft.technical_score)})
+            </span>
+          </div>
         </div>
       ),
     });
