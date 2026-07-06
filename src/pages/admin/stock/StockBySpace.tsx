@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowDownToLine, PackageOpen, Warehouse } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, Info, PackageOpen, Warehouse } from 'lucide-react';
 
 import {
   Alert,
@@ -360,6 +360,9 @@ export default function StockBySpace() {
   const balancesLoading =
     !!selectedLocationId && (reserveBalances.isLoading || spaceBalances.isLoading);
 
+  // Tous les stocks de l'espace à 0 → message d'attente d'inventaire physique.
+  const allZero = rows.length > 0 && rows.every((r) => r.spaceQty === 0);
+
   return (
     <div className="space-y-4">
       {/* Filtres */}
@@ -407,7 +410,17 @@ export default function StockBySpace() {
           message="Aucun produit ne correspond aux filtres sélectionnés."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg ring-1 ring-pr-stone/40">
+        <div className="space-y-4">
+          {allZero && (
+            <div className="flex items-center gap-3 rounded-xl border border-pr-stone/60 bg-pr-cream/60 p-4 text-sm text-pr-black-soft">
+              <Info className="h-4 w-4 flex-shrink-0 text-pr-stone" />
+              <span>
+                Stocks espaces remis à zéro — en attente de l’inventaire physique.
+                Les quantités seront mises à jour lors de la prochaine réception.
+              </span>
+            </div>
+          )}
+          <div className="overflow-x-auto rounded-lg ring-1 ring-pr-stone/40">
           <Table>
             <THead>
               <TR>
@@ -487,6 +500,7 @@ export default function StockBySpace() {
               ))}
             </TBody>
           </Table>
+          </div>
         </div>
       )}
 
