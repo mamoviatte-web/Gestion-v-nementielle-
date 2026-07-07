@@ -181,6 +181,9 @@ export interface Event {
   // Chaînage des matchs (runner_/match_chaining.sql)
   previous_event_id?: string | null;
   sequence_number?: number | null;
+  // Accès match par code unique (match_access.sql)
+  match_access_code?: string | null;
+  match_access_url?: string | null;
 }
 
 /** Ligne de la vue stock_continuity_check (écart stock entre 2 matchs). */

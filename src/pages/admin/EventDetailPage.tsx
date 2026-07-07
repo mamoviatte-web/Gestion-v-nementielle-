@@ -12,6 +12,7 @@ import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { RunnerPlanningTab } from '@/components/runner/RunnerPlanningTab';
 import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
 import { MatchConsumptionReport } from '@/components/analytics/MatchConsumptionReport';
+import { MatchAccessCode } from '@/components/events/MatchAccessCode';
 import { SeminaireSpacesTab } from '@/components/seminaire/SeminaireSpacesTab';
 import { SeminaireBilanTab } from '@/components/seminaire/SeminaireBilanTab';
 import { StaffEventInsights } from '@/components/staff/StaffEventInsights';
@@ -185,6 +186,11 @@ export default function EventDetailPage() {
             setTab('runner');
           }}
         />
+      )}
+
+      {/* Code d'accès match (responsables de zone) */}
+      {isMatch && (
+        <MatchAccessCode eventId={event.event_id} code={event.match_access_code ?? null} eventName={event.event_name} />
       )}
 
       {/* Onglets */}

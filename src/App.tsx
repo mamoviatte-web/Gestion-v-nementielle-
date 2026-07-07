@@ -47,6 +47,8 @@ const DebriefPage = lazy(() => import('@/pages/provider/DebriefPage'));
 const RunnerTerrainView = lazy(() => import('@/pages/runner/RunnerTerrainView'));
 const ZoneEntryPage = lazy(() => import('@/pages/zone/ZoneEntryPage'));
 const ZoneDashboard = lazy(() => import('@/pages/zone/ZoneDashboard'));
+const MatchAccessPage = lazy(() => import('@/pages/zone/MatchAccessPage'));
+const MatchZoneDashboard = lazy(() => import('@/pages/zone/MatchZoneDashboard'));
 
 /** Redirection de la racine selon l'état d'authentification et le rôle. */
 function RootRedirect() {
@@ -72,6 +74,9 @@ export default function App() {
         {/* Zone responsable séminaire — accès public par code (sans compte) */}
         <Route path="/zone/:token" element={<ZoneEntryPage />} />
         <Route path="/zone/:token/dashboard" element={<ZoneDashboard />} />
+        {/* Accès match par code unique — public (choix espace + nom) */}
+        <Route path="/match/:code" element={<MatchAccessPage />} />
+        <Route path="/zone/match/:sessionToken" element={<MatchZoneDashboard />} />
 
         {/* Espace Stade (ROLE_STADE) */}
         <Route
