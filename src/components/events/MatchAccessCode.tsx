@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/context/ToastContext';
@@ -20,12 +21,46 @@ function matchUrl(code: string): string {
 
 export function MatchAccessCode({ eventId, code, eventName }: { eventId: string; code: string | null; eventName: string }) {
   const { showToast } = useToast();
+  const qc = useQueryClient();
   const [showQR, setShowQR] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
+  async function generateCode() {
+    setGenerating(true);
+    const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const { data, error } = await supabase
+      .from('events')
+      .update({ match_access_code: newCode })
+      .eq('event_id', eventId)
+      .select('match_access_code')
+      .single();
+    setGenerating(false);
+    if (error) {
+      showToast(
+        /match_access_code|column/i.test(error.message)
+          ? 'Colonne absente — applique supabase/match_access.sql.'
+          : error.message,
+        'warning',
+      );
+      return;
+    }
+    void qc.invalidateQueries({ queryKey: ['event', eventId] });
+    void qc.invalidateQueries({ queryKey: ['events'] });
+    showToast(`Code généré : ${(data as { match_access_code: string }).match_access_code}`, 'success');
+  }
 
   if (!code) {
     return (
-      <div className="mb-6 rounded-2xl border border-pr-stone bg-pr-cream/50 p-4 text-sm text-pr-black-soft">
-        Code d'accès non généré — applique <code>supabase/match_access.sql</code> pour activer l'accès par code unique.
+      <div className="mb-6 flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <span className="text-amber-500">⚠️</span>
+        <p className="flex-1 text-sm text-amber-800">Code d'accès non encore généré pour ce match.</p>
+        <button
+          onClick={() => void generateCode()}
+          disabled={generating}
+          className="flex-shrink-0 rounded-xl bg-pr-black px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+        >
+          {generating ? 'Génération…' : 'Générer le code'}
+        </button>
       </div>
     );
   }
