@@ -142,11 +142,26 @@ export default function MatchZoneStocks() {
           </div>
         )}
 
-        {lines.length > 0 && <FamilyStockForm lines={visibleLines} mode={mode} onChange={onFieldChange} />}
+        {/* Clôture : bandeau récap + garde-fou si l'ouverture n'a pas été saisie */}
+        {mode === 'final' && lines.length > 0 && visibleLines.length > 0 && (
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <span>📋</span>
+            <span>
+              <strong>{visibleLines.length} produit(s)</strong> à saisir — uniquement ceux déclarés à l'ouverture ou au réassort.
+            </span>
+          </div>
+        )}
+        {mode === 'final' && lines.length > 0 && visibleLines.length === 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-800">
+            Aucun produit à saisir — complétez d'abord l'ouverture (stock initial).
+          </div>
+        )}
+
+        {visibleLines.length > 0 && <FamilyStockForm lines={visibleLines} mode={mode} onChange={onFieldChange} />}
       </div>
 
       {/* Barre d'action fixe */}
-      {lines.length > 0 && (
+      {visibleLines.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 p-4 backdrop-blur">
           <div className="mx-auto max-w-lg space-y-2">
             {error && <p className="rounded-lg bg-red-50 p-2.5 text-sm text-red-600">{error}</p>}
