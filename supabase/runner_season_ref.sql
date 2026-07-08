@@ -38,7 +38,7 @@ BEGIN
   SELECT event_id INTO v_event FROM events WHERE event_name = p_event_name LIMIT 1;
   SELECT space_id INTO v_space FROM spaces WHERE access_code = p_space_code;
   -- Alias connus (nom Excel ≠ catalogue).
-  v_norm := CASE p_product_name WHEN 'Pepsi bouteille 1L+' THEN 'Pepsi bouteille' ELSE p_product_name END;
+  v_norm := p_product_name;  -- match exact (le vrai produit est 'Pepsi bouteille 1L+')
   -- Exact d'abord, puis fuzzy sur le premier mot.
   SELECT product_id INTO v_product FROM products
    WHERE active = true

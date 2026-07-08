@@ -13,7 +13,7 @@ DECLARE v_event UUID; v_space UUID; v_product UUID; v_norm TEXT;
 BEGIN
   SELECT event_id INTO v_event FROM events WHERE event_name = p_event_name LIMIT 1;
   SELECT space_id INTO v_space FROM spaces WHERE access_code = p_space_code;
-  v_norm := CASE p_product_name WHEN 'Pepsi bouteille 1L+' THEN 'Pepsi bouteille' ELSE p_product_name END;
+  v_norm := p_product_name;  -- match exact (le vrai produit est 'Pepsi bouteille 1L+')
   SELECT product_id INTO v_product FROM products
    WHERE active = true
      AND (lower(product_name) = lower(v_norm) OR product_name ILIKE '%' || SPLIT_PART(v_norm, ' ', 1) || '%')
@@ -30,21 +30,21 @@ END; $$;
 -- BISTROT (BI2026)
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','BI2026','Fût BUD',5);
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','BI2026','Fût LEFFE',4);
-SELECT insert_ref_conso('Ref. vs Angoulême S-1','BI2026','Pepsi bouteille',17);
+SELECT insert_ref_conso('Ref. vs Angoulême S-1','BI2026','Pepsi bouteille 1L+',17);
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','BI2026','Pepsi Max bouteille',5);
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','BI2026','Perrier grande bouteille',25);
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','BI2026','Schweppes',9);
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','BI2026','Blanc Montaurone',15);
 SELECT insert_ref_conso('Ref. vs Barrage S-1','BI2026','Fût BUD',7);
 SELECT insert_ref_conso('Ref. vs Barrage S-1','BI2026','Fût LEFFE',4);
-SELECT insert_ref_conso('Ref. vs Barrage S-1','BI2026','Pepsi bouteille',20);
+SELECT insert_ref_conso('Ref. vs Barrage S-1','BI2026','Pepsi bouteille 1L+',20);
 SELECT insert_ref_conso('Ref. vs Barrage S-1','BI2026','Perrier grande bouteille',28);
 SELECT insert_ref_conso('Ref. vs Barrage S-1','BI2026','Schweppes',19);
 -- COMPTOIR (CO2026)
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','CO2026','Fût BUD',5);
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','CO2026','Rosé Miraval',6);
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','CO2026','Rouge Les Alexandrins',6);
-SELECT insert_ref_conso('Ref. vs Angoulême S-1','CO2026','Pepsi bouteille',8);
+SELECT insert_ref_conso('Ref. vs Angoulême S-1','CO2026','Pepsi bouteille 1L+',8);
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','CO2026','Perrier grande bouteille',7);
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','CO2026','Schweppes',13);
 -- CLUB 70 NORD (C70N26)
@@ -52,11 +52,11 @@ SELECT insert_ref_conso('Ref. vs Angoulême S-1','C70N26','Mumm Cordon Rouge',24
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','C70N26','Rosé Pey Blanc',4);
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','C70N26','Blanc du Seuil',9);
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','C70N26','Fût BUD',3);
-SELECT insert_ref_conso('Ref. vs Angoulême S-1','C70N26','Pepsi bouteille',8);
+SELECT insert_ref_conso('Ref. vs Angoulême S-1','C70N26','Pepsi bouteille 1L+',8);
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','C70N26','Perrier grande bouteille',3);
 SELECT insert_ref_conso('Ref. vs Barrage S-1','C70N26','Mumm Cordon Rouge',14);
 SELECT insert_ref_conso('Ref. vs Barrage S-1','C70N26','Fût BUD',4);
-SELECT insert_ref_conso('Ref. vs Barrage S-1','C70N26','Pepsi bouteille',11);
+SELECT insert_ref_conso('Ref. vs Barrage S-1','C70N26','Pepsi bouteille 1L+',11);
 SELECT insert_ref_conso('Ref. vs Barrage S-1','C70N26','Perrier grande bouteille',18);
 -- LOGES EST (LE2026)
 SELECT insert_ref_conso('Ref. vs Angoulême S-1','LE2026','Mumm Cordon Rouge',1);
