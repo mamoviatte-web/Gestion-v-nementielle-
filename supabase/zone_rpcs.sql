@@ -60,7 +60,11 @@ BEGIN
   );
 END; $$;
 
--- ── Lignes de stock éditables (produits dotés + valeurs saisies) ────────────
+-- ── Lignes de stock éditables ───────────────────────────────────────────────
+-- Retourne TOUS les produits boissons actifs (hors Matériel) pour que le
+-- prestataire puisse toujours saisir l'ouverture, même sans dotation runner
+-- pré-générée. planned_qty vient de runner_dotations si présente ; les valeurs
+-- saisies (initial/réassort/final/état) viennent d'event_stock_lines.
 CREATE OR REPLACE FUNCTION get_zone_stock(p_token TEXT)
 RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE v_e UUID; v_s UUID; v_n TEXT;
@@ -70,11 +74,6 @@ BEGIN
   RETURN json_build_object(
     'success', true,
     'lines', (
-      WITH prod AS (
-        SELECT product_id FROM runner_dotations WHERE event_id = v_e AND space_id = v_s
-        UNION
-        SELECT product_id FROM event_stock_lines WHERE event_id = v_e AND space_id = v_s
-      )
       SELECT COALESCE(json_agg(json_build_object(
         'product_id', p.product_id, 'product_name', p.product_name,
         'category', p.category, 'unit', p.unit,
@@ -83,10 +82,10 @@ BEGIN
         'reassort_qty', COALESCE(esl.reassort_qty, 0),
         'final_qty', esl.final_qty, 'product_state', esl.product_state
       ) ORDER BY p.category, p.product_name), '[]'::json)
-      FROM prod
-      JOIN products p ON p.product_id = prod.product_id
-      LEFT JOIN runner_dotations rd ON rd.event_id = v_e AND rd.space_id = v_s AND rd.product_id = prod.product_id
-      LEFT JOIN event_stock_lines esl ON esl.event_id = v_e AND esl.space_id = v_s AND esl.product_id = prod.product_id
+      FROM products p
+      LEFT JOIN runner_dotations rd ON rd.event_id = v_e AND rd.space_id = v_s AND rd.product_id = p.product_id
+      LEFT JOIN event_stock_lines esl ON esl.event_id = v_e AND esl.space_id = v_s AND esl.product_id = p.product_id
+      WHERE p.active = true AND p.category <> 'Matériel'
     )
   );
 END; $$;
@@ -139,25 +138,9 @@ BEGIN
       anomaly_comment = CASE WHEN p_step = 'cloture' THEN EXCLUDED.anomaly_comment ELSE event_stock_lines.anomaly_comment END,
       responsable_nom = v_name,
       submitted_at = CASE WHEN p_step = 'cloture' THEN now() ELSE event_stock_lines.submitted_at END;
-
-    -- RG-002 : toute mutation de stock = une ligne dans stock_movements.
-    DECLARE v_qty INT; v_type TEXT;
-    BEGIN
-      v_qty := CASE p_step
-        WHEN 'ouverture' THEN COALESCE((rec->>'initial_qty')::int, 0)
-        WHEN 'reassort'  THEN COALESCE((rec->>'reassort_qty')::int, 0)
-        WHEN 'cloture'   THEN COALESCE((rec->>'final_qty')::int, 0)
-      END;
-      v_type := CASE p_step
-        WHEN 'ouverture' THEN 'inventaire'
-        WHEN 'reassort'  THEN 'réassort'
-        WHEN 'cloture'   THEN 'inventaire'
-      END;
-      IF v_qty > 0 AND v_type IS NOT NULL THEN
-        INSERT INTO stock_movements (event_id, space_id, product_id, movement_type, qty, responsable_nom)
-        VALUES (v_e, v_s, (rec->>'product_id')::uuid, v_type, v_qty, v_name);
-      END IF;
-    END;
+    -- RG-002 : la traçabilité stock_movements est assurée par les triggers déjà
+    -- en place sur event_stock_lines (trg_reassort_updated → 'réassort_événement',
+    -- trg_stock_final_entered → consommation). On ne double-écrit PAS ici.
   END LOOP;
   RETURN json_build_object('success', true);
 END; $$;
