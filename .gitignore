@@ -35,3 +35,5 @@ supabase/scripts/*.env
 .vercel
 .env*
 !.env.example
+
+*.tsbuildinfo
