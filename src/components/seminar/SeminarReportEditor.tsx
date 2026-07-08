@@ -7,6 +7,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Download, Eye, Loader2, Trash2, Upload, X } from 'lucide-react';
 import { Alert, Badge, Button, Spinner } from '@/components/ui';
+import { supabase } from '@/lib/supabase';
 import { formatEuro } from '@/lib/calculations';
 import { isSeminaire } from '@/lib/eventUtils';
 import { useToast } from '@/context/ToastContext';
@@ -17,6 +18,8 @@ import {
   type SeminarReportDraft,
 } from '@/hooks/useSeminarReportDraft';
 import { exportSeminarReportPDF } from '@/lib/seminarReportPdf';
+import { FullPnL } from '@/components/seminar/FullPnL';
+import { ExternalChargesManager } from '@/components/seminar/ExternalChargesManager';
 import { renderScoreCircles, formatScoreText } from '@/lib/scoreRenderer';
 import type { Event } from '@/lib/types';
 
@@ -379,7 +382,7 @@ export function SeminarReportEditor({ event }: { event: Event }) {
 }
 
 function SeminarReportEditorInner({ event }: { event: Event }) {
-  const { draft, updateDraft, flush, uploadPhoto, setStatus, loading, saving, savedAt, provisioned } =
+  const { draft, updateDraft, flush, uploadPhoto, setStatus, loading, saving, savedAt, provisioned, externalCostHt, recomputeCosts } =
     useSeminarReportDraft(event);
   const { showToast } = useToast();
   const [preview, setPreview] = useState(false);
@@ -391,7 +394,12 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
     setExporting(true);
     try {
       await flush();
-      await exportSeminarReportPDF(draft);
+      const { data: charges } = await supabase
+        .from('event_external_charges')
+        .select('provider_name, charge_type, amount_ht')
+        .eq('event_id', event.event_id)
+        .order('charge_type');
+      await exportSeminarReportPDF(draft, (charges ?? []) as { provider_name: string; charge_type: string; amount_ht: number }[]);
       await setStatus('exporté');
       showToast('PDF exporté.', 'success');
     } catch (e) {
@@ -475,8 +483,27 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
         <div className="mt-2 grid grid-cols-2 gap-2 border-t border-pr-stone pt-2 text-xs sm:grid-cols-4">
           <Kpi label="Coût F&B" value={formatEuro(draft.total_fb_cost_ht ?? 0)} />
           <Kpi label="Charges RH" value={formatEuro(draft.total_rh_cost ?? 0)} />
-          <Kpi label="Coût total" value={formatEuro(draft.total_cost_ht ?? 0)} />
+          <Kpi label="Charges externes" value={formatEuro(externalCostHt ?? 0)} />
           <Kpi label="Gain net" value={formatEuro(draft.gain_net_ht ?? 0)} />
+        </div>
+      </Card>
+
+      {/* Bilan financier — P&L complet + charges externes (traiteur, sécurité…) */}
+      <Card title="Bilan financier">
+        <div className="space-y-6">
+          <FullPnL
+            caHT={Number(draft.ca_ht ?? 0)}
+            fbCostHT={Number(draft.total_fb_cost_ht ?? 0)}
+            rhCostHT={Number(draft.total_rh_cost ?? 0)}
+            externalCostHT={externalCostHt ?? 0}
+            pax={Number(draft.pax ?? event.expected_attendees ?? 0)}
+          />
+          <div>
+            <h4 className="mb-2 text-sm font-bold text-stone-800">
+              Charges externes <span className="font-normal text-stone-400">(traiteur, sécurité, technique…)</span>
+            </h4>
+            <ExternalChargesManager eventId={event.event_id} onCostChange={() => void recomputeCosts()} />
+          </div>
         </div>
       </Card>
 

@@ -78,7 +78,17 @@ async function photoGrid(doc: jsPDF, photos: ReportPhoto[], cols: number, startY
 }
 
 /** Génère et télécharge le PDF. Renvoie le nom de fichier. */
-export async function exportSeminarReportPDF(draft: SeminarReportDraft): Promise<string> {
+export interface PdfExternalCharge {
+  provider_name: string;
+  charge_type: string;
+  amount_ht: number;
+}
+
+export async function exportSeminarReportPDF(
+  draft: SeminarReportDraft,
+  externalCharges: PdfExternalCharge[] = [],
+): Promise<string> {
+  const externalTotal = externalCharges.reduce((s, c) => s + (Number(c.amount_ht) || 0), 0);
   const doc = new jsPDF({ format: 'a4', orientation: 'landscape', unit: 'mm' });
 
   // ── PAGE 1 — COUVERTURE ────────────────────────────────
@@ -118,17 +128,17 @@ export async function exportSeminarReportPDF(draft: SeminarReportDraft): Promise
   doc.text(`Régisseur : ${draft.regisseur_name ?? '—'}`, 20, 66);
   if (draft.traiteur_company) doc.text(`Traiteur : ${draft.traiteur_company}`, 20, 75);
   // Tableau financier
-  const rows: [string, string][] = [
-    ['Chiffre d’affaires HT', euro(draft.ca_ht) + (draft.ca_note ? ` (${draft.ca_note})` : '')],
-    ['Coût F&B HT', euro(draft.total_fb_cost_ht)],
-    ['Charges régisseur (RH)', euro(draft.total_rh_cost)],
-    ['Coût total HT', euro(draft.total_cost_ht)],
-    ['Gain net HT', euro(draft.gain_net_ht)],
-    ['Marge', draft.marge_pct == null ? '—' : `${Number(draft.marge_pct).toFixed(1)} %`],
+  const rows: [string, string, boolean][] = [
+    ['Chiffre d’affaires HT', euro(draft.ca_ht) + (draft.ca_note ? ` (${draft.ca_note})` : ''), false],
+    ['Coût F&B HT', euro(draft.total_fb_cost_ht), false],
+    ['Charges régisseur (RH)', euro(draft.total_rh_cost), false],
+    ['Charges externes HT', euro(externalTotal), false],
+    ['Coût total HT', euro(draft.total_cost_ht), true],
+    ['Gain net HT', euro(draft.gain_net_ht), true],
+    ['Marge', draft.marge_pct == null ? '—' : `${Number(draft.marge_pct).toFixed(1)} %`, true],
   ];
   let ty = 92;
-  rows.forEach(([label, val], i) => {
-    const isTotal = i >= 3;
+  rows.forEach(([label, val, isTotal], i) => {
     doc.setFillColor(i % 2 === 0 ? '#FFFFFF' : '#ECE8DC');
     doc.rect(20, ty - 6, W - 40, 11, 'F');
     doc.setFont('helvetica', isTotal ? 'bold' : 'normal');
@@ -138,6 +148,24 @@ export async function exportSeminarReportPDF(draft: SeminarReportDraft): Promise
     doc.text(val, W - 24, ty + 1, { align: 'right' });
     ty += 12;
   });
+
+  // Détail des charges externes (traiteur, sécurité…)
+  if (externalCharges.length > 0) {
+    ty += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(BLACK);
+    doc.text('Détail charges externes', 24, ty);
+    ty += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    for (const c of externalCharges) {
+      doc.setTextColor(BLACK);
+      doc.text(`• ${c.provider_name} (${c.charge_type})`, 26, ty);
+      doc.text(euro(c.amount_ht), W - 24, ty, { align: 'right' });
+      ty += 6;
+    }
+  }
   footerBar(doc);
 
   // ── PAGE 3 — MISE EN PLACE ─────────────────────────────
