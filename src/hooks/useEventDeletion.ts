@@ -16,11 +16,26 @@ const CHILD_TABLES = [
   'provider_presence',
   'schedules',
   'debriefs',
+  'debrief_photos',
   'runner_auto_planning',
+  'runner_recommendations',
   'event_consumptions',
+  'event_context_log',
   'event_attachments',
+  'event_report_photos',
+  'event_commercial_data',
+  'client_satisfaction_survey',
+  'seminar_report_draft',
+  'occasional_hours',
+  'match_access_sessions',
   'event_spaces',
 ] as const;
+
+/**
+ * Tables où event_id doit être DÉLIÉ (mis à NULL) plutôt que supprimé :
+ * les fûts et les analytics survivent à la suppression de l'événement.
+ */
+const NULLIFY_EVENT_TABLES = ['keg_inventory'] as const;
 
 /**
  * Niveau de risque d'une suppression, fonction de ce qui sera réellement perdu :
@@ -132,6 +147,10 @@ export function useEventsRiskMap(eventIds: string[]) {
 /** Suppression d'un événement + toutes ses données liées. */
 async function deleteOne(eventId: string): Promise<void> {
   await deleteEventFiles(eventId);
+  // Délier les tables qui survivent (fûts, analytics) — évite le blocage FK.
+  for (const t of NULLIFY_EVENT_TABLES) {
+    await supabase.from(t).update({ event_id: null }).eq('event_id', eventId);
+  }
   for (const t of CHILD_TABLES) {
     await supabase.from(t).delete().eq('event_id', eventId); // erreurs ignorées (table absente)
   }
