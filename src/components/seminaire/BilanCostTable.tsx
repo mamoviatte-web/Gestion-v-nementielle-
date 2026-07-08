@@ -148,6 +148,15 @@ export function BilanCostTable({ eventId }: { eventId: string }) {
     [data],
   );
 
+  // Produits consommés SANS prix (exclus du total — RG-005).
+  const missingPrice = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const l of data ?? []) {
+      if (l.unit_price_ht == null && (l.consumed_qty ?? 0) !== 0) seen.set(l.product_id, l.product_name);
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [data]);
+
   if (isLoading) return <p className="text-sm text-slate-500">Chargement des coûts…</p>;
   if ((data ?? []).length === 0) {
     return (
@@ -262,6 +271,16 @@ export function BilanCostTable({ eventId }: { eventId: string }) {
           <span>{formatEuro(totalHT * (1 + tvaRate))}</span>
         </div>
       </div>
+
+      {missingPrice.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          ⚠️ {missingPrice.length} produit(s) consommé(s) sans prix HT, exclus du total :{' '}
+          <span className="font-medium">{missingPrice.join(', ')}</span>
+          <span className="mt-1 block text-amber-600">
+            Renseigne le prix dans le Catalogue pour compléter le coût total.
+          </span>
+        </div>
+      )}
     </div>
   );
 }

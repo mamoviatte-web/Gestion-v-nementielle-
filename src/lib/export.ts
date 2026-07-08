@@ -124,7 +124,7 @@ export function buildStockAOA(data: EventExportData): {
         line?.product_state ? PRODUCT_STATE_META[line.product_state].label : '',
         consumed ?? '',
         price ?? '',
-        cost ?? '',
+        cost !== null ? cost : consumed !== null && price === null ? 'Prix manquant' : '',
         line?.responsable_nom ?? '',
       ]);
     }
