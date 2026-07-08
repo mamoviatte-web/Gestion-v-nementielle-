@@ -27,12 +27,18 @@ export default function MatchZoneDashboard() {
   const { token, session, loading } = useMatchSession();
   const navigate = useNavigate();
   const [status, setStatus] = useState<Record<string, Status>>({});
+  const [nbBuvettes, setNbBuvettes] = useState(0);
 
   useEffect(() => {
     if (!token || !session?.success) return;
     void supabase.rpc('get_zone_status', { p_token: token }).then(({ data }) => {
       const r = data as { success?: boolean; stocks?: Status; schedules?: Status; debrief?: Status } | null;
       if (r?.success) setStatus({ stocks: r.stocks ?? 'todo', schedules: r.schedules ?? 'todo', debrief: r.debrief ?? 'todo' });
+    });
+    // Superviseur buvettes ? get_zone_buvettes renvoie ses buvettes membres.
+    void supabase.rpc('get_zone_buvettes', { p_token: token }).then(({ data }) => {
+      const r = data as { success?: boolean; buvettes?: unknown[] } | null;
+      if (r?.success) setNbBuvettes(r.buvettes?.length ?? 0);
     });
   }, [token, session]);
 
@@ -52,6 +58,9 @@ export default function MatchZoneDashboard() {
   }
 
   const cards: { icon: string; title: string; subtitle: string; path: string; status?: Status }[] = [
+    ...(nbBuvettes > 0
+      ? [{ icon: '🍺', title: 'Gérer mes buvettes', subtitle: `${nbBuvettes} buvette(s) à superviser`, path: 'buvettes' }]
+      : []),
     { icon: '📋', title: 'Feuille de route', subtitle: 'Dotations prévues pour votre espace', path: 'roadmap' },
     { icon: '📦', title: 'Stocks', subtitle: 'Saisir stock initial, réassort et final', path: 'stocks', status: status.stocks },
     { icon: '⏱', title: 'Horaires', subtitle: "Confirmer vos heures d'arrivée / départ", path: 'schedules', status: status.schedules },

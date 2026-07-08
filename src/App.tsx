@@ -53,6 +53,8 @@ const MatchZoneRoadmap = lazy(() => import('@/pages/zone/MatchZoneRoadmap'));
 const MatchZoneStocks = lazy(() => import('@/pages/zone/MatchZoneStocks'));
 const MatchZoneSchedule = lazy(() => import('@/pages/zone/MatchZoneSchedule'));
 const MatchZoneDebrief = lazy(() => import('@/pages/zone/MatchZoneDebrief'));
+const BuvetteSupervisorPage = lazy(() => import('@/pages/zone/BuvetteSupervisorPage'));
+const BuvetteDetailPage = lazy(() => import('@/pages/zone/BuvetteDetailPage'));
 
 /** Redirection de la racine selon l'état d'authentification et le rôle. */
 function RootRedirect() {
@@ -85,6 +87,8 @@ export default function App() {
         <Route path="/zone/match/:sessionToken/stocks" element={<MatchZoneStocks />} />
         <Route path="/zone/match/:sessionToken/schedules" element={<MatchZoneSchedule />} />
         <Route path="/zone/match/:sessionToken/debrief" element={<MatchZoneDebrief />} />
+        <Route path="/zone/match/:sessionToken/buvettes" element={<BuvetteSupervisorPage />} />
+        <Route path="/zone/match/:sessionToken/buvette/:spaceId" element={<BuvetteDetailPage />} />
 
         {/* Espace Stade (ROLE_STADE) */}
         <Route
