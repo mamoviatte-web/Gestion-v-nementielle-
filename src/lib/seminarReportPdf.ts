@@ -7,7 +7,15 @@
 import jsPDF from 'jspdf';
 import { drawScoreCircles, formatScoreText } from '@/lib/scoreRenderer';
 import { addImageToPDF, imageForPdf } from '@/lib/storageUtils';
+import { supabase } from '@/lib/supabase';
 import type { SeminarReportDraft, ReportPhoto } from '@/hooks/useSeminarReportDraft';
+
+/** Pages photos terrain (débrief) : mise en place · F&B · fin d'événement. */
+const DEBRIEF_PHOTO_SECTIONS: { type: string; title: string }[] = [
+  { type: 'mise_en_place', title: 'Photos terrain — Mise en place' },
+  { type: 'fb', title: 'Photos terrain — F&B & Service' },
+  { type: 'fin_evenement', title: "Photos terrain — Fin d'événement" },
+];
 
 const W = 297;
 const H = 210;
@@ -74,6 +82,38 @@ async function photoGrid(doc: jsPDF, photos: ReportPhoto[], cols: number, startY
       doc.text(doc.splitTextToSize(photos[i].caption!, cellW), x, y + cellH + 5);
     }
     if (r >= rows) break;
+  }
+}
+
+/** Pages photos terrain depuis debrief_photos (3 catégories, 6 par page). */
+async function addDebriefPhotoPages(doc: jsPDF, eventId: string) {
+  for (const section of DEBRIEF_PHOTO_SECTIONS) {
+    const { data } = await supabase
+      .from('debrief_photos')
+      .select('storage_path, caption, taken_by')
+      .eq('event_id', eventId)
+      .eq('photo_type', section.type)
+      .order('taken_at', { ascending: true });
+    const rows = (data ?? []) as { storage_path: string; caption: string | null; taken_by: string | null }[];
+    if (rows.length === 0) continue;
+    const photos: ReportPhoto[] = [];
+    for (let idx = 0; idx < rows.length; idx++) {
+      const r = rows[idx];
+      const { data: u } = await supabase.storage.from('debrief-photos').createSignedUrl(r.storage_path, 3600);
+      photos.push({
+        url: u?.signedUrl ?? '',
+        caption: [r.taken_by, r.caption].filter(Boolean).join(' · ') || undefined,
+        order: idx,
+      });
+    }
+    const PER = 6;
+    for (let p = 0; p * PER < photos.length; p++) {
+      doc.addPage();
+      background(doc);
+      pageTitle(doc, p === 0 ? section.title : `${section.title} (suite)`);
+      await photoGrid(doc, photos.slice(p * PER, (p + 1) * PER), 3, 50);
+      footerBar(doc);
+    }
   }
 }
 
@@ -204,6 +244,9 @@ export async function exportSeminarReportPDF(
       footerBar(doc);
     }
   }
+
+  // ── PAGES — PHOTOS TERRAIN (débrief responsables) ──────
+  await addDebriefPhotoPages(doc, draft.event_id);
 
   // ── PAGE — DÉBRIEF ─────────────────────────────────────
   doc.addPage();

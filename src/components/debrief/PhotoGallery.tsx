@@ -71,8 +71,8 @@ export function PhotoGallery({
 
   const uploadPhoto = useCallback(
     async (file: File) => {
-      if (file.size > 10 * 1024 * 1024) {
-        alert('Photo trop lourde (max 10 Mo). Compresse-la et réessaie.');
+      if (file.size > 20 * 1024 * 1024) {
+        alert('Photo trop lourde (max 20 Mo). Compresse-la et réessaie.');
         return;
       }
       setUploading(true);
@@ -162,7 +162,7 @@ export function PhotoGallery({
           >
             <Upload className="mb-1 h-5 w-5 text-slate-400" />
             <span className="text-xs text-slate-400">{uploading ? `${progress}%` : 'Ajouter'}</span>
-            <input type="file" accept="image/jpeg,image/png,image/webp,image/heic" multiple className="hidden" onChange={handleFiles} />
+            <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple className="hidden" onChange={handleFiles} />
           </label>
         )}
       </div>

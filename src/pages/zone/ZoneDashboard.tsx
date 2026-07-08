@@ -805,7 +805,7 @@ function DebriefSection({ token, name, state, onDone, showToast }: DebriefSectio
     if (!files || files.length === 0) return;
     setUploading(true);
     try {
-      const remaining = 6 - photos.length;
+      const remaining = 30 - photos.length;
       const toUpload = Array.from(files).slice(0, remaining);
       const urls: string[] = [];
       for (const file of toUpload) {
@@ -1022,7 +1022,7 @@ function DebriefSection({ token, name, state, onDone, showToast }: DebriefSectio
 
           <Block title="📷 Photos">
             <div className="space-y-2">
-              <p className="text-sm font-medium text-pr-black">Photos (max 6)</p>
+              <p className="text-sm font-medium text-pr-black">Photos de l'espace</p>
               {photos.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {photos.map((url) => (
@@ -1037,17 +1037,17 @@ function DebriefSection({ token, name, state, onDone, showToast }: DebriefSectio
               )}
               <label
                 className={
-                  photos.length >= 6
+                  photos.length >= 30
                     ? 'inline-flex min-h-[44px] cursor-not-allowed items-center rounded-lg bg-pr-stone/60 px-4 py-2 text-sm text-pr-black-soft'
                     : 'inline-flex min-h-[44px] cursor-pointer items-center rounded-lg bg-white px-4 py-2 text-sm font-medium text-pr-black ring-1 ring-inset ring-pr-stone'
                 }
               >
-                {uploading ? 'Envoi…' : photos.length >= 6 ? 'Limite atteinte' : 'Ajouter des photos'}
+                {uploading ? 'Envoi…' : photos.length >= 30 ? 'Limite atteinte' : 'Ajouter des photos'}
                 <input
                   type="file"
                   accept="image/*"
                   multiple
-                  disabled={photos.length >= 6 || uploading}
+                  disabled={photos.length >= 30 || uploading}
                   onChange={handleFiles}
                   className="hidden"
                 />
