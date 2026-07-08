@@ -14,6 +14,7 @@ import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalys
 import { MatchConsumptionReport } from '@/components/analytics/MatchConsumptionReport';
 import { MatchAccessCode } from '@/components/events/MatchAccessCode';
 import { MatchLiveStatusPanel } from '@/components/events/MatchLiveStatusPanel';
+import { IntegrityBadge } from '@/components/events/IntegrityBadge';
 import { SeminaireSpacesTab } from '@/components/seminaire/SeminaireSpacesTab';
 import { SeminaireBilanTab } from '@/components/seminaire/SeminaireBilanTab';
 import { StaffEventInsights } from '@/components/staff/StaffEventInsights';
@@ -188,6 +189,9 @@ export default function EventDetailPage() {
           }}
         />
       )}
+
+      {/* Intégrité des liaisons de charges */}
+      <IntegrityBadge eventId={event.event_id} />
 
       {/* Code d'accès match (responsables de zone) */}
       {isMatch && (
