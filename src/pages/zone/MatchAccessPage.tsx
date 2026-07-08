@@ -15,6 +15,8 @@ interface SpaceOption {
   service_type: 'vip' | 'bar' | 'buvette' | null;
   max_pax: number | null;
   group_name: string | null;
+  nb_buvettes?: number;
+  buvette_codes?: string[];
 }
 interface MatchEventData {
   success: boolean;
@@ -78,7 +80,10 @@ export default function MatchAccessPage() {
     if (!err && res?.success && res.session_token) {
       setStep('ready');
       const token = res.session_token;
-      setTimeout(() => navigate(`/zone/match/${token}`), 1200);
+      // Superviseur buvettes (nb_buvettes > 0) → tableau de bord des buvettes ;
+      // sinon accueil de zone standard (VIP / bar).
+      const dest = (selectedSpace?.nb_buvettes ?? 0) > 0 ? `/zone/match/${token}/buvettes` : `/zone/match/${token}`;
+      setTimeout(() => navigate(dest), 1200);
     } else {
       setError(res?.error ?? "Erreur lors de l'enregistrement");
     }
@@ -161,7 +166,17 @@ export default function MatchAccessPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-pr-black">{space.space_name}</p>
-                      {space.group_name && <p className="mt-0.5 text-xs text-pr-black-soft/40">{space.group_name}</p>}
+                      {(space.buvette_codes?.length ?? 0) > 0 ? (
+                        <p className="mt-0.5 flex flex-wrap gap-1">
+                          {space.buvette_codes!.map((c) => (
+                            <span key={c} className="rounded bg-pr-stone/40 px-1.5 text-[10px] font-medium text-pr-black-soft/70">
+                              {c}
+                            </span>
+                          ))}
+                        </p>
+                      ) : (
+                        space.group_name && <p className="mt-0.5 text-xs text-pr-black-soft/40">{space.group_name}</p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {space.service_type === 'vip' && (
