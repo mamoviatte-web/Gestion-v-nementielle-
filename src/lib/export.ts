@@ -69,7 +69,7 @@ export function buildStockAOA(data: EventExportData): {
   const header: Row = [
     'Espace', 'Type', 'Produit', 'Catégorie', 'Unité', 'Dotation',
     'Runner Status', 'Stock Initial', 'Réassort', 'Stock Final', 'État produit',
-    'Consommation', 'Prix U HT (€)', 'Coût Total HT (€)', 'Responsable saisie',
+    'Consommation', 'Prix U HT (€)', 'Coût Total HT (€)', 'Clôture', 'Responsable saisie',
   ];
 
   const aoa: Row[] = [
@@ -101,10 +101,13 @@ export function buildStockAOA(data: EventExportData): {
       const product = priceOf.get(pid);
       const line = lines.find((l) => l.product_id === pid);
       const dotation = dotations.find((d) => d.product_id === pid);
-      const consumed =
-        line && line.final_qty !== null
-          ? computeConsumed(line.initial_qty, line.reassort_qty, line.final_qty)
-          : null;
+      // Clôture manquante : final_qty NULL alors qu'il y a eu un mouvement.
+      // Règle corrigée : conso estimée = initial + réassort − COALESCE(final, 0).
+      const hasMovement = !!line && ((line.initial_qty ?? 0) > 0 || (line.reassort_qty ?? 0) > 0);
+      const isMissingCloture = !!line && line.final_qty === null && hasMovement;
+      const consumed = line
+        ? computeConsumed(line.initial_qty, line.reassort_qty, line.final_qty ?? 0)
+        : null;
       const price = product?.unit_price_ht ?? null;
       const cost = consumed !== null ? computeCost(consumed, price) : null;
       if (cost !== null) spaceSubtotal += cost;
@@ -120,21 +123,22 @@ export function buildStockAOA(data: EventExportData): {
         dotation ? RUNNER_STATUS_META[dotation.runner_status].label : '',
         line?.initial_qty ?? '',
         line?.reassort_qty ?? '',
-        line?.final_qty ?? '',
+        isMissingCloture ? '⚠️ estimé (0)' : (line?.final_qty ?? ''),
         line?.product_state ? PRODUCT_STATE_META[line.product_state].label : '',
         consumed ?? '',
         price ?? '',
         cost !== null ? cost : consumed !== null && price === null ? 'Prix manquant' : '',
+        line ? (isMissingCloture ? 'MANQUANTE' : line.final_qty !== null ? 'OK' : '—') : '',
         line?.responsable_nom ?? '',
       ]);
     }
 
-    aoa.push([`Sous-total ${info.name}`, '', '', '', '', '', '', '', '', '', '', '', '', spaceSubtotal, '']);
+    aoa.push([`Sous-total ${info.name}`, '', '', '', '', '', '', '', '', '', '', '', '', spaceSubtotal, '', '']);
     grandTotal += spaceSubtotal;
   }
 
   aoa.push([]);
-  aoa.push(['TOTAL GÉNÉRAL', '', '', '', '', '', '', '', '', '', '', '', '', grandTotal, '']);
+  aoa.push(['TOTAL GÉNÉRAL', '', '', '', '', '', '', '', '', '', '', '', '', grandTotal, '', '']);
 
   return { aoa, totalCost: grandTotal, hasMissingPrice };
 }
@@ -240,7 +244,7 @@ export function exportEventReport(data: EventExportData): void {
   const stock = buildStockAOA(data);
   const wsStock = withColWidths(
     XLSX.utils.aoa_to_sheet(stock.aoa),
-    [16, 8, 26, 12, 8, 9, 14, 12, 9, 11, 12, 13, 13, 16, 18],
+    [16, 8, 26, 12, 8, 9, 14, 12, 9, 12, 12, 13, 13, 16, 11, 18],
   );
   XLSX.utils.book_append_sheet(wb, wsStock, 'Bilan Stocks');
 
