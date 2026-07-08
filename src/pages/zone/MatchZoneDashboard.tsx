@@ -35,10 +35,10 @@ export default function MatchZoneDashboard() {
       const r = data as { success?: boolean; stocks?: Status; schedules?: Status; debrief?: Status } | null;
       if (r?.success) setStatus({ stocks: r.stocks ?? 'todo', schedules: r.schedules ?? 'todo', debrief: r.debrief ?? 'todo' });
     });
-    // Superviseur buvettes ? get_zone_buvettes renvoie ses buvettes membres.
+    // Superviseur buvettes ? get_zone_buvettes renvoie le pool B1…B9 (vide sinon).
     void supabase.rpc('get_zone_buvettes', { p_token: token }).then(({ data }) => {
-      const r = data as { success?: boolean; buvettes?: unknown[] } | null;
-      if (r?.success) setNbBuvettes(r.buvettes?.length ?? 0);
+      const r = data as { success?: boolean; all_buvettes?: unknown[] } | null;
+      if (r?.success) setNbBuvettes(r.all_buvettes?.length ?? 0);
     });
   }, [token, session]);
 
