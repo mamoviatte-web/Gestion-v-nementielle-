@@ -23,6 +23,7 @@ import { computeConsumed } from '@/lib/calculations';
 import { PRODUCT_STATE_OPTIONS, PRODUCT_STATE_META } from '@/lib/labels';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { FeuilleRouteBanner } from '@/components/events/FeuilleRouteBanner';
+import { CategoryGroups, type CategoryItem } from '@/components/stock/CategoryGroups';
 import {
   Alert,
   Badge,
@@ -201,12 +202,17 @@ function OpeningForm({
       </Alert>
       {error && <Alert variant="error">{error}</Alert>}
 
-      <div className="space-y-3">
-        {dotations.map((d) => (
-          <div
-            key={d.dotation_id}
-            className="flex items-center justify-between gap-3 rounded-lg bg-white p-3 ring-1 ring-slate-200"
-          >
+      <CategoryGroups
+        items={dotations.map<CategoryItem<(typeof dotations)[number]>>((d) => ({
+          id: d.dotation_id,
+          category: stock.productMap.get(d.product_id)?.category ?? 'Autre',
+          sortName: productName(stock.productMap, d.product_id),
+          filled: (Number(qty[d.product_id] ?? 0) || 0) > 0,
+          data: d,
+        }))}
+        totalLabel={(f, t) => `${f} produit(s) saisi(s) sur ${t}`}
+        renderItem={(d) => (
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
               <p className="truncate font-medium text-slate-900">
                 {productName(stock.productMap, d.product_id)}
@@ -215,21 +221,19 @@ function OpeningForm({
                 Dotation prévue : {d.planned_qty} {productUnit(stock.productMap, d.product_id)}
               </p>
             </div>
-            <div className="w-28 shrink-0">
+            <div className="w-24 shrink-0">
               <Input
                 type="number"
                 inputMode="numeric"
                 min={0}
                 aria-label={`Quantité réelle ${productName(stock.productMap, d.product_id)}`}
                 value={qty[d.product_id] ?? ''}
-                onChange={(e) =>
-                  setQty((prev) => ({ ...prev, [d.product_id]: e.target.value }))
-                }
+                onChange={(e) => setQty((prev) => ({ ...prev, [d.product_id]: e.target.value }))}
               />
             </div>
           </div>
-        ))}
-      </div>
+        )}
+      />
 
       <Button fullWidth size="lg" loading={stock.submitting} onClick={handleSubmit}>
         <PackageCheck className="h-5 w-5" /> Valider l'inventaire d'ouverture
