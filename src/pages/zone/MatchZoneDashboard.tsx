@@ -63,7 +63,7 @@ export default function MatchZoneDashboard() {
       : []),
     { icon: '📋', title: 'Feuille de route', subtitle: 'Dotations prévues pour votre espace', path: 'roadmap' },
     { icon: '📦', title: 'Stocks', subtitle: 'Saisir stock initial, réassort et final', path: 'stocks', status: status.stocks },
-    { icon: '⏱', title: 'Horaires', subtitle: "Confirmer vos heures d'arrivée / départ", path: 'schedules', status: status.schedules },
+    { icon: '⏱', title: 'Horaires de l\'équipe', subtitle: 'Recenser vos agents et leurs heures réelles', path: 'rh', status: status.schedules },
     { icon: '📝', title: 'Débrief', subtitle: "Retour de fin d'événement + photos", path: 'debrief', status: status.debrief },
   ];
 
