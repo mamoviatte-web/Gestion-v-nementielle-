@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, MessageSquare, Send, ImagePlus, X } from 'lucide-react';
+import { PhotoGallery } from '@/components/debrief/PhotoGallery';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { useOpenEventsForSpace } from '@/hooks/useEvents';
@@ -180,7 +181,19 @@ function DebriefContent({
         ))}
       </div>
 
-      {/* Rapport photo (dernière section) */}
+      {/* Galerie photos illimitée par type (upload immédiat) */}
+      {isLast && (
+        <section className="space-y-4 rounded-lg border border-pr-stone bg-white p-4">
+          <h3 className="font-semibold text-pr-black">Photos de l'événement</h3>
+          <PhotoGallery eventId={event.event_id} spaceId={spaceId} photoType="mise_en_place" label="Photos mise en place" responsableNom={responsable} />
+          <hr className="border-slate-100" />
+          <PhotoGallery eventId={event.event_id} spaceId={spaceId} photoType="fb" label="Photos F&B" responsableNom={responsable} />
+          <hr className="border-slate-100" />
+          <PhotoGallery eventId={event.event_id} spaceId={spaceId} photoType="fin_evenement" label="Photos fin d'événement" responsableNom={responsable} />
+        </section>
+      )}
+
+      {/* Rapport photo hérité (dernière section) */}
       {isLast && (
         <div className="rounded-lg border border-pr-stone bg-white p-3">
           <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-pr-black">
