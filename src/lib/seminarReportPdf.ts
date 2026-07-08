@@ -11,10 +11,17 @@ import { supabase } from '@/lib/supabase';
 import type { SeminarReportDraft, ReportPhoto } from '@/hooks/useSeminarReportDraft';
 
 /** Pages photos terrain (débrief) : mise en place · F&B · fin d'événement. */
-const DEBRIEF_PHOTO_SECTIONS: { type: string; title: string }[] = [
-  { type: 'mise_en_place', title: 'Photos terrain — Mise en place' },
-  { type: 'fb', title: 'Photos terrain — F&B & Service' },
-  { type: 'fin_evenement', title: "Photos terrain — Fin d'événement" },
+const DEBRIEF_PHOTO_SECTIONS: {
+  type: 'mise_en_place' | 'fb' | 'fin_evenement';
+  title: string;
+  header: [number, number, number];
+  accent: [number, number, number];
+  cardColor: [number, number, number];
+  cardLabel: string;
+}[] = [
+  { type: 'mise_en_place', title: '📐 MISE EN PLACE', header: [35, 55, 100], accent: [235, 240, 255], cardColor: [100, 130, 220], cardLabel: 'Mise en place' },
+  { type: 'fb', title: '🍽️ F&B — SERVICE', header: [100, 50, 20], accent: [255, 245, 235], cardColor: [200, 130, 60], cardLabel: 'F&B — Service' },
+  { type: 'fin_evenement', title: "🔚 FIN D'ÉVÉNEMENT", header: [30, 80, 45], accent: [235, 255, 240], cardColor: [80, 160, 100], cardLabel: "Fin d'événement" },
 ];
 
 const W = 297;
@@ -85,34 +92,154 @@ async function photoGrid(doc: jsPDF, photos: ReportPhoto[], cols: number, startY
   }
 }
 
-/** Pages photos terrain depuis debrief_photos (3 catégories, 6 par page). */
-async function addDebriefPhotoPages(doc: jsPDF, eventId: string) {
-  for (const section of DEBRIEF_PHOTO_SECTIONS) {
+interface DebriefPdfPhoto {
+  url: string;
+  taken_by: string | null;
+  taken_at: string | null;
+  caption: string | null;
+}
+
+/**
+ * Rapport photo dense (débrief) : page de couverture + sections en-tête colorée,
+ * grille 3×4 = 12 photos/page, numérotées + légendées. Pages PORTRAIT (A4) même
+ * si le rapport est en paysage. Sections vides omises.
+ */
+async function addDebriefPhotoPages(doc: jsPDF, eventId: string, eventName: string, eventDate: string, regisseur: string) {
+  // 1) Charger + signer les photos de chaque section.
+  const sections: { cfg: (typeof DEBRIEF_PHOTO_SECTIONS)[number]; photos: DebriefPdfPhoto[] }[] = [];
+  for (const cfg of DEBRIEF_PHOTO_SECTIONS) {
     const { data } = await supabase
       .from('debrief_photos')
-      .select('storage_path, caption, taken_by')
+      .select('storage_path, caption, taken_by, taken_at')
       .eq('event_id', eventId)
-      .eq('photo_type', section.type)
+      .eq('photo_type', cfg.type)
       .order('taken_at', { ascending: true });
-    const rows = (data ?? []) as { storage_path: string; caption: string | null; taken_by: string | null }[];
-    if (rows.length === 0) continue;
-    const photos: ReportPhoto[] = [];
-    for (let idx = 0; idx < rows.length; idx++) {
-      const r = rows[idx];
+    const rows = (data ?? []) as { storage_path: string; caption: string | null; taken_by: string | null; taken_at: string | null }[];
+    const photos: DebriefPdfPhoto[] = [];
+    for (const r of rows) {
       const { data: u } = await supabase.storage.from('debrief-photos').createSignedUrl(r.storage_path, 3600);
-      photos.push({
-        url: u?.signedUrl ?? '',
-        caption: [r.taken_by, r.caption].filter(Boolean).join(' · ') || undefined,
-        order: idx,
-      });
+      photos.push({ url: u?.signedUrl ?? '', taken_by: r.taken_by, taken_at: r.taken_at, caption: r.caption });
     }
-    const PER = 6;
-    for (let p = 0; p * PER < photos.length; p++) {
-      doc.addPage();
-      background(doc);
-      pageTitle(doc, p === 0 ? section.title : `${section.title} (suite)`);
-      await photoGrid(doc, photos.slice(p * PER, (p + 1) * PER), 3, 50);
-      footerBar(doc);
+    sections.push({ cfg, photos });
+  }
+  const total = sections.reduce((s, x) => s + x.photos.length, 0);
+  if (total === 0) return;
+
+  const frDate = (d: string) => {
+    const dt = new Date(d);
+    return Number.isNaN(dt.getTime()) ? '' : dt.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  };
+  const frTime = (d: string) => {
+    const dt = new Date(d);
+    return Number.isNaN(dt.getTime()) ? '' : dt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // 2) Page de couverture du chapitre photo.
+  doc.addPage('a4', 'p');
+  doc.setFillColor(20, 20, 35);
+  doc.rect(0, 0, 210, 297, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.text('RAPPORT PHOTO', 105, 60, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(13);
+  doc.setTextColor(200, 200, 220);
+  doc.text(eventName, 105, 74, { align: 'center' });
+  doc.setDrawColor(201, 166, 70);
+  doc.setLineWidth(1.5);
+  doc.line(60, 82, 150, 82);
+  doc.setLineWidth(0.5);
+  doc.setFontSize(10);
+  doc.setTextColor(180, 180, 200);
+  doc.text(`Régisseur : ${regisseur}`, 105, 95, { align: 'center' });
+  sections.forEach((s, i) => {
+    const x = 15 + i * 65;
+    const y = 130;
+    const [r, g, b] = s.cfg.cardColor;
+    doc.setFillColor(r, g, b);
+    doc.roundedRect(x, y, 58, 70, 4, 4, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(32);
+    doc.text(`${s.photos.length}`, x + 29, y + 35, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text('photo' + (s.photos.length > 1 ? 's' : ''), x + 29, y + 46, { align: 'center' });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text(s.cfg.cardLabel, x + 29, y + 58, { align: 'center', maxWidth: 50 });
+  });
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text(`${total} photos au total`, 105, 230, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 100, 120);
+  doc.text('Provence Rugby · Stade Maurice-David', 105, 270, { align: 'center' });
+
+  // 3) Pages denses par section (3×4 = 12/page).
+  const COLS = 3, PER = 12, PW = 59, PH = 44, GX = 4, GY = 10, SX = 10, SY = 28;
+  for (const { cfg, photos } of sections) {
+    if (photos.length === 0) continue;
+    const pages = Math.ceil(photos.length / PER);
+    const [hr, hg, hb] = cfg.header;
+    const [ar, ag, ab] = cfg.accent;
+    for (let pg = 0; pg < pages; pg++) {
+      doc.addPage('a4', 'p');
+      doc.setFillColor(hr, hg, hb);
+      doc.rect(0, 0, 210, 22, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text(cfg.title, 10, 9);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.text(`${eventName}  ·  ${frDate(eventDate)}  ·  Régisseur : ${regisseur}`, 10, 16);
+      if (pages > 1) {
+        doc.setFontSize(8);
+        doc.text(`${pg + 1} / ${pages}`, 200, 9, { align: 'right' });
+      }
+      doc.setFontSize(7.5);
+      doc.text(`${photos.length} photo${photos.length > 1 ? 's' : ''}`, 200, 16, { align: 'right' });
+
+      const slice = photos.slice(pg * PER, (pg + 1) * PER);
+      for (let i = 0; i < slice.length; i++) {
+        const ph = slice[i];
+        const col = i % COLS;
+        const row = Math.floor(i / COLS);
+        const x = SX + col * (PW + GX);
+        const y = SY + row * (PH + GY);
+        doc.setFillColor(ar, ag, ab);
+        doc.roundedRect(x - 1, y - 1, PW + 2, PH + 2, 1.5, 1.5, 'F');
+        await addImageToPDF(doc, ph.url, x, y, PW, PH);
+        // Numéro de photo (coin haut-gauche)
+        doc.setFillColor(hr, hg, hb);
+        doc.roundedRect(x + 1, y + 1, 7, 5, 0.5, 0.5, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(5.5);
+        doc.text(`${pg * PER + i + 1}`, x + 2.4, y + 4.6);
+        // Légende
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.5);
+        doc.setTextColor(80, 80, 80);
+        const meta = [ph.taken_at ? frTime(ph.taken_at) : '', ph.taken_by ? `📷 ${ph.taken_by}` : ''].filter(Boolean).join('  ');
+        if (meta) doc.text(meta, x, y + PH + 4, { maxWidth: PW });
+        if (ph.caption) {
+          doc.setFontSize(6);
+          doc.setTextColor(120, 120, 120);
+          doc.text(ph.caption, x, y + PH + 8, { maxWidth: PW });
+        }
+      }
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(180, 180, 180);
+      doc.text(`Rapport photo — ${eventName} — Provence Rugby / Stade Maurice-David`, 105, 292, { align: 'center' });
+      doc.setDrawColor(200, 200, 200);
+      doc.line(10, 289, 200, 289);
     }
   }
 }
@@ -245,8 +372,14 @@ export async function exportSeminarReportPDF(
     }
   }
 
-  // ── PAGES — PHOTOS TERRAIN (débrief responsables) ──────
-  await addDebriefPhotoPages(doc, draft.event_id);
+  // ── PAGES — RAPPORT PHOTO TERRAIN (dense, couverture + sections) ────
+  await addDebriefPhotoPages(
+    doc,
+    draft.event_id,
+    draft.report_title || draft.client_name || 'Événement',
+    (draft.report_date as string | null) ?? new Date().toISOString(),
+    draft.regisseur_name || draft.responsable_commercial || 'Régisseur',
+  );
 
   // ── PAGE — DÉBRIEF ─────────────────────────────────────
   doc.addPage();

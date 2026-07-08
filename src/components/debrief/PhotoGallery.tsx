@@ -35,7 +35,8 @@ export function PhotoGallery({
   readonly = false,
 }: {
   eventId: string;
-  spaceId: string;
+  /** Optionnel : omis → photos au niveau événement (space_id NULL, ex. régisseur). */
+  spaceId?: string;
   photoType: DebriefPhotoType;
   label: string;
   responsableNom: string;
@@ -49,13 +50,13 @@ export function PhotoGallery({
   useEffect(() => {
     let active = true;
     async function load() {
-      const { data } = await supabase
+      let q = supabase
         .from('debrief_photos')
         .select('id, storage_path, public_url, caption, taken_by, taken_at')
         .eq('event_id', eventId)
-        .eq('photo_type', photoType)
-        .eq('space_id', spaceId)
-        .order('taken_at', { ascending: true });
+        .eq('photo_type', photoType);
+      q = spaceId ? q.eq('space_id', spaceId) : q.is('space_id', null);
+      const { data } = await q.order('taken_at', { ascending: true });
       if (!active) return;
       // Régénère une URL signée fraîche pour chaque photo.
       const withUrls = await Promise.all(
@@ -78,7 +79,7 @@ export function PhotoGallery({
       setUploading(true);
       setProgress(20);
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path = `${eventId}/${spaceId}/${photoType}/${Date.now()}_${safeName}`;
+      const path = `${eventId}/${spaceId ?? 'event'}/${photoType}/${Date.now()}_${safeName}`;
       const { data: up, error: upErr } = await supabase.storage
         .from('debrief-photos')
         .upload(path, file, { upsert: false });
@@ -93,7 +94,7 @@ export function PhotoGallery({
         .from('debrief_photos')
         .insert({
           event_id: eventId,
-          space_id: spaceId,
+          space_id: spaceId ?? null,
           photo_type: photoType,
           storage_path: up.path,
           public_url: url,

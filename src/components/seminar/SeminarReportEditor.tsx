@@ -20,6 +20,8 @@ import {
 import { exportSeminarReportPDF } from '@/lib/seminarReportPdf';
 import { FullPnL } from '@/components/seminar/FullPnL';
 import { ExternalChargesManager } from '@/components/seminar/ExternalChargesManager';
+import { PhotoChecklist } from '@/components/debrief/PhotoChecklist';
+import { PhotoGallery } from '@/components/debrief/PhotoGallery';
 import { renderScoreCircles, formatScoreText } from '@/lib/scoreRenderer';
 import type { Event } from '@/lib/types';
 
@@ -384,6 +386,7 @@ export function SeminarReportEditor({ event }: { event: Event }) {
 function SeminarReportEditorInner({ event }: { event: Event }) {
   const { draft, updateDraft, flush, uploadPhoto, setStatus, loading, saving, savedAt, provisioned, externalCostHt, recomputeCosts } =
     useSeminarReportDraft(event);
+  const reportRegisseur = draft.regisseur_name || draft.responsable_commercial || 'Régisseur';
   const { showToast } = useToast();
   const [preview, setPreview] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -391,6 +394,18 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
   if (loading) return <Spinner label="Chargement du rapport…" />;
 
   async function handleExport() {
+    // Avertissement non bloquant si des photos terrain manquent.
+    const { data: photoRows } = await supabase
+      .from('debrief_photos')
+      .select('photo_type')
+      .eq('event_id', event.event_id);
+    const types = new Set((photoRows ?? []).map((p) => (p as { photo_type: string }).photo_type));
+    const warnings: string[] = [];
+    if (!types.has('mise_en_place')) warnings.push('Aucune photo de mise en place');
+    if (!types.has('fb')) warnings.push('Aucune photo F&B');
+    if (warnings.length > 0 && !confirm(`⚠️ Rapport photo incomplet :\n\n• ${warnings.join('\n• ')}\n\nGénérer le PDF quand même ?`)) {
+      return;
+    }
     setExporting(true);
     try {
       await flush();
@@ -509,6 +524,26 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
 
       <PhotosSection title="📷 Photos mise en place" field="setup_photo_urls" photos={draft.setup_photo_urls ?? []} onChange={(f, next) => updateDraft({ [f]: next } as Partial<SeminarReportDraft>)} uploadPhoto={uploadPhoto} />
       <PhotosSection title="📷 Photos F&B" field="fb_photo_urls" photos={draft.fb_photo_urls ?? []} onChange={(f, next) => updateDraft({ [f]: next } as Partial<SeminarReportDraft>)} uploadPhoto={uploadPhoto} />
+
+      {/* Rapport photo terrain — checklist + galeries 3 catégories (→ PDF dense) */}
+      <Card title="📸 Rapport photo terrain">
+        <div className="space-y-7">
+          <div>
+            <p className="mb-3 text-sm font-bold text-stone-800">
+              ☑️ Checklist photos terrain{' '}
+              <span className="text-xs font-normal text-stone-400">— cochez au fur et à mesure</span>
+            </p>
+            <PhotoChecklist eventId={event.event_id} regisseurNom={reportRegisseur} />
+          </div>
+          <hr className="border-stone-100" />
+          <PhotoGallery eventId={event.event_id} photoType="mise_en_place" label="📐 Mise en place — avant ouverture" responsableNom={reportRegisseur} />
+          <hr className="border-stone-100" />
+          <PhotoGallery eventId={event.event_id} photoType="fb" label="🍽️ F&B — buffet, bar, service" responsableNom={reportRegisseur} />
+          <hr className="border-stone-100" />
+          <PhotoGallery eventId={event.event_id} photoType="fin_evenement" label="🔚 Fin d'événement — rangement & état" responsableNom={reportRegisseur} />
+          <p className="text-center text-xs text-stone-400">Sélection multiple · JPEG / PNG / HEIC · 20 Mo max · sans limite de nombre</p>
+        </div>
+      </Card>
 
       <DebriefSection draft={draft} update={updateDraft} />
 
