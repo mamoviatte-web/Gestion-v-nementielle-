@@ -49,6 +49,10 @@ const ZoneEntryPage = lazy(() => import('@/pages/zone/ZoneEntryPage'));
 const ZoneDashboard = lazy(() => import('@/pages/zone/ZoneDashboard'));
 const MatchAccessPage = lazy(() => import('@/pages/zone/MatchAccessPage'));
 const MatchZoneDashboard = lazy(() => import('@/pages/zone/MatchZoneDashboard'));
+const MatchZoneRoadmap = lazy(() => import('@/pages/zone/MatchZoneRoadmap'));
+const MatchZoneStocks = lazy(() => import('@/pages/zone/MatchZoneStocks'));
+const MatchZoneSchedule = lazy(() => import('@/pages/zone/MatchZoneSchedule'));
+const MatchZoneDebrief = lazy(() => import('@/pages/zone/MatchZoneDebrief'));
 
 /** Redirection de la racine selon l'état d'authentification et le rôle. */
 function RootRedirect() {
@@ -77,6 +81,10 @@ export default function App() {
         {/* Accès match par code unique — public (choix espace + nom) */}
         <Route path="/match/:code" element={<MatchAccessPage />} />
         <Route path="/zone/match/:sessionToken" element={<MatchZoneDashboard />} />
+        <Route path="/zone/match/:sessionToken/roadmap" element={<MatchZoneRoadmap />} />
+        <Route path="/zone/match/:sessionToken/stocks" element={<MatchZoneStocks />} />
+        <Route path="/zone/match/:sessionToken/schedules" element={<MatchZoneSchedule />} />
+        <Route path="/zone/match/:sessionToken/debrief" element={<MatchZoneDebrief />} />
 
         {/* Espace Stade (ROLE_STADE) */}
         <Route
