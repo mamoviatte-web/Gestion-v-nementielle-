@@ -11,13 +11,11 @@ import {
   Logo,
   Button,
   Input,
-  Select,
   Textarea,
   Alert,
   Badge,
   Spinner,
 } from '@/components/ui';
-import type { SelectOption } from '@/components/ui';
 import { useToast } from '@/context/ToastContext';
 import {
   getZoneState,
@@ -31,17 +29,6 @@ import {
   type ZoneInfo,
   type ZoneState,
 } from '@/lib/zoneApi';
-
-/** États produit possibles (RG-004 / clôture). */
-const STATE_OPTIONS: SelectOption[] = [
-  { value: 'fermé', label: 'Fermé' },
-  { value: 'ouvert', label: 'Ouvert' },
-  { value: 'cassé', label: 'Cassé' },
-  { value: 'perdu', label: 'Perdu' },
-  { value: 'périmé', label: 'Périmé' },
-  { value: 'fût_vide', label: 'Fût vide' },
-  { value: 'fût_percuté', label: 'Fût percuté' },
-];
 
 interface InitialForm {
   qty: string;
@@ -362,20 +349,6 @@ function StockSection({ token, name, state, onDone, showToast }: StockSectionPro
                   placeholder="Qté"
                   className="min-h-[44px] w-24"
                 />
-                <Select
-                  options={STATE_OPTIONS}
-                  value={initial[p.product_id]?.state ?? 'fermé'}
-                  onChange={(e) =>
-                    setInitial((prev) => ({
-                      ...prev,
-                      [p.product_id]: {
-                        ...(prev[p.product_id] ?? { qty: '', state: 'fermé' }),
-                        state: e.target.value,
-                      },
-                    }))
-                  }
-                  className="min-h-[44px]"
-                />
               </div>
             </div>
           ))}
@@ -455,24 +428,6 @@ function StockSection({ token, name, state, onDone, showToast }: StockSectionPro
                         className={
                           overStock ? 'min-h-[44px] w-32 border-red-400' : 'min-h-[44px] w-32'
                         }
-                      />
-                      <Select
-                        options={STATE_OPTIONS}
-                        value={final[p.product_id]?.state ?? 'fermé'}
-                        onChange={(e) =>
-                          setFinal((prev) => ({
-                            ...prev,
-                            [p.product_id]: {
-                              ...(prev[p.product_id] ?? {
-                                qty: '',
-                                state: 'fermé',
-                                anomaly: '',
-                              }),
-                              state: e.target.value,
-                            },
-                          }))
-                        }
-                        className="min-h-[44px]"
                       />
                     </div>
                     {overStock && (

@@ -20,7 +20,7 @@ import {
   type ReassortLineInput,
 } from '@/hooks/useStock';
 import { computeConsumed } from '@/lib/calculations';
-import { PRODUCT_STATE_OPTIONS, PRODUCT_STATE_META } from '@/lib/labels';
+import { PRODUCT_STATE_META } from '@/lib/labels';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { FeuilleRouteBanner } from '@/components/events/FeuilleRouteBanner';
 import { CategoryGroups, type CategoryItem } from '@/components/stock/CategoryGroups';
@@ -454,25 +454,15 @@ function ClosingForm({
                 </p>
                 <span className="text-xs text-slate-500">Disponible : {available}</span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  label="Restant"
-                  value={f.final}
-                  error={negative ? 'Consommation négative' : null}
-                  onChange={(e) => update(l.product_id, { final: e.target.value })}
-                />
-                <Select
-                  label="État"
-                  options={PRODUCT_STATE_OPTIONS}
-                  value={f.state}
-                  onChange={(e) =>
-                    update(l.product_id, { state: e.target.value as ProductState })
-                  }
-                />
-              </div>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                label="Restant"
+                value={f.final}
+                error={negative ? 'Consommation négative' : null}
+                onChange={(e) => update(l.product_id, { final: e.target.value })}
+              />
               {negative && (
                 <Textarea
                   label="Commentaire d'anomalie (obligatoire)"

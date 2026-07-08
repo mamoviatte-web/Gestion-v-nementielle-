@@ -78,7 +78,7 @@ export default function MatchZoneStocks() {
       initial_qty: l.initial_qty,
       reassort_qty: l.reassort_qty,
       final_qty: l.final_qty,
-      product_state: l.product_state ?? '',
+      product_state: 'fermé', // plus de saisie état en UI — valeur par défaut (historique DB conservé)
       anomaly_comment: l.anomaly_comment ?? '',
     }));
     const { data, error: err } = await supabase.rpc('save_zone_stock', {

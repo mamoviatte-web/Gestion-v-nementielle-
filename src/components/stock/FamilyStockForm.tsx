@@ -18,16 +18,6 @@ const FAMILIES: { key: string; label: string; emoji: string; color: string }[] =
 ];
 const FAMILY_ORDER = FAMILIES.map((f) => f.key);
 
-const PRODUCT_STATES = [
-  { value: 'fermé', label: 'Fermé (intact)' },
-  { value: 'ouvert', label: 'Ouvert (entamé)' },
-  { value: 'cassé', label: 'Cassé' },
-  { value: 'perdu', label: 'Perdu' },
-  { value: 'périmé', label: 'Périmé' },
-  { value: 'fût_vide', label: 'Fût vide' },
-  { value: 'fût_percuté', label: 'Fût percuté' },
-];
-
 export interface StockLine {
   product_id: string;
   product_name: string;
@@ -194,20 +184,6 @@ export function FamilyStockForm({ lines, mode, onChange }: Props) {
                           }`}
                         />
                       </div>
-
-                      {mode === 'final' && line.final_qty !== null && line.final_qty > 0 && (
-                        <select
-                          value={line.product_state ?? 'fermé'}
-                          onChange={(e) => onChange(line.product_id, 'product_state', e.target.value)}
-                          className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                        >
-                          {PRODUCT_STATES.map((s) => (
-                            <option key={s.value} value={s.value}>
-                              {s.label}
-                            </option>
-                          ))}
-                        </select>
-                      )}
 
                       {isAnomaly && (
                         <div className="mt-2 space-y-1">
