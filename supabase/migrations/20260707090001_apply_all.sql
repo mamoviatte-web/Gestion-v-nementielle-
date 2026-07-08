@@ -51,6 +51,12 @@ BEGIN
   DELETE FROM supplier_delivery_lines WHERE delivery_id IN (
     SELECT id FROM supplier_deliveries
      WHERE invoice_ref ILIKE 'BL-2026-000%' OR notes ILIKE '%démo%' OR notes ILIKE '%demo%');
+  -- keg_inventory référence supplier_deliveries (FK) → délier avant suppression.
+  IF to_regclass('public.keg_inventory') IS NOT NULL THEN
+    UPDATE keg_inventory SET delivery_id = NULL WHERE delivery_id IN (
+      SELECT id FROM supplier_deliveries
+       WHERE invoice_ref ILIKE 'BL-2026-000%' OR notes ILIKE '%démo%' OR notes ILIKE '%demo%');
+  END IF;
   DELETE FROM supplier_deliveries
    WHERE invoice_ref ILIKE 'BL-2026-000%' OR notes ILIKE '%démo%' OR notes ILIKE '%demo%';
 
