@@ -10,29 +10,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useMatchSession } from '@/hooks/useMatchSession';
 import { MatchZoneHeader } from '@/components/zone/MatchZoneHeader';
-import { CategoryGroups, type CategoryItem } from '@/components/stock/CategoryGroups';
+import { FamilyStockForm, type StockLine, type StockMode } from '@/components/stock/FamilyStockForm';
 
 type Step = 'ouverture' | 'reassort' | 'cloture';
 
-const STEPS: { key: Step; label: string; icon: string }[] = [
-  { key: 'ouverture', label: 'Ouverture', icon: '📥' },
-  { key: 'reassort', label: 'Réassort', icon: '🔄' },
-  { key: 'cloture', label: 'Clôture', icon: '📤' },
+const STEPS: { key: Step; label: string; icon: string; mode: StockMode }[] = [
+  { key: 'ouverture', label: 'Ouverture', icon: '📥', mode: 'initial' },
+  { key: 'reassort', label: 'Réassort', icon: '🔄', mode: 'reassort' },
+  { key: 'cloture', label: 'Clôture', icon: '📤', mode: 'final' },
 ];
 
-const PRODUCT_STATES = ['fermé', 'ouvert', 'cassé', 'perdu', 'périmé', 'fût_vide', 'fût_percuté'] as const;
-
-interface Line {
-  product_id: string;
-  product_name: string;
-  category: string;
-  unit: string;
+interface Line extends StockLine {
   planned_qty: number;
-  initial_qty: number;
-  reassort_qty: number;
-  final_qty: number | null;
-  product_state: string | null;
-  anomaly_comment?: string | null;
 }
 
 export default function MatchZoneStocks() {
@@ -66,17 +55,12 @@ export default function MatchZoneStocks() {
     [lines, step],
   );
 
-  const items: CategoryItem<Line>[] = useMemo(
-    () =>
-      lines.map((l) => ({
-        id: l.product_id,
-        category: l.category,
-        sortName: l.product_name,
-        filled:
-          step === 'ouverture' ? l.initial_qty > 0 : step === 'reassort' ? l.reassort_qty > 0 : l.final_qty != null,
-        data: l,
-      })),
-    [lines, step],
+  const mode: StockMode = STEPS.find((s) => s.key === step)!.mode;
+
+  // Clôture : uniquement les produits ayant eu un mouvement (initial ou réassort).
+  const visibleLines = useMemo(
+    () => (mode === 'final' ? lines.filter((l) => l.initial_qty > 0 || l.reassort_qty > 0) : lines),
+    [lines, mode],
   );
 
   if (loading) return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Chargement…</div>;
@@ -109,76 +93,8 @@ export default function MatchZoneStocks() {
     setSavedMsg(`${STEPS.find((s) => s.key === step)?.label} enregistré ✅`);
   }
 
-  function renderRow(l: Line) {
-    const conso = consumption(l);
-    const isAnomaly = step === 'cloture' && conso != null && conso < 0;
-    return (
-      <div className="space-y-2 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-slate-800">{l.product_name}</p>
-            <p className="text-xs text-slate-400">
-              {l.unit}
-              {step !== 'ouverture' && ` · init ${l.initial_qty}`}
-              {step === 'cloture' && ` +réa ${l.reassort_qty}`}
-              {step === 'ouverture' && l.planned_qty > 0 && ` · prévu ${l.planned_qty}`}
-            </p>
-          </div>
-          <input
-            type="number"
-            min={0}
-            inputMode="numeric"
-            value={
-              step === 'ouverture'
-                ? l.initial_qty || ''
-                : step === 'reassort'
-                  ? l.reassort_qty || ''
-                  : l.final_qty ?? ''
-            }
-            onChange={(e) => {
-              const v = e.target.value === '' ? (step === 'cloture' ? null : 0) : parseInt(e.target.value) || 0;
-              if (step === 'ouverture') patch(l.product_id, { initial_qty: (v as number) ?? 0 });
-              else if (step === 'reassort') patch(l.product_id, { reassort_qty: (v as number) ?? 0 });
-              else patch(l.product_id, { final_qty: v as number | null });
-            }}
-            placeholder="0"
-            className="h-12 w-24 shrink-0 rounded-lg border border-slate-200 text-center text-base font-semibold focus:ring-2 focus:ring-amber-400"
-          />
-        </div>
-
-        {step === 'cloture' && l.final_qty != null && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className={isAnomaly ? 'font-bold text-red-600' : 'text-slate-500'}>
-                Consommé : {conso}
-                {isAnomaly && ' ⚠️ anomalie'}
-              </span>
-              <select
-                value={l.product_state ?? ''}
-                onChange={(e) => patch(l.product_id, { product_state: e.target.value || null })}
-                className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-              >
-                <option value="">État…</option>
-                {PRODUCT_STATES.map((s) => (
-                  <option key={s} value={s}>
-                    {s.replace(/_/g, ' ')}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {isAnomaly && (
-              <input
-                value={l.anomaly_comment ?? ''}
-                onChange={(e) => patch(l.product_id, { anomaly_comment: e.target.value })}
-                placeholder="Commentaire d'anomalie obligatoire (RG-004)"
-                className="w-full rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm focus:ring-2 focus:ring-red-400"
-              />
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
+  const onFieldChange = (id: string, field: keyof StockLine, value: number | string | null) =>
+    patch(id, { [field]: value } as Partial<Line>);
 
   return (
     <div className="min-h-screen bg-slate-50 pb-28">
@@ -222,17 +138,11 @@ export default function MatchZoneStocks() {
         )}
         {ready && lines.length === 0 && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-            Aucun produit doté pour cet espace. Contactez l'équipe stade.
+            Aucun produit actif pour cet espace. Contactez l'équipe stade.
           </div>
         )}
 
-        {lines.length > 0 && (
-          <CategoryGroups
-            items={items}
-            renderItem={renderRow}
-            totalLabel={(f, t) => `${f} / ${t} produits saisis`}
-          />
-        )}
+        {lines.length > 0 && <FamilyStockForm lines={visibleLines} mode={mode} onChange={onFieldChange} />}
       </div>
 
       {/* Barre d'action fixe */}
