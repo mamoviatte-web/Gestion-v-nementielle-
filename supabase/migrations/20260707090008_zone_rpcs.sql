@@ -139,6 +139,25 @@ BEGIN
       anomaly_comment = CASE WHEN p_step = 'cloture' THEN EXCLUDED.anomaly_comment ELSE event_stock_lines.anomaly_comment END,
       responsable_nom = v_name,
       submitted_at = CASE WHEN p_step = 'cloture' THEN now() ELSE event_stock_lines.submitted_at END;
+
+    -- RG-002 : toute mutation de stock = une ligne dans stock_movements.
+    DECLARE v_qty INT; v_type TEXT;
+    BEGIN
+      v_qty := CASE p_step
+        WHEN 'ouverture' THEN COALESCE((rec->>'initial_qty')::int, 0)
+        WHEN 'reassort'  THEN COALESCE((rec->>'reassort_qty')::int, 0)
+        WHEN 'cloture'   THEN COALESCE((rec->>'final_qty')::int, 0)
+      END;
+      v_type := CASE p_step
+        WHEN 'ouverture' THEN 'inventaire'
+        WHEN 'reassort'  THEN 'réassort'
+        WHEN 'cloture'   THEN 'inventaire'
+      END;
+      IF v_qty > 0 AND v_type IS NOT NULL THEN
+        INSERT INTO stock_movements (event_id, space_id, product_id, movement_type, qty, responsable_nom)
+        VALUES (v_e, v_s, (rec->>'product_id')::uuid, v_type, v_qty, v_name);
+      END IF;
+    END;
   END LOOP;
   RETURN json_build_object('success', true);
 END; $$;
@@ -194,3 +213,62 @@ GRANT EXECUTE ON FUNCTION get_zone_roadmap(TEXT), get_zone_status(TEXT),
   get_zone_stock(TEXT), get_zone_schedule(TEXT),
   save_zone_stock(TEXT,TEXT,TEXT,JSONB), save_zone_schedule(TEXT,UUID,TIME,BOOLEAN,BOOLEAN),
   save_zone_debrief(TEXT,TEXT,JSONB) TO anon, authenticated;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Montée en charge (20+ prestataires simultanés) + suivi live admin.
+-- Additif, idempotent. Les colonnes/déclencheurs match sont déjà posés par
+-- match_access.sql (appliqué en prod).
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── Index pour la charge simultanée ─────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_match_sessions_token
+  ON match_access_sessions(session_token) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_esl_event_space
+  ON event_stock_lines(event_id, space_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_event_space
+  ON schedules(event_id, space_id);
+CREATE INDEX IF NOT EXISTS idx_runner_event_space
+  ON runner_dotations(event_id, space_id);
+CREATE INDEX IF NOT EXISTS idx_products_active_category
+  ON products(active, category, product_name) WHERE active = true;
+
+-- ── Vue de suivi live du match (ROLE_STADE) ─────────────────────────────────
+-- Un état par espace : sessions connectées, avancement stocks/horaires,
+-- consommation estimée (COALESCE final = 0 si clôture non faite).
+CREATE OR REPLACE VIEW match_live_status
+WITH (security_invoker = true) AS
+SELECT
+  e.event_id,
+  e.event_name,
+  s.space_id,
+  s.space_name,
+  s.service_type,
+  COUNT(DISTINCT mas.id) FILTER (WHERE mas.is_active)          AS active_sessions,
+  MAX(mas.staff_name)                                          AS last_staff_name,
+  MAX(mas.last_active_at)                                      AS last_activity,
+  BOOL_OR(esl.initial_qty > 0)                                AS has_initial,
+  BOOL_OR(COALESCE(esl.reassort_qty, 0) > 0)                  AS has_reassort,
+  BOOL_OR(esl.final_qty IS NOT NULL)                          AS has_final,
+  SUM(COALESCE(esl.initial_qty, 0))                           AS total_initial,
+  SUM(COALESCE(esl.reassort_qty, 0))                          AS total_reassort,
+  SUM(COALESCE(esl.final_qty, 0))                             AS total_final,
+  SUM(COALESCE(esl.initial_qty, 0) + COALESCE(esl.reassort_qty, 0)
+      - COALESCE(esl.final_qty, 0))                           AS total_consumed_est,
+  COUNT(DISTINCT sc.schedule_id) FILTER (WHERE sc.actual_departure IS NOT NULL)
+                                                              AS schedules_done,
+  COUNT(DISTINCT sc.schedule_id)                              AS schedules_total,
+  CASE
+    WHEN BOOL_OR(esl.final_qty IS NOT NULL) THEN 'clôturé'
+    WHEN BOOL_OR(esl.initial_qty > 0)       THEN 'en_cours'
+    ELSE 'en_attente'
+  END                                                         AS stock_status
+FROM events e
+JOIN event_spaces es ON es.event_id = e.event_id
+JOIN spaces s        ON s.space_id  = es.space_id
+LEFT JOIN match_access_sessions mas ON mas.event_id = e.event_id AND mas.space_id = s.space_id
+LEFT JOIN event_stock_lines esl     ON esl.event_id = e.event_id AND esl.space_id = s.space_id
+LEFT JOIN schedules sc              ON sc.event_id  = e.event_id AND sc.space_id  = s.space_id
+WHERE e.event_type = 'match'
+GROUP BY e.event_id, e.event_name, s.space_id, s.space_name, s.service_type;
+
+GRANT SELECT ON match_live_status TO authenticated;

@@ -13,6 +13,7 @@ import { RunnerPlanningTab } from '@/components/runner/RunnerPlanningTab';
 import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
 import { MatchConsumptionReport } from '@/components/analytics/MatchConsumptionReport';
 import { MatchAccessCode } from '@/components/events/MatchAccessCode';
+import { MatchLiveStatusPanel } from '@/components/events/MatchLiveStatusPanel';
 import { SeminaireSpacesTab } from '@/components/seminaire/SeminaireSpacesTab';
 import { SeminaireBilanTab } from '@/components/seminaire/SeminaireBilanTab';
 import { StaffEventInsights } from '@/components/staff/StaffEventInsights';
@@ -190,7 +191,10 @@ export default function EventDetailPage() {
 
       {/* Code d'accès match (responsables de zone) */}
       {isMatch && (
-        <MatchAccessCode eventId={event.event_id} code={event.match_access_code ?? null} eventName={event.event_name} />
+        <>
+          <MatchAccessCode eventId={event.event_id} code={event.match_access_code ?? null} eventName={event.event_name} />
+          <MatchLiveStatusPanel eventId={event.event_id} />
+        </>
       )}
 
       {/* Onglets */}
