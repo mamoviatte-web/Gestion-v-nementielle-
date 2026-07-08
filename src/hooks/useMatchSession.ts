@@ -16,7 +16,7 @@ export interface MatchSession {
   event_date: string;
   space_id: string;
   space_name: string;
-  service_type: 'vip' | 'bar' | 'buvette' | null;
+  service_type: 'vip' | 'bar' | 'buvette' | 'bodega' | null;
   staff_name: string;
   error?: string;
 }

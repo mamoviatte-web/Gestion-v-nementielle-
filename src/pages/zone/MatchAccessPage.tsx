@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase';
 interface SpaceOption {
   space_id: string;
   space_name: string;
-  service_type: 'vip' | 'bar' | 'buvette' | null;
+  service_type: 'vip' | 'bar' | 'buvette' | 'bodega' | null;
   max_pax: number | null;
   group_name: string | null;
   nb_buvettes?: number;
@@ -166,13 +166,9 @@ export default function MatchAccessPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-pr-black">{space.space_name}</p>
-                      {(space.buvette_codes?.length ?? 0) > 0 ? (
-                        <p className="mt-0.5 flex flex-wrap gap-1">
-                          {space.buvette_codes!.map((c) => (
-                            <span key={c} className="rounded bg-pr-stone/40 px-1.5 text-[10px] font-medium text-pr-black-soft/70">
-                              {c}
-                            </span>
-                          ))}
+                      {(space.nb_buvettes ?? 0) > 0 ? (
+                        <p className="mt-0.5 text-xs text-pr-black-soft/50">
+                          🍺 {space.nb_buvettes} buvette{(space.nb_buvettes ?? 0) > 1 ? 's' : ''} à superviser
                         </p>
                       ) : (
                         space.group_name && <p className="mt-0.5 text-xs text-pr-black-soft/40">{space.group_name}</p>
