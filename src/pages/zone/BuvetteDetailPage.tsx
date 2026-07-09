@@ -121,7 +121,7 @@ export default function BuvetteDetailPage() {
             Aucun produit à saisir — complétez d'abord l'ouverture (stock initial).
           </div>
         )}
-        {visibleLines.length > 0 && <FamilyStockForm lines={visibleLines} mode={mode} onChange={onFieldChange} />}
+        {visibleLines.length > 0 && <FamilyStockForm lines={visibleLines} mode={mode} onChange={onFieldChange} spaceType="buvette" />}
       </div>
 
       {visibleLines.length > 0 && (

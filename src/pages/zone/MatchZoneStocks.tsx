@@ -33,13 +33,15 @@ export default function MatchZoneStocks() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [savedMsg, setSavedMsg] = useState('');
+  const [spaceProfile, setSpaceProfile] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (!token || !session?.success) return;
     void supabase.rpc('get_zone_stock', { p_token: token }).then(({ data, error: err }) => {
-      const r = data as { success?: boolean; lines?: Line[] } | null;
+      const r = data as { success?: boolean; lines?: Line[]; space_profile?: string } | null;
       if (err || !r?.success) return setReady(false);
       setLines((r.lines ?? []).map((l) => ({ ...l, anomaly_comment: l.anomaly_comment ?? '' })));
+      setSpaceProfile(r.space_profile);
       setReady(true);
     });
   }, [token, session]);
@@ -157,7 +159,7 @@ export default function MatchZoneStocks() {
           </div>
         )}
 
-        {visibleLines.length > 0 && <FamilyStockForm lines={visibleLines} mode={mode} onChange={onFieldChange} />}
+        {visibleLines.length > 0 && <FamilyStockForm lines={visibleLines} mode={mode} onChange={onFieldChange} spaceType={spaceProfile} />}
       </div>
 
       {/* Barre d'action fixe */}

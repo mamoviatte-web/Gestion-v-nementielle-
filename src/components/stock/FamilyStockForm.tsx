@@ -7,6 +7,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { FAMILIES_BY_SPACE } from '@/constants/spaceProducts';
 
 const FAMILIES: { key: string; label: string; emoji: string; color: string }[] = [
   { key: 'Bières', label: 'Bières & Fûts', emoji: '🍺', color: 'bg-yellow-50' },
@@ -16,7 +17,7 @@ const FAMILIES: { key: string; label: string; emoji: string; color: string }[] =
   { key: 'Spiritueux', label: 'Spiritueux', emoji: '🥃', color: 'bg-orange-50' },
   { key: 'Matériel', label: 'Matériel & Linge', emoji: '📦', color: 'bg-stone-50' },
 ];
-const FAMILY_ORDER = FAMILIES.map((f) => f.key);
+const FAMILY_COLOR: Record<string, string> = Object.fromEntries(FAMILIES.map((f) => [f.key, f.color]));
 
 export interface StockLine {
   product_id: string;
@@ -36,10 +37,24 @@ interface Props {
   lines: StockLine[];
   mode: StockMode;
   onChange: (productId: string, field: keyof StockLine, value: number | string | null) => void;
+  /** Profil de l'espace (salon/loge/bar_pub/…) → ordre & libellés des familles. */
+  spaceType?: string;
 }
 
-export function FamilyStockForm({ lines, mode, onChange }: Props) {
+export function FamilyStockForm({ lines, mode, onChange, spaceType }: Props) {
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Config de familles selon le profil d'espace (repli sur l'ordre par défaut).
+  const famConfig = useMemo(() => {
+    const profile = spaceType ? FAMILIES_BY_SPACE[spaceType] : undefined;
+    return (profile ?? FAMILIES).map((f) => ({
+      key: f.key,
+      label: f.label,
+      emoji: f.emoji,
+      color: FAMILY_COLOR[f.key] ?? 'bg-stone-50',
+    }));
+  }, [spaceType]);
+  const familyOrder = useMemo(() => famConfig.map((f) => f.key), [famConfig]);
 
   const byFamily = useMemo(() => {
     const map: Record<string, StockLine[]> = {};
@@ -50,10 +65,10 @@ export function FamilyStockForm({ lines, mode, onChange }: Props) {
 
   const families = useMemo(
     () => [
-      ...FAMILY_ORDER.filter((k) => byFamily[k]?.length),
-      ...Object.keys(byFamily).filter((k) => !FAMILY_ORDER.includes(k) && byFamily[k]?.length).sort(),
+      ...familyOrder.filter((k) => byFamily[k]?.length),
+      ...Object.keys(byFamily).filter((k) => !familyOrder.includes(k) && byFamily[k]?.length).sort(),
     ],
-    [byFamily],
+    [byFamily, familyOrder],
   );
 
   const [open, setOpen] = useState<Set<string>>(() => new Set(families.slice(0, 1)));
@@ -95,7 +110,7 @@ export function FamilyStockForm({ lines, mode, onChange }: Props) {
       </div>
 
       {families.map((familyKey) => {
-        const cfg = FAMILIES.find((f) => f.key === familyKey) ?? { key: familyKey, label: familyKey, emoji: '📋', color: 'bg-stone-50' };
+        const cfg = famConfig.find((f) => f.key === familyKey) ?? { key: familyKey, label: familyKey, emoji: '📋', color: 'bg-stone-50' };
         const fLines = byFamily[familyKey] ?? [];
         const isOpen = open.has(familyKey);
         const filled = filledCount(familyKey);
