@@ -140,6 +140,11 @@ export function FamilyStockForm({ lines, mode, onChange, spaceType }: Props) {
 
             {isOpen && (
               <div className={`divide-y divide-stone-100/70 border-t border-stone-100 ${cfg.color}`}>
+                {familyKey === 'Bières' && spaceType && ['terrasse', 'pmr'].includes(spaceType) && (
+                  <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
+                    ⚠️ Format bouteille uniquement — pas de fûts ni de pression.
+                  </p>
+                )}
                 {mode === 'reassort' && (
                   <p className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-700">
                     Saisissez uniquement les quantités <strong>reçues</strong> en cours d'événement. Laissez à 0 sinon.

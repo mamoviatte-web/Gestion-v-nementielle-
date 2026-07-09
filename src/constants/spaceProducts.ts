@@ -57,11 +57,12 @@ export const FAMILIES_BY_SPACE: Record<string, SpaceFamily[]> = {
     { key: 'Soft', label: 'Softs & Eaux', emoji: '💧' },
     { key: 'Spiritueux', label: 'Spiritueux', emoji: '🥃' },
   ],
-  // PMR / Terrasses — simple
+  // PMR — bouteilles uniquement (FADA BTL), même gamme que Terrasses
   pmr: [
+    { key: 'Bières', label: '🍺 Bières en bouteille (FADA BTL)', emoji: '🍺' },
     { key: 'Vins', label: 'Vins', emoji: '🍷' },
-    { key: 'Bières', label: 'FADA Bouteille', emoji: '🍺' },
     { key: 'Soft', label: 'Softs & Eaux', emoji: '💧' },
+    { key: 'Sirops', label: 'Sirops', emoji: '🫙' },
   ],
   // BODEGA — fûts FADA en premier
   bodega: [
@@ -71,12 +72,12 @@ export const FAMILIES_BY_SPACE: Record<string, SpaceFamily[]> = {
     { key: 'Soft', label: 'Softs (50cl & bouteille)', emoji: '🥤' },
     { key: 'Sirops', label: 'Sirops', emoji: '🫙' },
   ],
-  // TERRASSE — minimaliste
+  // TERRASSE — bouteilles uniquement (pas de fûts ni de CO2)
   terrasse: [
-    { key: 'Bières', label: 'Fûts', emoji: '🍺' },
+    { key: 'Bières', label: '🍺 Bières en bouteille', emoji: '🍺' },
     { key: 'Vins', label: 'Vins', emoji: '🍷' },
     { key: 'Soft', label: 'Softs & Eaux', emoji: '💧' },
-    { key: 'Matériel', label: 'CO2', emoji: '📦' },
+    { key: 'Sirops', label: 'Sirops', emoji: '🫙' },
   ],
   // BUVETTE — 3 familles
   buvette: [
