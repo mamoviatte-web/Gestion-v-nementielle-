@@ -110,15 +110,17 @@ async function addDebriefPhotoPages(doc: jsPDF, eventId: string, eventName: stri
   for (const cfg of DEBRIEF_PHOTO_SECTIONS) {
     const { data } = await supabase
       .from('debrief_photos')
-      .select('storage_path, caption, taken_by, taken_at')
+      .select('storage_path, caption, pdf_caption, taken_by, taken_at')
       .eq('event_id', eventId)
       .eq('photo_type', cfg.type)
+      .eq('include_in_pdf', true) // ← uniquement les photos choisies par le régisseur
+      .order('pdf_order', { ascending: true })
       .order('taken_at', { ascending: true });
-    const rows = (data ?? []) as { storage_path: string; caption: string | null; taken_by: string | null; taken_at: string | null }[];
+    const rows = (data ?? []) as { storage_path: string; caption: string | null; pdf_caption: string | null; taken_by: string | null; taken_at: string | null }[];
     const photos: DebriefPdfPhoto[] = [];
     for (const r of rows) {
       const { data: u } = await supabase.storage.from('debrief-photos').createSignedUrl(r.storage_path, 3600);
-      photos.push({ url: u?.signedUrl ?? '', taken_by: r.taken_by, taken_at: r.taken_at, caption: r.caption });
+      photos.push({ url: u?.signedUrl ?? '', taken_by: r.taken_by, taken_at: r.taken_at, caption: r.pdf_caption ?? r.caption });
     }
     sections.push({ cfg, photos });
   }

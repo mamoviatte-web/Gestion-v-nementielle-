@@ -25,7 +25,8 @@ import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
-import { Zap } from 'lucide-react';
+import { Zap, CheckCircle2 } from 'lucide-react';
+import { useToast } from '@/context/ToastContext';
 
 type Tab =
   | 'stocks'
@@ -69,9 +70,21 @@ export default function EventDetailPage() {
   const stats = useEventStats(id);
   const allEvents = useEventsList();
   const { setStatus, updating } = useEventActions(id);
+  const { showToast } = useToast();
   const [tab, setTab] = useState<Tab>('stocks');
   const [spaceId, setSpaceId] = useState<string>('');
   const [showRunnerModal, setShowRunnerModal] = useState(false);
+
+  async function handleCloseEvent(eventName: string) {
+    if (!window.confirm(`Confirmer la clôture de « ${eventName} » ?\n\nLes coûts finaux seront calculés et l'événement sera clôturé.`)) return;
+    try {
+      await setStatus('clôturé');
+      showToast(`Événement « ${eventName} » clôturé.`, 'success');
+    } catch (err) {
+      console.error('Erreur clôture:', err);
+      showToast(`Impossible de clôturer : ${err instanceof Error ? err.message : 'erreur inconnue'}`, 'warning');
+    }
+  }
 
   if (eventQuery.isLoading) return <Spinner fullPage label="Chargement…" />;
   const event = eventQuery.data;
@@ -170,10 +183,15 @@ export default function EventDetailPage() {
             <Button
               size="sm"
               loading={updating}
-              onClick={() => void setStatus('clôturé')}
+              onClick={() => void handleCloseEvent(event.event_name)}
             >
               Clôturer l'événement
             </Button>
+          )}
+          {(event.status === 'clôturé' || event.status === 'archivé') && (
+            <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" /> Événement clôturé
+            </span>
           )}
         </div>
       </div>

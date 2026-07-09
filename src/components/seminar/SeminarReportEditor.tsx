@@ -22,6 +22,7 @@ import { FullPnL } from '@/components/seminar/FullPnL';
 import { ExternalChargesManager } from '@/components/seminar/ExternalChargesManager';
 import { PhotoChecklist } from '@/components/debrief/PhotoChecklist';
 import { PhotoGallery } from '@/components/debrief/PhotoGallery';
+import { PdfPhotoSummary } from '@/components/debrief/PdfPhotoSummary';
 import { renderScoreCircles, formatScoreText } from '@/lib/scoreRenderer';
 import type { Event } from '@/lib/types';
 
@@ -536,12 +537,14 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
             <PhotoChecklist eventId={event.event_id} regisseurNom={reportRegisseur} />
           </div>
           <hr className="border-stone-100" />
-          <PhotoGallery eventId={event.event_id} photoType="mise_en_place" label="📐 Mise en place — avant ouverture" responsableNom={reportRegisseur} />
+          <PhotoGallery eventId={event.event_id} photoType="mise_en_place" label="📐 Mise en place — avant ouverture" responsableNom={reportRegisseur} showPdfSelector />
           <hr className="border-stone-100" />
-          <PhotoGallery eventId={event.event_id} photoType="fb" label="🍽️ F&B — buffet, bar, service" responsableNom={reportRegisseur} />
+          <PhotoGallery eventId={event.event_id} photoType="fb" label="🍽️ F&B — buffet, bar, service" responsableNom={reportRegisseur} showPdfSelector />
           <hr className="border-stone-100" />
-          <PhotoGallery eventId={event.event_id} photoType="fin_evenement" label="🔚 Fin d'événement — rangement & état" responsableNom={reportRegisseur} />
+          <PhotoGallery eventId={event.event_id} photoType="fin_evenement" label="🔚 Fin d'événement — rangement & état" responsableNom={reportRegisseur} showPdfSelector />
           <p className="text-center text-xs text-stone-400">Sélection multiple · JPEG / PNG / HEIC · 20 Mo max · sans limite de nombre</p>
+          <hr className="border-stone-100" />
+          <PdfPhotoSummary eventId={event.event_id} />
         </div>
       </Card>
 

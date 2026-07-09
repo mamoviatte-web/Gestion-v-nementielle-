@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Camera, Upload, X, ZoomIn } from 'lucide-react';
+import { Camera, FileText, Upload, X, ZoomIn } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export type DebriefPhotoType = 'mise_en_place' | 'fb' | 'fin_evenement' | 'incident' | 'autre';
@@ -17,6 +17,8 @@ interface Photo {
   caption?: string | null;
   taken_by?: string | null;
   taken_at: string;
+  include_in_pdf?: boolean;
+  pdf_caption?: string | null;
 }
 
 const SIGNED_TTL = 60 * 60 * 24 * 7; // 7 jours
@@ -33,6 +35,7 @@ export function PhotoGallery({
   label,
   responsableNom,
   readonly = false,
+  showPdfSelector = false,
 }: {
   eventId: string;
   /** Optionnel : omis → photos au niveau événement (space_id NULL, ex. régisseur). */
@@ -41,6 +44,8 @@ export function PhotoGallery({
   label: string;
   responsableNom: string;
   readonly?: boolean;
+  /** Régisseur (ROLE_STADE) : autorise le choix des photos du rapport PDF. */
+  showPdfSelector?: boolean;
 }) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -52,7 +57,7 @@ export function PhotoGallery({
     async function load() {
       let q = supabase
         .from('debrief_photos')
-        .select('id, storage_path, public_url, caption, taken_by, taken_at')
+        .select('id, storage_path, public_url, caption, taken_by, taken_at, include_in_pdf, pdf_caption')
         .eq('event_id', eventId)
         .eq('photo_type', photoType);
       q = spaceId ? q.eq('space_id', spaceId) : q.is('space_id', null);
@@ -124,6 +129,18 @@ export function PhotoGallery({
     setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
   }
 
+  async function togglePdf(photo: Photo) {
+    const next = !photo.include_in_pdf;
+    setPhotos((prev) => prev.map((p) => (p.id === photo.id ? { ...p, include_in_pdf: next } : p)));
+    await supabase.from('debrief_photos').update({ include_in_pdf: next }).eq('id', photo.id);
+    window.dispatchEvent(new CustomEvent('pdf-photos-changed'));
+  }
+
+  async function savePdfCaption(photo: Photo, caption: string) {
+    setPhotos((prev) => prev.map((p) => (p.id === photo.id ? { ...p, pdf_caption: caption } : p)));
+    await supabase.from('debrief_photos').update({ pdf_caption: caption }).eq('id', photo.id);
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -138,10 +155,15 @@ export function PhotoGallery({
           <div key={photo.id} className="group relative aspect-square">
             <img
               src={photo.public_url}
-              alt={photo.caption ?? label}
+              alt={photo.pdf_caption ?? photo.caption ?? label}
               loading="lazy"
-              className="h-full w-full rounded-lg border border-slate-200 object-cover"
+              className={`h-full w-full rounded-lg object-cover ${
+                photo.include_in_pdf ? 'border-2 border-amber-400 shadow-md shadow-amber-100' : 'border border-slate-200'
+              }`}
             />
+            {photo.include_in_pdf && !showPdfSelector && (
+              <span className="absolute right-1 top-1 rounded bg-amber-400 px-1 text-[9px] font-black text-slate-900">PDF</span>
+            )}
             <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
               <button onClick={() => setLightbox(photo)} className="rounded-full bg-white/90 p-1.5" title="Agrandir">
                 <ZoomIn className="h-3.5 w-3.5 text-slate-700" />
@@ -152,6 +174,27 @@ export function PhotoGallery({
                 </button>
               )}
             </div>
+            {showPdfSelector && (
+              <div className="absolute inset-x-0 bottom-0 space-y-0.5 rounded-b-lg bg-black/70 p-1">
+                <button
+                  onClick={() => void togglePdf(photo)}
+                  className={`flex w-full items-center justify-center gap-1 rounded py-0.5 text-[10px] font-bold transition-colors ${
+                    photo.include_in_pdf ? 'bg-amber-400 text-slate-900' : 'bg-white/20 text-white hover:bg-white/30'
+                  }`}
+                >
+                  <FileText className="h-2.5 w-2.5" />
+                  {photo.include_in_pdf ? 'Dans le PDF ✓' : 'Ajouter au PDF'}
+                </button>
+                {photo.include_in_pdf && (
+                  <input
+                    defaultValue={photo.pdf_caption ?? ''}
+                    onBlur={(e) => void savePdfCaption(photo, e.target.value)}
+                    placeholder="Légende PDF…"
+                    className="w-full rounded bg-white/90 px-1 py-0.5 text-[10px] text-slate-800 focus:outline-none"
+                  />
+                )}
+              </div>
+            )}
           </div>
         ))}
 
