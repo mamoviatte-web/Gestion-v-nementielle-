@@ -35,7 +35,7 @@ const CatalogPage = lazy(() => import('@/pages/admin/CatalogPage'));
 const StockPage = lazy(() => import('@/pages/admin/stock/StockPage'));
 const AnalyticsPage = lazy(() => import('@/pages/admin/AnalyticsPage'));
 const CostControlPage = lazy(() => import('@/pages/admin/CostControlPage'));
-const StaffAnalyticsPage = lazy(() => import('@/pages/admin/StaffAnalyticsPage'));
+const StaffAnalyticsPage = lazy(() => import('@/pages/admin/StaffRHPage'));
 const MonthlyStaffReportsPage = lazy(() => import('@/pages/admin/MonthlyStaffReportsPage'));
 const SpacesPage = lazy(() => import('@/pages/admin/SpacesPage'));
 const ExportPage = lazy(() => import('@/pages/admin/ExportPage'));
