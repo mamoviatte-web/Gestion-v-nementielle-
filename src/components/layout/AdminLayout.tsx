@@ -9,7 +9,6 @@ import {
   CalendarDays,
   Package,
   Boxes,
-  Building2,
   Download,
   LogOut,
   AlertTriangle,
@@ -43,7 +42,6 @@ const NAV: NavItem[] = [
   { to: '/admin/analytics/coefficients', label: 'Coefficients espace', icon: Ruler },
   { to: '/admin/rh/preplan', label: 'Planning RH Match', icon: UserPlus },
   { to: '/admin/catalog', label: 'Catalogue', icon: Package },
-  { to: '/admin/spaces', label: 'Espaces', icon: Building2 },
   { to: '/admin/export', label: 'Export', icon: Download },
 ];
 
