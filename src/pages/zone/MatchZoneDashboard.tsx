@@ -59,7 +59,7 @@ export default function MatchZoneDashboard() {
 
   const cards: { icon: string; title: string; subtitle: string; path: string; status?: Status }[] = [
     ...(nbBuvettes > 0
-      ? [{ icon: '🍺', title: 'Gérer mes buvettes', subtitle: `${nbBuvettes} buvette(s) à superviser`, path: 'buvettes' }]
+      ? [{ icon: '🍺', title: 'Gérer mes buvettes', subtitle: 'Stocks & pointage des buvettes', path: 'buvettes' }]
       : []),
     { icon: '📋', title: 'Feuille de route', subtitle: 'Dotations prévues pour votre espace', path: 'roadmap' },
     { icon: '📦', title: 'Stocks', subtitle: 'Saisir stock initial, réassort et final', path: 'stocks', status: status.stocks },

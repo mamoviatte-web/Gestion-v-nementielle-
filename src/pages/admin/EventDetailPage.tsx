@@ -155,6 +155,19 @@ export default function EventDetailPage() {
           );
         })()}
 
+      {/* Séminaire préparé : activation automatique nocturne (00:01) */}
+      {event.event_type === 'séminaire' && event.status === 'préparé' && (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+          <span className="text-xl">⏰</span>
+          <div>
+            <p className="text-sm font-semibold text-blue-800">Activation automatique prévue</p>
+            <p className="mt-0.5 text-xs text-blue-600">
+              Le {new Date(event.event_date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} à 00:01 — le séminaire passera automatiquement « En cours » (bouton manuel ci-dessous en secours).
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Compteurs + actions de statut */}
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <Badge tone="neutral">

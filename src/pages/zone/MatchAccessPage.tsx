@@ -166,13 +166,6 @@ export default function MatchAccessPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-pr-black">{space.space_name}</p>
-                      {(space.nb_buvettes ?? 0) > 0 ? (
-                        <p className="mt-0.5 text-xs text-pr-black-soft/50">
-                          🍺 {space.nb_buvettes} buvette{(space.nb_buvettes ?? 0) > 1 ? 's' : ''} à superviser
-                        </p>
-                      ) : (
-                        space.group_name && <p className="mt-0.5 text-xs text-pr-black-soft/40">{space.group_name}</p>
-                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {space.service_type === 'vip' && (
