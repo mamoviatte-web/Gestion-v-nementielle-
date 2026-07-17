@@ -201,11 +201,68 @@ function StaffCard({ agent, token, onChange }: { agent: StaffMember; token: stri
   );
 }
 
+interface PreplanStaff {
+  id: string; nom: string; prenom: string; full_name: string; role: string;
+  planned_start: string | null; planned_end: string | null; status: string;
+}
+
+/** Carte d'un agent pré-planifié par la RH — pointage terrain (zone manager). */
+function PreplanAgentCard({ agent, token, onUpdate }: { agent: PreplanStaff; token: string; onUpdate: () => void }) {
+  const [actualStart, setActualStart] = useState(agent.planned_start?.slice(0, 5) ?? '');
+  const [actualEnd, setActualEnd] = useState('');
+  const [saving, setSaving] = useState(false);
+  const isDone = agent.status === 'pointé' || agent.status === 'absent';
+
+  async function pointage(status: 'présent' | 'absent' | 'pointé') {
+    setSaving(true);
+    await supabase.rpc('zone_pointage_agent', {
+      p_token: token, p_agent_id: agent.id, p_status: status,
+      p_start: status !== 'absent' ? actualStart : null,
+      p_end: status === 'pointé' ? actualEnd : null,
+    });
+    setSaving(false);
+    onUpdate();
+  }
+
+  return (
+    <div className={`space-y-3 rounded-2xl border-2 bg-white p-4 ${agent.status === 'pointé' ? 'border-green-300' : agent.status === 'absent' ? 'border-red-200 opacity-60' : 'border-stone-200'}`}>
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-stone-900 text-sm font-black text-white">{agent.prenom?.[0]}{agent.nom?.[0]}</div>
+        <div className="flex-1">
+          <p className="font-bold text-stone-900">{agent.prenom} {agent.nom}</p>
+          <p className="text-xs text-stone-400">{agent.role} · prévu {agent.planned_start?.slice(0, 5)}{agent.planned_end ? `→${agent.planned_end.slice(0, 5)}` : ''}</p>
+        </div>
+        {isDone && <span className={`rounded-lg px-2 py-1 text-xs font-bold ${agent.status === 'pointé' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{agent.status === 'pointé' ? '✅ Pointé' : '❌ Absent'}</span>}
+      </div>
+      {!isDone && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1 block text-xs text-stone-400">Arrivée réelle</label>
+              <input type="time" value={actualStart} onChange={(e) => setActualStart(e.target.value)} className="min-h-[44px] w-full rounded-xl border border-stone-200 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-green-400" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-stone-400">Départ réel</label>
+              <input type="time" value={actualEnd} onChange={(e) => setActualEnd(e.target.value)} className="min-h-[44px] w-full rounded-xl border border-stone-200 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-green-400" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => void pointage('absent')} disabled={saving} className="rounded-xl border-2 border-red-200 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40">❌ Absent</button>
+            <button onClick={() => void pointage(actualEnd ? 'pointé' : 'présent')} disabled={saving || !actualStart} className="rounded-xl bg-stone-900 py-2.5 text-sm font-bold text-white disabled:opacity-40">{saving ? '…' : actualEnd ? '✅ Pointer' : '🟡 Arrivé'}</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function ZoneStaffHoursPage() {
   const { token, session, loading } = useMatchSession();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [ready, setReady] = useState<boolean | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [preplanStaff, setPreplanStaff] = useState<PreplanStaff[]>([]);
+  const [isPrelocked, setIsPrelocked] = useState(false);
 
   const fetchStaff = useCallback(async () => {
     if (!token) return;
@@ -216,9 +273,23 @@ export default function ZoneStaffHoursPage() {
     setReady(true);
   }, [token]);
 
+  const fetchPreplan = useCallback(async () => {
+    if (!token) return;
+    const { data } = await supabase.rpc('zone_get_preplan_staff', { p_token: token });
+    const r = data as { success?: boolean; is_prelocked?: boolean; staff?: PreplanStaff[] } | null;
+    if (r?.success) {
+      setPreplanStaff(r.staff ?? []);
+      setIsPrelocked(r.is_prelocked ?? false);
+    }
+  }, [token]);
+
+  const refetchAll = useCallback(async () => {
+    await Promise.all([fetchStaff(), fetchPreplan()]);
+  }, [fetchStaff, fetchPreplan]);
+
   useEffect(() => {
-    if (session?.success) void fetchStaff();
-  }, [session, fetchStaff]);
+    if (session?.success) void refetchAll();
+  }, [session, refetchAll]);
 
   if (loading) return <div className="flex min-h-screen items-center justify-center bg-stone-50 text-stone-500">Chargement…</div>;
   if (!session?.success) return <div className="p-8 text-center text-stone-500">Session expirée.</div>;
@@ -245,6 +316,20 @@ export default function ZoneStaffHoursPage() {
           <p className="text-sm font-semibold text-stone-700">Horaires de l'équipe</p>
         </div>
 
+        {/* Liste pré-planifiée par la RH (verrouillée) → pointage terrain */}
+        {isPrelocked && preplanStaff.length > 0 && (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+              <p className="text-sm font-semibold text-blue-800">👥 {preplanStaff.length} agent(s) planifié(s) par la RH</p>
+              <p className="mt-0.5 text-xs text-blue-600">Confirmez leur présence et renseignez les heures réelles.</p>
+            </div>
+            {preplanStaff.map((agent) => (
+              <PreplanAgentCard key={agent.id} agent={agent} token={token} onUpdate={() => void refetchAll()} />
+            ))}
+            <p className="pt-1 text-center text-xs text-stone-400">— Ajouts hors planning ci-dessous —</p>
+          </div>
+        )}
+
         {staff.length > 0 && (
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-center">
@@ -267,7 +352,7 @@ export default function ZoneStaffHoursPage() {
             Fonctionnalité en cours d'activation — applique <code>supabase/zone_staff_hours.sql</code>.
           </div>
         )}
-        {staff.length === 0 && ready && (
+        {staff.length === 0 && ready && !isPrelocked && (
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
             <p className="mb-1 font-semibold">👥 Recensement de l'équipe</p>
             <p>Ajoutez chaque membre de votre équipe avec ses heures réelles d'arrivée et de départ.</p>

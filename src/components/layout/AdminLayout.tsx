@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Wallet,
   Users,
+  UserPlus,
   type LucideIcon,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -38,6 +39,7 @@ const NAV: NavItem[] = [
   { to: '/admin/analytics', label: 'Analyses', icon: TrendingUp },
   { to: '/admin/analytics/costs', label: 'Contrôle de charges', icon: Wallet },
   { to: '/admin/analytics/staff', label: 'Staff & RH', icon: Users },
+  { to: '/admin/rh/preplan', label: 'Planning RH Match', icon: UserPlus },
   { to: '/admin/catalog', label: 'Catalogue', icon: Package },
   { to: '/admin/spaces', label: 'Espaces', icon: Building2 },
   { to: '/admin/export', label: 'Export', icon: Download },
