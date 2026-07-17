@@ -19,6 +19,7 @@ import { SeminaireSpacesTab } from '@/components/seminaire/SeminaireSpacesTab';
 import { SeminaireBilanTab } from '@/components/seminaire/SeminaireBilanTab';
 import { StaffEventInsights } from '@/components/staff/StaffEventInsights';
 import { DebriefScoresGrid } from '@/components/debrief/DebriefScoresGrid';
+import { StadeDebriefView } from '@/components/debrief/StadeDebriefView';
 import { RunnerGenerationModal } from '@/components/runner/RunnerGenerationModal';
 import { RouteSheetPanel } from '@/components/events/RouteSheetPanel';
 import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
@@ -314,6 +315,12 @@ export default function EventDetailPage() {
       )}
       {activeTab === 'debriefs' && (
         <div className="space-y-6">
+          {!isMatch && (
+            <section>
+              <h2 className="mb-4 font-display text-lg font-bold text-pr-black">📸 Rapport photo &amp; terrain (retour régisseur)</h2>
+              <StadeDebriefView eventId={event.event_id} />
+            </section>
+          )}
           <DebriefScoresGrid eventId={event.event_id} spaces={spaces} />
           <DebriefAdminPanel eventId={event.event_id} spaces={spaces} />
         </div>

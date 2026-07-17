@@ -23,6 +23,7 @@ import { ExternalChargesManager } from '@/components/seminar/ExternalChargesMana
 import { PhotoChecklist } from '@/components/debrief/PhotoChecklist';
 import { PhotoGallery } from '@/components/debrief/PhotoGallery';
 import { PdfPhotoSummary } from '@/components/debrief/PdfPhotoSummary';
+import { LogoUploader } from '@/components/seminar/LogoUploader';
 import { renderScoreCircles, formatScoreText } from '@/lib/scoreRenderer';
 import type { Event } from '@/lib/types';
 
@@ -458,8 +459,8 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
         <Row label="Titre du rapport">
           <InlineEditable value={draft.report_title} onSave={(v) => updateDraft({ report_title: v })} />
         </Row>
-        <Row label="Logo client (URL)">
-          <InlineEditable value={draft.client_logo_url} placeholder="URL du logo…" onSave={(v) => updateDraft({ client_logo_url: v || null })} />
+        <Row label="Logo client">
+          <LogoUploader eventId={event.event_id} value={draft.client_logo_url} onChange={(url) => updateDraft({ client_logo_url: url })} />
         </Row>
       </Card>
 
