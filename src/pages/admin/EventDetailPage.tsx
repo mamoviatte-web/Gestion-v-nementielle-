@@ -24,6 +24,7 @@ import { RunnerGenerationModal } from '@/components/runner/RunnerGenerationModal
 import { RouteSheetPanel } from '@/components/events/RouteSheetPanel';
 import { RoadmapEditor } from '@/components/admin/RoadmapEditor';
 import { MatchClosedView } from '@/components/events/MatchClosedView';
+import { DeleteEventButton } from '@/components/events/DeleteEventButton';
 import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -213,6 +214,7 @@ export default function EventDetailPage() {
               Clôturer l'événement
             </Button>
           )}
+          <DeleteEventButton event={{ event_id: event.event_id, event_name: event.event_name, event_type: event.event_type }} />
           {(event.status === 'clôturé' || event.status === 'archivé') && (
             <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700">
               <CheckCircle2 className="h-4 w-4" /> Événement clôturé
