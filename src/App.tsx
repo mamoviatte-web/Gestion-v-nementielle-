@@ -14,6 +14,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { RequireResponsableName } from '@/components/RequireResponsableName';
+import { RHRoute } from '@/components/RHRoute';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { ProviderLayout } from '@/components/layout/ProviderLayout';
 import { Logo } from '@/components/ui';
@@ -38,6 +39,7 @@ const CostControlPage = lazy(() => import('@/pages/admin/CostControlPage'));
 const StaffAnalyticsPage = lazy(() => import('@/pages/admin/StaffRHPage'));
 const MonthlyStaffReportsPage = lazy(() => import('@/pages/admin/MonthlyStaffReportsPage'));
 const HRPreplanPage = lazy(() => import('@/pages/admin/HRPreplanPage'));
+const RHPlanningPage = lazy(() => import('@/pages/rh/RHPlanningPage'));
 const SpacesPage = lazy(() => import('@/pages/admin/SpacesPage'));
 const ExportPage = lazy(() => import('@/pages/admin/ExportPage'));
 const RunnerSpaceDetail = lazy(() => import('@/pages/admin/RunnerSpaceDetail'));
@@ -92,6 +94,8 @@ export default function App() {
         <Route path="/zone/match/:sessionToken/buvettes" element={<BuvetteSupervisorPage />} />
         <Route path="/zone/match/:sessionToken/buvette/:spaceId" element={<BuvetteDetailPage />} />
         <Route path="/zone/match/:sessionToken/rh" element={<ZoneStaffHoursPage />} />
+        {/* Espace Responsable RH — accès par code match (session locale) */}
+        <Route path="/rh/planning" element={<RHRoute><RHPlanningPage /></RHRoute>} />
 
         {/* Espace Stade (ROLE_STADE) */}
         <Route

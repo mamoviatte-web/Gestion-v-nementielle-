@@ -215,6 +215,26 @@ export default function EventDetailPage() {
       {isMatch && (
         <>
           <MatchAccessCode eventId={event.event_id} code={event.match_access_code ?? null} eventName={event.event_name} />
+          {event.rh_access_code && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="mb-1 text-xs font-bold uppercase tracking-wide text-amber-700">Code accès Responsable RH</p>
+                  <p className="font-display text-3xl font-black tracking-[0.25em] text-stone-900">{event.rh_access_code}</p>
+                  <p className="mt-1 text-xs text-amber-600">À communiquer uniquement à la responsable RH · Valide pour ce match uniquement</p>
+                </div>
+                <button
+                  onClick={() => {
+                    void navigator.clipboard.writeText(event.rh_access_code ?? '');
+                    showToast('Code RH copié.', 'success');
+                  }}
+                  className="shrink-0 rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-white"
+                >
+                  📋 Copier
+                </button>
+              </div>
+            </div>
+          )}
           <MatchLiveStatusPanel eventId={event.event_id} />
         </>
       )}

@@ -183,6 +183,7 @@ export interface Event {
   sequence_number?: number | null;
   // Accès match par code unique (match_access.sql)
   match_access_code?: string | null;
+  rh_access_code?: string | null;
   match_access_url?: string | null;
 }
 

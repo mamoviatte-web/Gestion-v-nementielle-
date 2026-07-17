@@ -9,16 +9,12 @@
 
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, KeyRound, ShieldCheck } from 'lucide-react';
+import { KeyRound, ShieldCheck, Users } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { Button, Input, Alert, Logo } from '@/components/ui';
 
-type Mode = 'stade' | 'responsable';
-
-function credentialsFromCode(code: string): { email: string; password: string } {
-  const normalized = code.trim().toUpperCase();
-  return { email: `${normalized.toLowerCase()}@stade.fr`, password: normalized };
-}
+type Mode = 'stade' | 'rh';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -27,8 +23,13 @@ export default function LoginPage() {
   const [mode, setMode] = useState<Mode>('stade');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Accès Responsable RH (code match + nom, session anonyme locale).
+  const [rhCode, setRhCode] = useState('');
+  const [rhNom, setRhNom] = useState('');
+  const [rhError, setRhError] = useState('');
+  const [rhLoading, setRhLoading] = useState(false);
 
   async function handleStadeSubmit(e: FormEvent) {
     e.preventDefault();
@@ -38,13 +39,25 @@ export default function LoginPage() {
     if (user) navigate('/admin/dashboard', { replace: true });
   }
 
-  async function handleResponsableSubmit(e: FormEvent) {
+  async function handleRHSubmit(e: FormEvent) {
     e.preventDefault();
-    setSubmitting(true);
-    const { email: respEmail, password: respPassword } = credentialsFromCode(code);
-    const user = await login(respEmail, respPassword);
-    setSubmitting(false);
-    if (user) navigate('/provider/home', { replace: true });
+    if (!rhCode.trim() || !rhNom.trim()) return;
+    setRhLoading(true);
+    setRhError('');
+    const { data, error: err } = await supabase.rpc('validate_rh_code', {
+      p_code: rhCode.trim().toUpperCase(),
+      p_rh_nom: rhNom.trim(),
+    });
+    setRhLoading(false);
+    const res = data as { success?: boolean; session_token?: string; event_name?: string; rh_nom?: string; error?: string } | null;
+    if (err || !res?.success || !res.session_token) {
+      setRhError(res?.error ?? 'Code RH invalide ou match non actif');
+      return;
+    }
+    localStorage.setItem('rh_session_token', res.session_token);
+    localStorage.setItem('rh_event_name', res.event_name ?? '');
+    localStorage.setItem('rh_nom', res.rh_nom ?? rhNom.trim());
+    navigate('/rh/planning', { replace: true });
   }
 
   return (
@@ -81,18 +94,18 @@ export default function LoginPage() {
             </button>
             <button
               type="button"
-              onClick={() => setMode('responsable')}
+              onClick={() => setMode('rh')}
               className={`flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                mode === 'responsable'
+                mode === 'rh'
                   ? 'bg-pr-black text-white shadow-sm'
                   : 'text-pr-black-soft hover:bg-pr-stone/50'
               }`}
             >
-              <Building2 className="h-4 w-4" /> Responsable
+              <Users className="h-4 w-4" /> Responsable RH
             </button>
           </div>
 
-          {error && (
+          {error && mode === 'stade' && (
             <Alert variant="error" className="mb-4">
               {error}
             </Alert>
@@ -129,33 +142,48 @@ export default function LoginPage() {
               </Button>
             </form>
           ) : (
-            <form onSubmit={handleResponsableSubmit} className="space-y-4">
+            <form onSubmit={handleRHSubmit} className="space-y-4">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-sm font-semibold text-amber-800">👥 Espace Responsable RH</p>
+                <p className="mt-0.5 text-xs text-amber-600">
+                  Saisissez le code RH communiqué par l'équipe stade pour planifier le personnel d'un match.
+                </p>
+              </div>
               <Input
-                label="Code d'accès espace"
-                name="code"
+                label="Code d'accès RH"
+                name="rh_code"
                 type="text"
                 autoComplete="off"
-                placeholder="Ex : SN2026"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                hint="Le code fourni par l'équipe Stade pour votre espace."
-                className="uppercase"
+                placeholder="Ex : RH3A9F2C"
+                value={rhCode}
+                onChange={(e) => setRhCode(e.target.value.toUpperCase())}
+                className="uppercase tracking-[0.2em]"
                 required
               />
-              <Button type="submit" fullWidth loading={submitting} className="tracking-[0.12em]">
-                <KeyRound className="h-4 w-4" /> ACCÈS RESPONSABLE
+              <Input
+                label="Votre nom"
+                name="rh_nom"
+                type="text"
+                autoComplete="name"
+                placeholder="Prénom Nom"
+                value={rhNom}
+                onChange={(e) => setRhNom(e.target.value)}
+                required
+              />
+              {rhError && (
+                <Alert variant="error">{rhError}</Alert>
+              )}
+              <Button type="submit" fullWidth loading={rhLoading} disabled={!rhCode.trim() || !rhNom.trim()} className="tracking-[0.12em]">
+                <KeyRound className="h-4 w-4" /> ACCÉDER AU PLANNING RH
               </Button>
             </form>
           )}
 
-          {import.meta.env.DEV && (
+          {import.meta.env.DEV && mode === 'stade' && (
             <div className="mt-6 rounded-lg bg-pr-cream p-3 text-xs text-pr-olive-dark">
               <p className="font-semibold text-pr-black-soft">Démo (dev uniquement)</p>
               <p className="mt-1">
                 Stade : <code>mviatte@provencerugby.com</code> / <code>StadeMD2026!</code>
-              </p>
-              <p>
-                Responsable : code <code>SN2026</code>, <code>BV12026</code>…
               </p>
             </div>
           )}
