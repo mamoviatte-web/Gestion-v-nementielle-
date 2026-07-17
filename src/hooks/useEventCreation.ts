@@ -7,6 +7,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { isPremiumIndoor } from '@/lib/eventUtils';
 import type {
   AttachmentType,
   EventAttachment,
@@ -114,14 +115,20 @@ export function useEventCreation() {
         spaceIds = draft.selected_space_ids;
       }
 
-      // RG buvettes : les buvettes ne s'activent QUE sur les matchs.
+      // Séminaires : uniquement les espaces premium intérieurs
+      // (salon/loge/bar_pub/wine_bar/club). Exclut buvettes, terrasses,
+      // bodega, PMR — cf. règle métier « spécificité espaces ».
       if (draft.event_type !== 'match' && spaceIds.length > 0) {
-        const { data: buv } = await supabase
+        const { data: rows } = await supabase
           .from('spaces')
-          .select('space_id')
-          .eq('space_type', 'Buvette');
-        const buvetteIds = new Set((buv ?? []).map((s) => s.space_id));
-        spaceIds = spaceIds.filter((id) => !buvetteIds.has(id));
+          .select('space_id, space_name')
+          .in('space_id', spaceIds);
+        const allowed = new Set(
+          (rows ?? [])
+            .filter((s) => isPremiumIndoor(s.space_name as string))
+            .map((s) => s.space_id as string),
+        );
+        spaceIds = spaceIds.filter((id) => allowed.has(id));
       }
 
       if (spaceIds.length > 0) {
