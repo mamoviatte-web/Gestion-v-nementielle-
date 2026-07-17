@@ -215,11 +215,40 @@ export function WeeklyPlanner() {
 
   useEffect(() => {
     let alive = true;
-    void supabase.from('weekly_planning').select('*').then(({ data }) => {
+    async function load() {
+      const { data, error } = await supabase.from('weekly_planning').select('*');
       if (!alive) return;
-      setAllEvents((data as PlanningEvent[] | null) ?? []);
+      if (!error) {
+        setAllEvents((data as PlanningEvent[] | null) ?? []);
+        setLoading(false);
+        return;
+      }
+      // Repli : la vue weekly_planning n'est pas encore déployée →
+      // on lit directement les événements (event_date est une DATE 'YYYY-MM-DD',
+      // donc pas de conversion de fuseau : event_day = event_date tel quel).
+      const { data: raw } = await supabase
+        .from('events')
+        .select('event_id, event_name, event_type, status, event_date, start_time, expected_attendees, regisseur_name')
+        .neq('status', 'archivé')
+        .order('event_date');
+      if (!alive) return;
+      const normalized: PlanningEvent[] = (raw ?? []).map((e) => ({
+        event_id: e.event_id as string,
+        event_name: e.event_name as string,
+        event_type: (e.event_type as string | null) ?? null,
+        status: e.status as string,
+        pax_count: (e.expected_attendees as number | null) ?? null,
+        event_day: (e.event_date as string | null) ?? null,
+        start_time: (e.start_time as string | null) ?? null,
+        all_spaces: null,
+        regisseurs: (e.regisseur_name as string | null) ?? null,
+        nb_agents_total: null,
+        phases: null,
+      }));
+      setAllEvents(normalized);
       setLoading(false);
-    });
+    }
+    void load();
     return () => { alive = false; };
   }, []);
 

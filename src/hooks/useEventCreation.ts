@@ -61,6 +61,14 @@ export function useEventCreation() {
   /** 1. Crée l'événement (+ event_spaces selon le type). */
   const createMutation = useMutation({
     mutationFn: async (draft: EventCreationDraft): Promise<{ event_id: string }> => {
+      // Garde-fou date : un saisie type "0026-08-13" (siècle perdu dans le
+      // sélecteur de date) placerait l'événement ~2000 ans dans le passé et il
+      // n'apparaîtrait jamais dans le planning. On exige une année plausible.
+      const year = Number((draft.event_date ?? '').slice(0, 4));
+      if (!Number.isInteger(year) || year < 2020 || year > 2100) {
+        throw new Error(`Date invalide (${draft.event_date}). L'année doit être comprise entre 2020 et 2100.`);
+      }
+
       // Match : valeurs par défaut calculées côté moteur (saisie minimale).
       let startTime: string | null = draft.start_time || null;
       let attendees: number | null = draft.expected_attendees || null;

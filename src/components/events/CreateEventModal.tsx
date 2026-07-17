@@ -186,7 +186,7 @@ export function CreateEventModal({
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                   />
-                  <Input type="date" label="Date du match *" value={date} onChange={(e) => setDate(e.target.value)} />
+                  <Input type="date" label="Date du match *" min="2020-01-01" max="2100-12-31" value={date} onChange={(e) => setDate(e.target.value)} />
                   <details className="mt-1">
                     <summary className="cursor-pointer text-sm text-pr-olive-dark">
                       + Plus d'options (optionnel)
@@ -212,7 +212,7 @@ export function CreateEventModal({
                 <>
                   <Input label="Nom de l'événement *" value={name} onChange={(e) => setName(e.target.value)} />
                   <div className="grid grid-cols-2 gap-3">
-                    <Input type="date" label="Date *" value={date} onChange={(e) => setDate(e.target.value)} />
+                    <Input type="date" label="Date *" min="2020-01-01" max="2100-12-31" value={date} onChange={(e) => setDate(e.target.value)} />
                     <Input type="time" label="Heure de début" value={time} onChange={(e) => setTime(e.target.value)} />
                   </div>
                   <Input
