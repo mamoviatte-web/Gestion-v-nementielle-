@@ -185,6 +185,9 @@ export interface Event {
   match_access_code?: string | null;
   rh_access_code?: string | null;
   match_access_url?: string | null;
+  // Régisseur assigné (colonnes régie)
+  regisseur_name?: string | null;
+  regisseur_space_id?: string | null;
 }
 
 /** Ligne de la vue stock_continuity_check (écart stock entre 2 matchs). */

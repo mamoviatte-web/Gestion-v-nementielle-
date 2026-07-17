@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ChevronRight, Activity } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { isMatch } from '@/lib/eventUtils';
+import { WeeklyPlanner } from '@/components/dashboard/WeeklyPlanner';
 
 const OR_PR = '#C9A646';
 const BLEU_NUIT = '#1A1A2E';
@@ -318,6 +319,15 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* ── PLANNING HEBDOMADAIRE ── */}
+      <div>
+        <div className="mb-4 flex items-center gap-2">
+          <div className="h-6 w-1.5 rounded-full" style={{ background: OR_PR }} />
+          <h2 className="text-lg font-black text-stone-900">Planning hebdomadaire</h2>
+        </div>
+        <WeeklyPlanner />
+      </div>
     </div>
   );
 }

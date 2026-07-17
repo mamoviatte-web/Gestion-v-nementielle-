@@ -28,7 +28,7 @@ import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
-import { Zap, CheckCircle2 } from 'lucide-react';
+import { Zap, CheckCircle2, CalendarClock } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 
 type Tab =
@@ -198,6 +198,12 @@ export default function EventDetailPage() {
               <Zap className="h-4 w-4" /> Générer les dotations runner
             </Button>
           )}
+          <Link
+            to={`/admin/events/${event.event_id}/planning`}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+          >
+            <CalendarClock className="h-4 w-4" /> Planning opérationnel
+          </Link>
           {event.status !== 'clôturé' && event.status !== 'archivé' && (
             <Button
               size="sm"
