@@ -23,6 +23,7 @@ import { StadeDebriefView } from '@/components/debrief/StadeDebriefView';
 import { RunnerGenerationModal } from '@/components/runner/RunnerGenerationModal';
 import { RouteSheetPanel } from '@/components/events/RouteSheetPanel';
 import { RoadmapEditor } from '@/components/admin/RoadmapEditor';
+import { MatchClosedView } from '@/components/events/MatchClosedView';
 import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -82,6 +83,9 @@ export default function EventDetailPage() {
     try {
       await setStatus('clôturé');
       showToast(`Événement « ${eventName} » clôturé.`, 'success');
+      // Le bilan post-match remplace le suivi live (invalidation react-query) —
+      // on remonte en haut pour l'afficher immédiatement.
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       console.error('Erreur clôture:', err);
       showToast(`Impossible de clôturer : ${err instanceof Error ? err.message : 'erreur inconnue'}`, 'warning');
@@ -250,7 +254,25 @@ export default function EventDetailPage() {
               </div>
             </div>
           )}
-          <MatchLiveStatusPanel eventId={event.event_id} />
+          {event.status === 'clôturé' || event.status === 'archivé' ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 rounded-2xl bg-stone-900 px-5 py-4">
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-green-400" />
+                <div>
+                  <p className="font-bold text-white">Match clôturé</p>
+                  <p className="text-xs text-white/50">Bilan post-match — remplace le suivi live</p>
+                </div>
+                <span className="ml-auto hidden text-xs text-white/30 sm:inline">{event.event_name}</span>
+              </div>
+              <MatchClosedView
+                eventId={event.event_id}
+                eventName={event.event_name}
+                paxCount={event.expected_attendees ?? 0}
+              />
+            </div>
+          ) : (
+            <MatchLiveStatusPanel eventId={event.event_id} />
+          )}
         </>
       )}
 
