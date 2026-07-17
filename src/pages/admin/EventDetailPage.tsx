@@ -22,6 +22,7 @@ import { DebriefScoresGrid } from '@/components/debrief/DebriefScoresGrid';
 import { StadeDebriefView } from '@/components/debrief/StadeDebriefView';
 import { RunnerGenerationModal } from '@/components/runner/RunnerGenerationModal';
 import { RouteSheetPanel } from '@/components/events/RouteSheetPanel';
+import { RoadmapEditor } from '@/components/admin/RoadmapEditor';
 import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -325,7 +326,18 @@ export default function EventDetailPage() {
           <DebriefAdminPanel eventId={event.event_id} spaces={spaces} />
         </div>
       )}
-      {activeTab === 'route' && <RouteSheetPanel eventId={event.event_id} spaces={spaces} />}
+      {activeTab === 'route' && (
+        <div className="space-y-8">
+          <section>
+            <h2 className="mb-4 font-display text-lg font-bold text-pr-black">📋 Brief digital par espace</h2>
+            <RoadmapEditor eventId={event.event_id} spaces={spaces} />
+          </section>
+          <section>
+            <h2 className="mb-4 font-display text-lg font-bold text-pr-black">📎 Feuilles de route (fichiers)</h2>
+            <RouteSheetPanel eventId={event.event_id} spaces={spaces} />
+          </section>
+        </div>
+      )}
       {activeTab === 'runner' && (
         <RunnerPlanningTab
           event={event}
