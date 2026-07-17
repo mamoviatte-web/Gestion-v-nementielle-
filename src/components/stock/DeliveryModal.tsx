@@ -5,11 +5,12 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Plus, Trash2, Truck, X } from 'lucide-react';
+import { Plus, Trash2, Truck, X, Sparkles } from 'lucide-react';
 import { Alert, Button, Input, Select, Textarea } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import { useCatalog } from '@/hooks/useCatalog';
 import { useRecordDelivery, type DeliveryLineInput } from '@/hooks/useDepots';
+import { InvoiceScanner, type ExtractedInvoice } from './InvoiceScanner';
 import type { Product } from '@/lib/types';
 
 interface LineDraft {
@@ -17,6 +18,9 @@ interface LineDraft {
   productId: string;
   qtyReceived: string;
   unitPriceHt: string;
+  /** Contexte facture (scanner IA). */
+  rawName?: string;
+  confidence?: 'high' | 'medium' | 'low';
 }
 
 function todayISO(): string {
@@ -51,6 +55,8 @@ export function DeliveryModal({
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<LineDraft[]>(() => [newLine()]);
   const [error, setError] = useState<string | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannerUsed, setScannerUsed] = useState(false);
 
   const catalog = useMemo(() => {
     const all = (products.data ?? []).filter((p) => p.active);
@@ -90,6 +96,28 @@ export function DeliveryModal({
 
   function removeLine(key: string) {
     setLines((prev) => (prev.length > 1 ? prev.filter((l) => l.key !== key) : prev));
+  }
+
+  function handleScanExtracted(invoice: ExtractedInvoice) {
+    if (invoice.supplier) setSupplierName(invoice.supplier);
+    if (invoice.delivery_date) setDeliveryDate(invoice.delivery_date);
+    if (invoice.invoice_number) setInvoiceRef(invoice.invoice_number);
+
+    // Lignes reconnues d'abord, puis non reconnues (produit à sélectionner).
+    const allowed = new Set(catalog.map((p) => p.product_id));
+    const scanned: LineDraft[] = invoice.products.map((p) => ({
+      key: crypto.randomUUID(),
+      // On ne garde le product_id que s'il est dans le périmètre du dépôt.
+      productId: p.matched_id && allowed.has(p.matched_id) ? p.matched_id : '',
+      qtyReceived: p.qty > 0 ? String(p.qty) : '',
+      unitPriceHt: p.price_ht != null ? String(p.price_ht) : '',
+      rawName: p.raw_name,
+      confidence: p.confidence,
+    }));
+    scanned.sort((a, b) => (a.productId ? 0 : 1) - (b.productId ? 0 : 1));
+    setLines(scanned.length > 0 ? scanned : [newLine()]);
+    setShowScanner(false);
+    setScannerUsed(true);
   }
 
   const totalHt = useMemo(
@@ -162,6 +190,35 @@ export function DeliveryModal({
           </Alert>
         )}
 
+        {showScanner ? (
+          <InvoiceScanner
+            catalog={catalog.map((p) => ({
+              product_id: p.product_id,
+              product_name: p.product_name,
+              category: p.category,
+              unit: p.unit,
+            }))}
+            onExtracted={handleScanExtracted}
+            onClose={() => setShowScanner(false)}
+          />
+        ) : (
+          <>
+        {/* Bouton IA */}
+        {!scannerUsed ? (
+          <button
+            type="button"
+            onClick={() => setShowScanner(true)}
+            className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 py-3 text-sm font-bold text-stone-900 shadow-sm transition-all hover:from-amber-500 hover:to-amber-600"
+          >
+            <Sparkles className="h-4 w-4" /> 📄 Lire la facture automatiquement
+          </button>
+        ) : (
+          <div className="mb-4 flex items-center justify-between rounded-xl border border-green-200 bg-green-50 px-4 py-2.5">
+            <p className="text-sm font-semibold text-green-700">✅ Formulaire pré-rempli depuis la facture</p>
+            <button type="button" onClick={() => setShowScanner(true)} className="text-xs text-green-600 underline">Relire</button>
+          </div>
+        )}
+
         {/* En-tête livraison */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input
@@ -204,8 +261,11 @@ export function DeliveryModal({
             {lines.map((l) => (
               <div
                 key={l.key}
-                className="grid grid-cols-1 items-end gap-2 rounded-lg border border-pr-stone bg-pr-cream/40 p-2 sm:grid-cols-[1fr_5rem_6rem_auto]"
+                className={`grid grid-cols-1 items-end gap-2 rounded-lg border bg-pr-cream/40 p-2 sm:grid-cols-[1fr_5rem_6rem_auto] ${l.confidence === 'medium' ? 'border-amber-300' : l.rawName && !l.productId ? 'border-red-300' : 'border-pr-stone'}`}
               >
+                {l.rawName && (
+                  <p className="col-span-full -mb-1 text-[10px] italic text-pr-black-soft/50">Extrait : « {l.rawName} »</p>
+                )}
                 <Select
                   label="Produit"
                   options={productOptions}
@@ -267,6 +327,8 @@ export function DeliveryModal({
             </Button>
           </div>
         </div>
+          </>
+        )}
       </div>
     </div>
   );
