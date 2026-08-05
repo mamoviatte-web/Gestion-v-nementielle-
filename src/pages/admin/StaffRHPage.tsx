@@ -23,12 +23,6 @@ const VERT_OK = '#059669';
 const ORANGE_W = '#F97316';
 const ROUGE_KO = '#DC2626';
 
-const STATUT_STYLE: Record<string, { color: string; bg: string; border: string; label: string }> = {
-  ok: { color: VERT_OK, bg: 'bg-green-50', border: 'border-green-300', label: '✅ Staffé' },
-  'sous-staffé': { color: ORANGE_W, bg: 'bg-amber-50', border: 'border-amber-300', label: '⚠️ Sous-staffé' },
-  critique: { color: ROUGE_KO, bg: 'bg-red-50', border: 'border-red-300', label: '🔴 Critique' },
-  inconnu: { color: '#9CA3AF', bg: 'bg-stone-50', border: 'border-stone-200', label: '— Inconnu' },
-};
 const ROLE_COLORS: Record<string, string> = {
   Serveur: '#2563EB', 'Chef de rang': OR_PR, Barman: '#7C3AED', 'Agent de sécurité': ROUGE_KO,
   Runner: VERT_OK, 'Responsable espace': BLEU_NUIT, 'Hôte / Hôtesse': '#DB2777', Agent: '#0891B2', Autre: '#9CA3AF',
@@ -85,17 +79,15 @@ export default function StaffRHPage() {
 
   const uniqEspacesList = useMemo(() => [...new Map(espaces.map((e) => [e.space_id, e])).values()], [espaces]);
 
+  // Alertes RH pertinentes uniquement. Le ratio agents/100 pax (et donc les
+  // statuts « sous-staffé »/« critique ») a été retiré : chaque événement est
+  // différent, la métrique n'est pas fiable.
   const alertes = useMemo(() => {
     const list: { level: 'critique' | 'warning'; msg: string; detail: string }[] = [];
-    const uniq = [...new Map(espaces.map((e) => [e.space_id + e.event_id, e])).values()];
-    const crit = uniq.filter((e) => e.statut_staffing === 'critique');
-    if (crit.length) list.push({ level: 'critique', msg: `${crit.length} espace(s) en sous-staffing critique`, detail: crit.slice(0, 3).map((e) => `${e.space_name} (${e.ecart_pct ?? '?'}%)`).join(', ') });
-    const sous = uniq.filter((e) => e.statut_staffing === 'sous-staffé');
-    if (sous.length) list.push({ level: 'warning', msg: `${sous.length} espace(s) légèrement sous-staffé(s)`, detail: sous.slice(0, 3).map((e) => `${e.space_name} (${e.ecart_pct ?? '?'}%)`).join(', ') });
     const sansC = unified.filter((u) => !u.confirme_agent && u.heures_travaillees !== null);
     if (sansC.length) list.push({ level: 'warning', msg: `${sansC.length} déclaration(s) sans confirmation agent`, detail: [...new Set(sansC.map((u) => u.agent_nom))].slice(0, 5).join(', ') });
     return list;
-  }, [espaces, unified]);
+  }, [unified]);
 
   const aggregated = period.mode === 'annee' || period.mode === 'tout';
   const chartData = useMemo(() => {
@@ -211,41 +203,19 @@ export default function StaffRHPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
-                    <h3 className="mb-4 font-bold text-stone-800">👥 Répartition par rôle</h3>
-                    {chartRoles.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={200}>
-                        <PieChart>
-                          <Pie data={chartRoles} cx="40%" cy="50%" outerRadius={80} innerRadius={50} dataKey="value" animationBegin={0}>
-                            {chartRoles.map((entry, i) => <Cell key={i} fill={ROLE_COLORS[entry.name] ?? '#9CA3AF'} />)}
-                          </Pie>
-                          <Tooltip formatter={(value) => [`${Number(value)} personnes`, '']} />
-                          <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 11 }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : <p className="py-12 text-center text-sm text-stone-400">Pas de données.</p>}
-                  </div>
-                  <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
-                    <h3 className="mb-4 font-bold text-stone-800">🗺 Ratio agents / 100 pax par espace</h3>
-                    {uniqEspacesList.length > 0 ? (
-                      <div className="space-y-3">
-                        {uniqEspacesList.sort((a, b) => (a.ecart_pct ?? 0) - (b.ecart_pct ?? 0)).map((espace) => {
-                          const s = STATUT_STYLE[espace.statut_staffing] ?? STATUT_STYLE.inconnu;
-                          const pct = espace.cible_ratio > 0 && espace.ratio_actuel != null ? Math.min((espace.ratio_actuel / espace.cible_ratio) * 100, 120) : 0;
-                          return (
-                            <div key={espace.space_id}>
-                              <div className="mb-1 flex items-center justify-between text-sm">
-                                <span className="font-semibold text-stone-700">{espace.space_name}</span>
-                                <span className={`rounded-full border px-2 py-0.5 text-xs font-bold ${s.bg} ${s.border}`} style={{ color: s.color }}>{s.label}</span>
-                              </div>
-                              <div className="h-2.5 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: s.color }} /></div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : <p className="py-12 text-center text-sm text-stone-400">Aucun espace avec données.</p>}
-                  </div>
+                <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
+                  <h3 className="mb-4 font-bold text-stone-800">👥 Répartition par rôle</h3>
+                  {chartRoles.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <PieChart>
+                        <Pie data={chartRoles} cx="40%" cy="50%" outerRadius={80} innerRadius={50} dataKey="value" animationBegin={0}>
+                          {chartRoles.map((entry, i) => <Cell key={i} fill={ROLE_COLORS[entry.name] ?? '#9CA3AF'} />)}
+                        </Pie>
+                        <Tooltip formatter={(value) => [`${Number(value)} personnes`, '']} />
+                        <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 11 }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : <p className="py-12 text-center text-sm text-stone-400">Pas de données.</p>}
                 </div>
               </div>
             )}
@@ -280,20 +250,15 @@ export default function StaffRHPage() {
             {tab === 'par_espace' && (
               uniqEspacesList.length > 0 ? (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {uniqEspacesList.map((espace) => {
-                    const s = STATUT_STYLE[espace.statut_staffing] ?? STATUT_STYLE.inconnu;
-                    return (
-                      <div key={espace.space_id} className={`rounded-2xl border-2 bg-white p-5 ${s.border}`}>
-                        <div className="mb-3 flex items-center justify-between"><p className="font-bold text-stone-900">{espace.space_name}</p><span className="rounded-lg px-2 py-1 text-xs font-bold" style={{ background: s.color + '20', color: s.color }}>{s.label}</span></div>
-                        <div className="grid grid-cols-3 gap-2 text-center">
-                          <div className="rounded-xl bg-stone-50 py-2"><p className="text-xl font-black text-stone-900">{espace.nb_agents}</p><p className="text-[10px] text-stone-400">agents</p></div>
-                          <div className="rounded-xl bg-stone-50 py-2"><p className="text-xl font-black text-stone-900">{espace.moy_heures.toFixed(1)}h</p><p className="text-[10px] text-stone-400">moy/agent</p></div>
-                          <div className={`rounded-xl py-2 ${s.bg}`}><p className="text-xl font-black" style={{ color: s.color }}>{espace.ratio_actuel ?? '—'}</p><p className="text-[10px] text-stone-400">/ 100pax</p></div>
-                        </div>
-                        {espace.ecart_pct !== null && <p className="mt-2 text-center text-xs" style={{ color: s.color }}>Cible {espace.cible_ratio} · écart {espace.ecart_pct > 0 ? '+' : ''}{espace.ecart_pct}%</p>}
+                  {uniqEspacesList.map((espace) => (
+                    <div key={espace.space_id} className="rounded-2xl border border-stone-100 bg-white p-5">
+                      <div className="mb-3 flex items-center justify-between"><p className="font-bold text-stone-900">{espace.space_name}</p></div>
+                      <div className="grid grid-cols-2 gap-2 text-center">
+                        <div className="rounded-xl bg-stone-50 py-2"><p className="text-xl font-black text-stone-900">{espace.nb_agents}</p><p className="text-[10px] text-stone-400">agents</p></div>
+                        <div className="rounded-xl bg-stone-50 py-2"><p className="text-xl font-black text-stone-900">{espace.moy_heures.toFixed(1)}h</p><p className="text-[10px] text-stone-400">moy/agent</p></div>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               ) : <div className="rounded-2xl border border-stone-100 bg-white p-10 text-center text-sm text-stone-400">Aucun espace avec données de staffing.</div>
             )}
@@ -366,7 +331,7 @@ export default function StaffRHPage() {
             {tab === 'alertes' && (
               <div className="space-y-3">
                 {alertes.length === 0 ? (
-                  <div className="rounded-2xl border border-green-200 bg-green-50 p-8 text-center"><CheckCircle size={32} className="mx-auto mb-2 text-green-500" /><p className="font-bold text-green-700">Aucune alerte RH</p><p className="text-sm text-green-500">Tous les espaces sont correctement staffés.</p></div>
+                  <div className="rounded-2xl border border-green-200 bg-green-50 p-8 text-center"><CheckCircle size={32} className="mx-auto mb-2 text-green-500" /><p className="font-bold text-green-700">Aucune alerte RH</p><p className="text-sm text-green-500">Aucune anomalie à signaler.</p></div>
                 ) : alertes.map((a, i) => (
                   <div key={i} className={`rounded-2xl border p-4 ${a.level === 'critique' ? 'border-red-300 bg-red-50' : 'border-amber-300 bg-amber-50'}`}>
                     <div className="mb-1 flex items-center gap-2"><AlertTriangle size={16} className={a.level === 'critique' ? 'text-red-600' : 'text-amber-600'} /><p className={`text-sm font-bold ${a.level === 'critique' ? 'text-red-800' : 'text-amber-800'}`}>{a.msg}</p></div>

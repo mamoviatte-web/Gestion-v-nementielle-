@@ -80,10 +80,20 @@ interface ProductRow {
   product_id: string;
   product_name: string;
   category: string;
-  unit: string;
   nb_events: number;
   total_cost_ht: number;
   avg_cost_per_event: number;
+}
+
+/** Ligne coût par événement/produit (vue event_cost_details) — porte event_type,
+ *  ce qui permet de filtrer « Produits les plus coûteux » par type d'événement. */
+interface CostDetailRow {
+  event_id: string;
+  event_type: string;
+  product_id: string;
+  product_name: string;
+  category: string;
+  line_cost_ht: number | null;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -220,39 +230,67 @@ export default function CostControlPage() {
   const [fbEvents, setFbEvents] = useState<FbEventRow[]>([]);
   const [extCharges, setExtCharges] = useState<ExtChargeRow[]>([]);
   const [traiteurs, setTraiteurs] = useState<TraiteurRow[]>([]);
-  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [costDetails, setCostDetails] = useState<CostDetailRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const [fb, ext, tr, prod] = await Promise.all([
+      const [fb, ext, tr, details] = await Promise.all([
         supabase.from('charges_fb_by_event').select('*').order('event_date', { ascending: false }),
         supabase.from('charges_external_by_event').select('*').order('event_date', { ascending: false }),
         supabase.from('charges_traiteurs_summary').select('*').order('event_date', { ascending: false }),
-        supabase.from('charges_products_ranking').select('*').limit(20),
+        // Détail coût par produit/événement : porte event_type → filtrable par toggle.
+        supabase
+          .from('event_cost_details')
+          .select('event_id, event_type, product_id, product_name, category, line_cost_ht')
+          .not('final_qty', 'is', null),
       ]);
       setFbEvents((fb.data ?? []) as FbEventRow[]);
       setExtCharges((ext.data ?? []) as ExtChargeRow[]);
       setTraiteurs((tr.data ?? []) as TraiteurRow[]);
-      setProducts((prod.data ?? []) as ProductRow[]);
+      setCostDetails((details.data ?? []) as CostDetailRow[]);
       setLoading(false);
     })();
   }, []);
 
-  const filtered = useMemo(
-    () =>
-      fbEvents.filter((e) =>
-        eventType === 'tous'
-          ? true
-          : eventType === 'match'
-            ? e.event_type === 'match'
-            : eventType === 'seminaire'
-              ? SEMINAR_TYPES.includes(e.event_type)
-              : e.event_type !== 'match' && !SEMINAR_TYPES.includes(e.event_type),
-      ),
-    [fbEvents, eventType],
-  );
+  // Classement d'un event_type selon le toggle actif (match / séminaire / autre).
+  const inTypeScope = useMemo(() => {
+    return (t: string | null | undefined): boolean => {
+      if (eventType === 'tous') return true;
+      if (eventType === 'match') return t === 'match';
+      if (eventType === 'seminaire') return SEMINAR_TYPES.includes(t ?? '');
+      return t !== 'match' && !SEMINAR_TYPES.includes(t ?? ''); // 'autre'
+    };
+  }, [eventType]);
+
+  const filtered = useMemo(() => fbEvents.filter((e) => inTypeScope(e.event_type)), [fbEvents, inTypeScope]);
+
+  // Produits les plus coûteux — recalculés depuis event_cost_details FILTRÉ par
+  // le type d'événement actif (fix : la section ne filtrait pas auparavant).
+  const products = useMemo<ProductRow[]>(() => {
+    const agg = new Map<string, { name: string; category: string; total: number; events: Set<string> }>();
+    for (const d of costDetails) {
+      if (!inTypeScope(d.event_type)) continue;
+      const cost = Number(d.line_cost_ht ?? 0);
+      if (cost <= 0) continue;
+      const a = agg.get(d.product_id) ?? { name: d.product_name, category: d.category, total: 0, events: new Set<string>() };
+      a.total += cost;
+      a.events.add(d.event_id);
+      agg.set(d.product_id, a);
+    }
+    return [...agg.entries()]
+      .map(([product_id, a]) => ({
+        product_id,
+        product_name: a.name,
+        category: a.category,
+        nb_events: a.events.size,
+        total_cost_ht: a.total,
+        avg_cost_per_event: a.total / a.events.size,
+      }))
+      .sort((a, b) => b.total_cost_ht - a.total_cost_ht)
+      .slice(0, 10);
+  }, [costDetails, inTypeScope]);
 
   const kpis = useMemo(() => {
     const matches = fbEvents.filter((e) => e.event_type === 'match');
@@ -335,8 +373,12 @@ export default function CostControlPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <KPICard label="F&B moy. / match" value={`${fmt(kpis.avgFbMatch)} €`} sub="HT par match clôturé" />
-        <KPICard label="F&B moy. / séminaire" value={`${fmt(kpis.avgFbSemi)} €`} sub="HT par séminaire clôturé" />
+        {(eventType === 'tous' || eventType === 'match') && (
+          <KPICard label="F&B moy. / match" value={`${fmt(kpis.avgFbMatch)} €`} sub="HT par match clôturé" />
+        )}
+        {(eventType === 'tous' || eventType === 'seminaire') && (
+          <KPICard label="F&B moy. / séminaire" value={`${fmt(kpis.avgFbSemi)} €`} sub="HT par séminaire clôturé" />
+        )}
         <KPICard label="Charges externes totales" value={`${fmt(kpis.totalExt)} €`} sub="Traiteurs + prestataires HT" color="amber" />
         <KPICard label="Marge moyenne" value={`${kpis.avgMarge.toFixed(1)} %`} sub="Sur événements avec CA" color={kpis.avgMarge >= 50 ? 'green' : kpis.avgMarge >= 20 ? 'amber' : 'red'} />
       </div>
@@ -409,7 +451,11 @@ export default function CostControlPage() {
                   </div>
                 );
               })}
-              {products.length === 0 && <p className="py-6 text-center text-sm text-stone-400">Aucun produit chiffré.</p>}
+              {products.length === 0 && (
+                <p className="py-6 text-center text-sm text-stone-400">
+                  Aucun produit chiffré{eventType !== 'tous' ? ` pour ce type d'événement` : ''}.
+                </p>
+              )}
             </div>
           </div>
 

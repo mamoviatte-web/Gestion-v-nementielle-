@@ -197,7 +197,50 @@ export default function MonthlyStaffReportsPage() {
     },
   });
 
-  const reports = reportsQuery.data ?? [];
+  const rawReports = reportsQuery.data ?? [];
+
+  /* -------- Défense anti-orphelins --------
+   * `monthly_staff_reports` est un snapshot SANS clé étrangère vers events :
+   * si un événement est supprimé, ses lignes de rapport persistent (le RPC de
+   * régénération ne purge pas). On recroise ici avec les événements réellement
+   * existants → on masque les rapports 100 % orphelins et on recalcule les
+   * totaux des rapports partiellement orphelins. */
+  const liveEventsQuery = useQuery({
+    queryKey: ['liveEventNames'],
+    queryFn: async (): Promise<Set<string>> => {
+      const { data, error } = await supabase.from('events').select('event_name');
+      if (error) throw error;
+      return new Set((data ?? []).map((e) => (e as { event_name: string }).event_name));
+    },
+  });
+
+  const reports = useMemo<MonthlyReport[]>(() => {
+    const live = liveEventsQuery.data;
+    if (!live) return rawReports; // pas encore chargé : ne rien masquer
+    const cleaned: MonthlyReport[] = [];
+    for (const r of rawReports) {
+      const all = r.events_detail ?? [];
+      const kept = all.filter((d) => live.has(d.event_name));
+      if (all.length > 0 && kept.length === 0) continue; // 100 % orphelin → masquer
+      if (kept.length === all.length) {
+        cleaned.push(r);
+        continue;
+      }
+      // Rapport partiellement orphelin → recalcul depuis les événements survivants.
+      const planned = kept.reduce((s, d) => s + (d.planned_h ?? 0), 0);
+      const actual = kept.reduce((s, d) => s + (d.actual_h ?? 0), 0);
+      const overtime = kept.reduce((s, d) => s + Math.max(0, (d.actual_h ?? 0) - (d.planned_h ?? 0)), 0);
+      cleaned.push({
+        ...r,
+        events_detail: kept,
+        total_events: kept.length,
+        total_planned_h: planned,
+        total_actual_h: actual,
+        total_overtime_h: overtime,
+      });
+    }
+    return cleaned;
+  }, [rawReports, liveEventsQuery.data]);
 
   /* -------- Taux horaires par (agent × espace) pour le coût RH -------- */
   const ratesQuery = useQuery({
