@@ -1,13 +1,7 @@
--- ═══════════════════════════════════════════════════════════════════════
--- Bundle migrations 033 → 042 (ordre d'application).
--- À coller dans Supabase Dashboard → SQL Editor → Run (une seule fois).
--- Généré automatiquement ; chaque bloc reste idempotent.
--- ═══════════════════════════════════════════════════════════════════════
+-- Bundle migrations 033 → 043 (ordre d'application). SQL Editor → Run. Idempotent.
 BEGIN;
 
--- ╭──────────────────────────────────────────────────────────╮
--- │ 20260707090033_zone_roadmaps.sql
--- ╰──────────────────────────────────────────────────────────╯
+-- ── 20260707090033_zone_roadmaps.sql ──
 -- ═══════════════════════════════════════════════════════════════════════════
 -- zone_roadmaps.sql — Feuille de route par espace (brief) : admin remplit,
 -- responsable lit. Pré-initialisée à la création du match → jamais de page vide.
@@ -153,9 +147,7 @@ BEGIN
 END; $$;
 GRANT EXECUTE ON FUNCTION get_zone_roadmap(TEXT) TO anon, authenticated;
 
--- ╭──────────────────────────────────────────────────────────╮
--- │ 20260707090034_space_specificity_dashboard.sql
--- ╰──────────────────────────────────────────────────────────╯
+-- ── 20260707090034_space_specificity_dashboard.sql ──
 -- ═══════════════════════════════════════════════════════════════════════════
 -- space_specificity_dashboard.sql
 --   BLOC 1 — Spécificité espaces par type d'événement (séminaire vs match)
@@ -322,9 +314,7 @@ ALTER VIEW dashboard_kpis              SET (security_invoker = on);
 GRANT SELECT ON dashboard_vip_spaces_status, dashboard_kpis TO authenticated;
 REVOKE SELECT ON dashboard_vip_spaces_status, dashboard_kpis FROM anon;
 
--- ╭──────────────────────────────────────────────────────────╮
--- │ 20260707090035_match_closed_summary.sql
--- ╰──────────────────────────────────────────────────────────╯
+-- ── 20260707090035_match_closed_summary.sql ──
 -- ═══════════════════════════════════════════════════════════════════════════
 -- match_closed_summary.sql — bilan post-match par espace (matchs clôturés).
 --
@@ -428,9 +418,7 @@ ALTER VIEW match_closed_summary SET (security_invoker = on);
 GRANT SELECT ON match_closed_summary TO authenticated;
 REVOKE SELECT ON match_closed_summary FROM anon;
 
--- ╭──────────────────────────────────────────────────────────╮
--- │ 20260707090036_event_planning_phases.sql
--- ╰──────────────────────────────────────────────────────────╯
+-- ── 20260707090036_event_planning_phases.sql ──
 -- ═══════════════════════════════════════════════════════════════════════════
 -- event_planning_phases.sql — planning hebdomadaire dynamique (remplace l'Excel).
 --   BLOC 1 — table des phases opérationnelles + auto-création + backfill
@@ -551,9 +539,7 @@ ALTER VIEW weekly_planning SET (security_invoker = on);
 GRANT SELECT ON weekly_planning TO authenticated;
 REVOKE SELECT ON weekly_planning FROM anon;
 
--- ╭──────────────────────────────────────────────────────────╮
--- │ 20260707090037_event_deletion_cascade.sql
--- ╰──────────────────────────────────────────────────────────╯
+-- ── 20260707090037_event_deletion_cascade.sql ──
 -- ═══════════════════════════════════════════════════════════════════════════
 -- event_deletion_cascade.sql — suppression totale d'un événement + recalcul.
 --   BLOC 2 — ON DELETE CASCADE sur TOUTES les FK → events (dynamique)
@@ -732,9 +718,7 @@ BEGIN
 END; $$;
 GRANT EXECUTE ON FUNCTION delete_event_complete(UUID, TEXT, TEXT) TO authenticated;
 
--- ╭──────────────────────────────────────────────────────────╮
--- │ 20260707090038_coefficients_5match.sql
--- ╰──────────────────────────────────────────────────────────╯
+-- ── 20260707090038_coefficients_5match.sql ──
 -- ═══════════════════════════════════════════════════════════════════════════
 -- coefficients_5match.sql — Base runner 2026-2027 : coefficients réels 5 matchs.
 --
@@ -1101,9 +1085,7 @@ ALTER VIEW v_runner_sheet SET (security_invoker = on);
 GRANT SELECT ON v_runner_sheet TO authenticated;
 REVOKE SELECT ON v_runner_sheet FROM anon;  -- RG-003 : prix/coûts admin only
 
--- ╭──────────────────────────────────────────────────────────╮
--- │ 20260707090039_terrasse_zones.sql
--- ╰──────────────────────────────────────────────────────────╯
+-- ── 20260707090039_terrasse_zones.sql ──
 -- ═══════════════════════════════════════════════════════════════════════════
 -- terrasse_zones.sql — Terrasses T2→T5 (modèle sous-zones), match uniquement.
 --
@@ -1187,9 +1169,7 @@ BEGIN
 END; $$;
 GRANT EXECUTE ON FUNCTION get_terrasse_zones_for_match(TEXT) TO anon, authenticated;
 
--- ╭──────────────────────────────────────────────────────────╮
--- │ 20260707090040_coefficients_orphan_fix.sql
--- ╰──────────────────────────────────────────────────────────╯
+-- ── 20260707090040_coefficients_orphan_fix.sql ──
 -- ═══════════════════════════════════════════════════════════════════════════
 -- coefficients_orphan_fix.sql — purge des coefficients orphelins à la
 -- suppression d'un événement + reset total + exclusion des simulations.
@@ -1316,9 +1296,7 @@ CREATE TRIGGER trg_after_event_delete AFTER DELETE ON events
 -- Nettoyage immédiat de l'état actuel (purge des orphelins de simulation).
 SELECT compute_space_coefficients();
 
--- ╭──────────────────────────────────────────────────────────╮
--- │ 20260707090041_match_access_realtime.sql
--- ╰──────────────────────────────────────────────────────────╯
+-- ── 20260707090041_match_access_realtime.sql ──
 -- ═══════════════════════════════════════════════════════════════════════════
 -- match_access_realtime.sql — Présence live des responsables de zone.
 --   Heartbeat (ping_session), déconnexion propre (leave_session), Realtime.
@@ -1411,9 +1389,7 @@ EXCEPTION
   WHEN undefined_object THEN NULL;  -- publication absente (env local) → ignoré
 END $$;
 
--- ╭──────────────────────────────────────────────────────────╮
--- │ 20260707090042_staff_hors_event.sql
--- ╰──────────────────────────────────────────────────────────╯
+-- ── 20260707090042_staff_hors_event.sql ──
 -- ═══════════════════════════════════════════════════════════════════════════
 -- staff_hors_event.sql — Personnel intervenant HORS événement (manutention,
 -- nettoyage, technique, reporting, sécurité, logistique, prestataires…).
@@ -1540,5 +1516,47 @@ ALTER VIEW she_by_role  SET (security_invoker = on);
 
 GRANT SELECT ON she_kpis, she_by_month, she_by_role TO authenticated;
 REVOKE SELECT ON she_kpis, she_by_month, she_by_role FROM anon;
+
+-- ── 20260707090043_coefficients_seed_recompute.sql ──
+-- ═══════════════════════════════════════════════════════════════════════════
+-- coefficients_seed_recompute.sql — recalcule la colonne `coefficient` des
+-- lignes seed (base « 5 matchs », migration 038).
+--
+-- Problème corrigé : inject_5match_coefficients() (038) ne remplissait PAS la
+-- colonne `coefficient` → elle valait 1.00 par défaut pour les 179 lignes, et
+-- la page Coefficients (vue v_space_dotation_recommendations → coeff_espace)
+-- affichait « ×1.00 » partout (dont Bistrot/Bodega).
+--
+-- Correctif : coefficient = conso moyenne de l'espace / moyenne du PROFIL
+-- d'espace (space_profile) pour ce produit — cohérent avec
+-- compute_space_coefficients (040). NON destructif : aucune ligne supprimée,
+-- la base de référence est conservée. Idempotent / re-jouable.
+--
+-- ⚠ Déjà appliqué en production le 2026-08-05 via l'API REST (DML autorisée
+--   par la clé service_role). Ce fichier assure la reproductibilité d'un
+--   rebuild complet depuis les migrations.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+WITH profile_avg AS (
+  SELECT space_profile(s.space_name) AS profile,
+         spc.product_id,
+         AVG(spc.avg_consumption) AS type_avg
+  FROM space_product_coefficients spc
+  JOIN spaces s ON s.space_id = spc.space_id
+  WHERE COALESCE(spc.source, 'computed') = 'seed'
+    AND spc.avg_consumption > 0
+  GROUP BY space_profile(s.space_name), spc.product_id
+)
+UPDATE space_product_coefficients spc
+SET coefficient = CASE
+      WHEN COALESCE(pa.type_avg, 0) > 0
+        THEN ROUND((spc.avg_consumption / pa.type_avg)::numeric, 2)
+      ELSE 1.00 END,
+    last_computed_at = now()
+FROM spaces s
+JOIN profile_avg pa ON pa.profile = space_profile(s.space_name)
+WHERE s.space_id = spc.space_id
+  AND pa.product_id = spc.product_id
+  AND COALESCE(spc.source, 'computed') = 'seed';
 
 COMMIT;
