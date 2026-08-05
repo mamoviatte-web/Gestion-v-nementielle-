@@ -36,6 +36,25 @@ export default {
       borderRadius: {
         DEFAULT: '8px',
       },
+      keyframes: {
+        slideDown: {
+          '0%': { opacity: '0', transform: 'scaleY(0)' },
+          '100%': { opacity: '1', transform: 'scaleY(1)' },
+        },
+        slideUp: {
+          '0%': { transform: 'translateY(100%)' },
+          '100%': { transform: 'translateY(0)' },
+        },
+        fadeSlideIn: {
+          '0%': { opacity: '0', transform: 'translateX(-8px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
+      },
+      animation: {
+        slideDown: 'slideDown 0.25s ease forwards',
+        slideUp: 'slideUp 0.25s cubic-bezier(0.32,0.72,0,1) forwards',
+        fadeSlideIn: 'fadeSlideIn 0.2s ease forwards',
+      },
     },
   },
   plugins: [],
