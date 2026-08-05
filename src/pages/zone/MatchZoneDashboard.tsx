@@ -61,6 +61,9 @@ export default function MatchZoneDashboard() {
     ...(nbBuvettes > 0
       ? [{ icon: '🍺', title: 'Gérer mes buvettes', subtitle: 'Stocks & pointage des buvettes', path: 'buvettes' }]
       : []),
+    ...(session.space_name === 'Terrasses'
+      ? [{ icon: '🌿', title: 'Terrasses VIP', subtitle: 'Sous-zones T2→T5 activées pour ce match', path: 'terrasses' }]
+      : []),
     { icon: '📋', title: 'Feuille de route', subtitle: 'Dotations prévues pour votre espace', path: 'roadmap' },
     { icon: '📦', title: 'Stocks', subtitle: 'Saisir stock initial, réassort et final', path: 'stocks', status: status.stocks },
     { icon: '⏱', title: 'Horaires de l\'équipe', subtitle: 'Recenser vos agents et leurs heures réelles', path: 'rh', status: status.schedules },

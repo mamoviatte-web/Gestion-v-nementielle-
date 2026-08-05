@@ -57,6 +57,7 @@ const MatchZoneRoadmap = lazy(() => import('@/pages/zone/MatchZoneRoadmap'));
 const MatchZoneStocks = lazy(() => import('@/pages/zone/MatchZoneStocks'));
 const MatchZoneSchedule = lazy(() => import('@/pages/zone/MatchZoneSchedule'));
 const MatchZoneDebrief = lazy(() => import('@/pages/zone/MatchZoneDebrief'));
+const TerrasseSupervisorPage = lazy(() => import('@/pages/zone/TerrasseSupervisorPage'));
 const BuvetteSupervisorPage = lazy(() => import('@/pages/zone/BuvetteSupervisorPage'));
 const BuvetteDetailPage = lazy(() => import('@/pages/zone/BuvetteDetailPage'));
 const ZoneStaffHoursPage = lazy(() => import('@/pages/zone/ZoneStaffHoursPage'));
@@ -92,6 +93,7 @@ export default function App() {
         <Route path="/zone/match/:sessionToken/stocks" element={<MatchZoneStocks />} />
         <Route path="/zone/match/:sessionToken/schedules" element={<MatchZoneSchedule />} />
         <Route path="/zone/match/:sessionToken/debrief" element={<MatchZoneDebrief />} />
+        <Route path="/zone/match/:sessionToken/terrasses" element={<TerrasseSupervisorPage />} />
         <Route path="/zone/match/:sessionToken/buvettes" element={<BuvetteSupervisorPage />} />
         <Route path="/zone/match/:sessionToken/buvette/:spaceId" element={<BuvetteDetailPage />} />
         <Route path="/zone/match/:sessionToken/rh" element={<ZoneStaffHoursPage />} />
