@@ -844,4 +844,6 @@ export interface EventCreationDraft {
   selected_space_ids: string[];
   /** Pax attendus par espace (matchs VIP/Bar) — clé = space_id. */
   space_pax?: Record<string, number>;
+  /** Match de simulation : exclu des calculs de coefficients (match uniquement). */
+  is_simulation?: boolean;
 }

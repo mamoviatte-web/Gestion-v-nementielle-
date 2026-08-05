@@ -106,6 +106,17 @@ export function useEventCreation() {
       if (error) throw error;
       const eventId = ev.event_id as string;
 
+      // Match de simulation : best-effort (la colonne is_simulation peut ne pas
+      // être encore provisionnée). On tag après création pour ne rien casser si
+      // la migration coefficients_orphan_fix (040) n'est pas appliquée.
+      if (draft.event_type === 'match' && draft.is_simulation) {
+        const { error: simErr } = await supabase
+          .from('events')
+          .update({ is_simulation: true })
+          .eq('event_id', eventId);
+        if (simErr && !/is_simulation|column/i.test(simErr.message)) throw simErr;
+      }
+
       let spaceIds: string[];
       if (draft.event_type === 'match') {
         // Match = tous les espaces actifs s'activent automatiquement.

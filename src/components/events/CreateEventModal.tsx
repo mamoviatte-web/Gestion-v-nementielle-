@@ -45,6 +45,7 @@ export function CreateEventModal({
   const [paxBySpace, setPaxBySpace] = useState<Record<string, number>>({});
   const [terrassesEnabled, setTerrassesEnabled] = useState(false);
   const [activeTerrasseZones, setActiveTerrasseZones] = useState<string[]>([]);
+  const [isSimulation, setIsSimulation] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isMatch = type === 'match';
@@ -90,6 +91,7 @@ export function CreateEventModal({
         expected_attendees: Number(attendees) || 0,
         selected_space_ids: [...selected],
         space_pax: isMatch ? paxBySpace : undefined,
+        is_simulation: isMatch ? isSimulation : undefined,
       });
       // Terrasses (match) : persister les sous-zones activées (best-effort ;
       // ignoré proprement si la table event_terrasse_zones n'est pas déployée).
@@ -223,6 +225,20 @@ export function CreateEventModal({
                         value={attendees}
                         onChange={(e) => setAttendees(e.target.value)}
                       />
+                      <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-pr-stone bg-pr-cream/40 px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={isSimulation}
+                          onChange={(e) => setIsSimulation(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded accent-pr-black"
+                        />
+                        <span>
+                          <span className="block text-sm font-semibold text-pr-black">Match de simulation</span>
+                          <span className="block text-xs text-pr-black-soft/60">
+                            Exclu des calculs de coefficients de consommation, même une fois clôturé.
+                          </span>
+                        </span>
+                      </label>
                     </div>
                   </details>
                 </>

@@ -68,6 +68,11 @@ RETURNS TEXT LANGUAGE sql IMMUTABLE AS $$
 $$;
 
 -- ── BLOC C : injection ──────────────────────────────────────────────────────
+-- La base injectée est tagguée source='seed' : la purge d'orphelins et le reset
+-- total (coefficients_orphan_fix / 040) ne touchent QUE les lignes 'computed'.
+-- On ajoute la colonne défensivement (038 s'exécute avant 040).
+ALTER TABLE space_product_coefficients ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'computed';
+
 CREATE OR REPLACE FUNCTION inject_5match_coefficients()
 RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $$
 DECLARE
@@ -304,14 +309,14 @@ BEGIN
 
       INSERT INTO space_product_coefficients (
         space_id, product_id, avg_consumption, max_consumption, min_consumption,
-        total_matches, confidence_level, recommended_qty
+        total_matches, confidence_level, recommended_qty, source
       ) VALUES (
         v_sp, v_pd, rec.avg_c, rec.max_c, rec.min_c, rec.n_match,
         CASE WHEN rec.n_match >= 5 THEN 'très élevé'
              WHEN rec.n_match >= 4 THEN 'élevé'
              WHEN rec.n_match >= 3 THEN 'moyen'
              ELSE 'faible' END,
-        ROUND(rec.avg_c * 1.20)
+        ROUND(rec.avg_c * 1.20), 'seed'
       )
       ON CONFLICT (space_id, product_id) DO UPDATE SET
         avg_consumption  = EXCLUDED.avg_consumption,
@@ -320,6 +325,7 @@ BEGIN
         total_matches    = EXCLUDED.total_matches,
         confidence_level = EXCLUDED.confidence_level,
         recommended_qty  = EXCLUDED.recommended_qty,
+        source           = 'seed',
         last_computed_at = now();
       v_ok := v_ok + 1;
     END;

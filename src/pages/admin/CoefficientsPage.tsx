@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, RotateCcw, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface Row {
@@ -50,6 +50,9 @@ export default function CoefficientsPage() {
   const [data, setData] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [computing, setComputing] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const [filterSpace, setFilterSpace] = useState('');
   const [filterCat, setFilterCat] = useState('');
   const [sortBy, setSortBy] = useState<'coeff_desc' | 'coeff_asc' | 'moy'>('coeff_desc');
@@ -72,9 +75,25 @@ export default function CoefficientsPage() {
 
   async function recompute() {
     setComputing(true);
-    await supabase.rpc('compute_space_coefficients');
+    setFeedback(null);
+    const { data: res, error } = await supabase.rpc('compute_space_coefficients');
     await fetchData();
     setComputing(false);
+    if (error) setFeedback(`Erreur : ${error.message}`);
+    else if (res && typeof res === 'object' && 'message' in res) setFeedback(String((res as { message?: unknown }).message ?? 'Recalcul terminé.'));
+    else setFeedback('Recalcul terminé.');
+  }
+
+  async function resetAll() {
+    setResetting(true);
+    setFeedback(null);
+    const { data: res, error } = await supabase.rpc('reset_all_coefficients');
+    await fetchData();
+    setResetting(false);
+    setShowReset(false);
+    if (error) setFeedback(`Erreur : ${error.message}`);
+    else if (res && typeof res === 'object' && 'message' in res) setFeedback(String((res as { message?: unknown }).message ?? 'Reset terminé.'));
+    else setFeedback('Reset terminé.');
   }
 
   const spaces = useMemo(() => [...new Set(data.map((d) => d.space_name))].sort(), [data]);
@@ -102,10 +121,42 @@ export default function CoefficientsPage() {
           </div>
           <p className="ml-3.5 mt-1 text-sm text-stone-400">Dotations intelligentes par espace spécifique · historique des matchs clôturés</p>
         </div>
-        <button onClick={() => void recompute()} disabled={computing} className="flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
-          <RefreshCw size={14} className={computing ? 'animate-spin' : ''} /> {computing ? 'Recalcul…' : 'Recalculer'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => void recompute()} disabled={computing || resetting} className="flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
+            <RefreshCw size={14} className={computing ? 'animate-spin' : ''} /> {computing ? 'Recalcul…' : 'Recalculer'}
+          </button>
+          <button onClick={() => setShowReset(true)} disabled={computing || resetting} className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 disabled:opacity-40">
+            <RotateCcw size={14} /> Reset total
+          </button>
+        </div>
       </div>
+
+      {feedback && (
+        <div className="rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-600 shadow-sm">{feedback}</div>
+      )}
+
+      {showReset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !resetting && setShowReset(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600"><AlertTriangle size={20} /></div>
+              <h3 className="text-lg font-black text-stone-900">Reset total des coefficients</h3>
+            </div>
+            <p className="mb-2 text-sm text-stone-600">
+              Cette action efface tous les coefficients <strong>calculés</strong> puis les recalcule intégralement à partir des matchs clôturés (hors simulations).
+            </p>
+            <p className="mb-5 text-sm text-stone-500">
+              La base de référence injectée (5 matchs, <em>seed</em>) est <strong>préservée</strong>. Les orphelins issus de simulations ou d'événements supprimés sont éliminés.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowReset(false)} disabled={resetting} className="flex-1 rounded-xl border border-stone-200 py-3 text-sm font-medium text-stone-600 disabled:opacity-40">Annuler</button>
+              <button onClick={() => void resetAll()} disabled={resetting} className="flex-1 rounded-xl bg-red-600 py-3 text-sm font-bold text-white disabled:opacity-40">
+                {resetting ? 'Reset en cours…' : 'Confirmer le reset'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
