@@ -6,14 +6,16 @@
  * Données : hook useRhData (vues rh_* réservées ROLE_STADE — RG-003).
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bar, Cell, ComposedChart, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { AlertTriangle, Calendar, CheckCircle, Download, Users } from 'lucide-react';
 import { PeriodSelector, buildPeriod, type Period } from '@/components/rh/PeriodSelector';
+import { HorsEventSection } from '@/components/rh/HorsEventSection';
 import { useRhData, type EventKpi } from '@/hooks/useRhData';
+import { supabase } from '@/lib/supabase';
 
 const OR_PR = '#C9A646';
 const BLEU_NUIT = '#1A1A2E';
@@ -33,6 +35,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 type EventTab = 'match' | 'seminaire';
+type MainTab = EventTab | 'hors_event';
 type ActiveTab = 'synthese' | 'par_agent' | 'par_espace' | 'par_evenement' | 'cumul' | 'alertes' | 'export';
 
 const initials = (nom: string) => nom.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
@@ -56,11 +59,29 @@ function Kpi({ label, value, unit, sub, icon, accent }: { label: string; value: 
 
 export default function StaffRHPage() {
   const navigate = useNavigate();
-  const [eventTab, setEventTab] = useState<EventTab>('match');
+  const [mainTab, setMainTab] = useState<MainTab>('match');
+  const eventTab: EventTab = mainTab === 'hors_event' ? 'match' : mainTab;
+  const isHorsEvent = mainTab === 'hors_event';
   const [tab, setTab] = useState<ActiveTab>('synthese');
   const [period, setPeriod] = useState<Period>(() => buildPeriod('annee'));
+  const [horsCount, setHorsCount] = useState(0);
 
   const { kpis, espaces, agents, unified, byMonth, globalKpis, matchCount, semiCount, loading } = useRhData(eventTab, period);
+
+  // Compteur d'interventions hors-événement sur la période (badge du toggle).
+  // Dégrade à 0 si la table n'est pas encore provisionnée (migration 042).
+  useEffect(() => {
+    let active = true;
+    const s = period.startDate.toISOString().slice(0, 10);
+    const e = period.endDate.toISOString().slice(0, 10);
+    void supabase
+      .from('staff_hors_event')
+      .select('id', { count: 'exact', head: true })
+      .gte('work_date', s)
+      .lte('work_date', e)
+      .then(({ count }) => { if (active) setHorsCount(count ?? 0); });
+    return () => { active = false; };
+  }, [period]);
 
   const uniqEspacesList = useMemo(() => [...new Map(espaces.map((e) => [e.space_id, e])).values()], [espaces]);
 
@@ -114,12 +135,16 @@ export default function StaffRHPage() {
           </button>
         </div>
 
-        {/* Toggle Match / Séminaire */}
+        {/* Toggle Matchs / Séminaires / Hors événement */}
         <div className="flex flex-wrap items-center gap-3">
-          {([{ key: 'match', label: '🏉 Matchs', count: matchCount }, { key: 'seminaire', label: '📋 Séminaires', count: semiCount }] as const).map((et) => (
-            <button key={et.key} onClick={() => setEventTab(et.key)} className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all ${eventTab === et.key ? 'text-white shadow' : 'border border-stone-200 bg-white text-stone-600 hover:bg-stone-50'}`} style={eventTab === et.key ? { background: BLEU_NUIT } : {}}>
+          {([
+            { key: 'match', label: '🏉 Matchs', count: matchCount },
+            { key: 'seminaire', label: '📋 Séminaires', count: semiCount },
+            { key: 'hors_event', label: '🔧 Hors événement', count: horsCount },
+          ] as const).map((et) => (
+            <button key={et.key} onClick={() => setMainTab(et.key)} className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all ${mainTab === et.key ? 'text-white shadow' : 'border border-stone-200 bg-white text-stone-600 hover:bg-stone-50'}`} style={mainTab === et.key ? { background: BLEU_NUIT } : {}}>
               {et.label}
-              <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${eventTab === et.key ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>{et.count}</span>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${mainTab === et.key ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-500'}`}>{et.count}</span>
             </button>
           ))}
         </div>
@@ -128,11 +153,15 @@ export default function StaffRHPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <PeriodSelector value={period} onChange={setPeriod} />
           <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-400">
-            {kpis.length} événement{kpis.length > 1 ? 's' : ''} · <span className="capitalize">{period.label}</span>
+            {isHorsEvent
+              ? <>{horsCount} intervention{horsCount > 1 ? 's' : ''} · <span className="capitalize">{period.label}</span></>
+              : <>{kpis.length} événement{kpis.length > 1 ? 's' : ''} · <span className="capitalize">{period.label}</span></>}
           </div>
         </div>
 
-        {loading ? (
+        {isHorsEvent ? (
+          <HorsEventSection period={period} />
+        ) : loading ? (
           <div className="space-y-4">{[...Array(3)].map((_, i) => <div key={i} className="h-32 animate-pulse rounded-2xl bg-stone-100" />)}</div>
         ) : !globalKpis ? (
           <div className="rounded-2xl border border-stone-100 bg-white p-12 text-center">
