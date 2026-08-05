@@ -6,8 +6,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle, ChevronDown, ChevronRight, Lock, LogOut, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle, ChevronDown, ChevronRight, Lock, LogOut, Plus, Sparkles, Trash2, RefreshCw, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { ExcelRHImporter, type ExtractedAgent } from '@/components/rh/ExcelRHImporter';
+import { AgentSwapModal, type SwapTarget } from '@/components/rh/AgentSwapModal';
 
 const ROLES = ['Serveur', 'Chef de rang', 'Barman', 'Agent de sécurité', 'Runner', 'Hôte / Hôtesse', 'Responsable espace', 'Autre'];
 const ROLE_ICONS: Record<string, string> = {
@@ -31,6 +33,9 @@ export default function RHPlanningPage() {
   const [loading, setLoading] = useState(true);
   const [locking, setLocking] = useState(false);
   const [openSpaces, setOpenSpaces] = useState<Set<string>>(new Set());
+  const [showImporter, setShowImporter] = useState(false);
+  const [importBanner, setImportBanner] = useState<string | null>(null);
+  const [swapAgent, setSwapAgent] = useState<SwapTarget | null>(null);
 
   const loadPreplan = useCallback(async () => {
     const { data } = await supabase.rpc('rh_get_preplan_by_token', { p_token: token });
@@ -88,6 +93,25 @@ export default function RHPlanningPage() {
     navigate('/login');
   }
 
+  const rhSpaces = (preplan?.by_space ?? []).map((s) => ({ space_id: s.space_id, space_name: s.space_name }));
+
+  async function handleAgentsImported(imported: ExtractedAgent[]) {
+    let ok = 0;
+    let ko = 0;
+    for (const a of imported) {
+      if (!a.space_id || !a.nom || !a.prenom) { ko++; continue; }
+      const { data } = await supabase.rpc('rh_upsert_agent_by_token', {
+        p_token: token, p_space_id: a.space_id, p_agent_id: null,
+        p_nom: a.nom, p_prenom: a.prenom, p_role: a.role,
+        p_start: a.start_time || '00:00', p_end: a.end_time || null, p_rate: a.hourly_rate,
+      });
+      if ((data as { success?: boolean } | null)?.success) ok += 1; else ko += 1;
+    }
+    setShowImporter(false);
+    setImportBanner(`✅ ${ok} agent(s) importé(s)${ko > 0 ? ` · ⚠️ ${ko} non importé(s)` : ''}`);
+    await loadPreplan();
+  }
+
   if (loading)
     return (
       <div className="flex min-h-screen items-center justify-center bg-stone-50">
@@ -130,6 +154,22 @@ export default function RHPlanningPage() {
             <p className={`mt-0.5 text-xs ${isLocked ? 'text-green-600' : 'text-stone-400'}`}>{isLocked ? 'Transmis aux zones' : 'En préparation'}</p>
           </div>
         </div>
+
+        {importBanner && (
+          <div className="flex items-center justify-between rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+            <p className="text-sm font-semibold text-green-800">{importBanner}</p>
+            <button onClick={() => setImportBanner(null)} className="text-green-500 hover:text-green-700"><X size={16} /></button>
+          </div>
+        )}
+
+        {!isLocked && (
+          <button
+            onClick={() => setShowImporter(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 py-3.5 text-sm font-bold text-stone-900 shadow-sm transition-all hover:from-amber-500 hover:to-amber-600"
+          >
+            <Sparkles size={16} /> 📊 Importer le planning Excel prestataire
+          </button>
+        )}
 
         {!isLocked && totalPlanifies > 0 && (
           <button onClick={() => void lockPreplan()} disabled={locking} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-stone-900 py-4 text-base font-bold text-white transition-colors hover:bg-stone-700 disabled:opacity-40">
@@ -182,7 +222,16 @@ export default function RHPlanningPage() {
                         <p className="truncate text-xs text-stone-400">{ROLE_ICONS[agent.role]} {agent.role} · {agent.planned_start?.slice(0, 5)}{agent.planned_end ? ` → ${agent.planned_end.slice(0, 5)}` : ''}</p>
                       </div>
                       {!isLocked && (
-                        <button onClick={() => void deleteAgent(agent.id)} className="shrink-0 p-1 text-stone-300 transition-colors hover:text-red-400"><Trash2 size={14} /></button>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            onClick={() => setSwapAgent({ id: agent.id, prenom: agent.prenom, nom: agent.nom, role: agent.role, space_id: space.space_id, space_name: space.space_name })}
+                            title="Remplacer / retirer (no-show)"
+                            className="p-1 text-stone-300 transition-colors hover:text-amber-500"
+                          >
+                            <RefreshCw size={14} />
+                          </button>
+                          <button onClick={() => void deleteAgent(agent.id)} className="p-1 text-stone-300 transition-colors hover:text-red-400"><Trash2 size={14} /></button>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -193,6 +242,28 @@ export default function RHPlanningPage() {
           );
         })}
       </div>
+
+      {showImporter && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 md:items-center">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+            <ExcelRHImporter token={token} spaces={rhSpaces} onImported={handleAgentsImported} onClose={() => setShowImporter(false)} />
+          </div>
+        </div>
+      )}
+
+      {swapAgent && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 md:items-center">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl">
+            <h3 className="mb-4 font-bold text-stone-900">Gestion absence / remplacement</h3>
+            <AgentSwapModal
+              absentAgent={swapAgent}
+              token={token}
+              onDone={() => { setSwapAgent(null); void loadPreplan(); }}
+              onClose={() => setSwapAgent(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
