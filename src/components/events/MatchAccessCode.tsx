@@ -3,17 +3,12 @@
  * boutons copier code/lien + QR, et la liste temps réel des responsables connectés.
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/context/ToastContext';
-
-interface ConnectedSession {
-  id: string;
-  staff_name: string;
-  space?: { space_name: string; service_type: string | null } | null;
-}
+import { LivePresence } from '@/components/events/LivePresence';
 
 function matchUrl(code: string): string {
   return `${window.location.origin}/match/${code}`;
@@ -96,68 +91,9 @@ export function MatchAccessCode({ eventId, code, eventName }: { eventId: string;
         </div>
       </div>
 
-      <ConnectedStaffList eventId={eventId} />
+      <LivePresence eventId={eventId} />
 
       {showQR && <QRCodeModal code={code} eventName={eventName} onClose={() => setShowQR(false)} />}
-    </div>
-  );
-}
-
-function ConnectedStaffList({ eventId }: { eventId: string }) {
-  const [sessions, setSessions] = useState<ConnectedSession[]>([]);
-
-  useEffect(() => {
-    let active = true;
-    void supabase
-      .from('match_access_sessions')
-      .select('id, staff_name, space:spaces(space_name, service_type)')
-      .eq('event_id', eventId)
-      .eq('is_active', true)
-      .then(({ data }) => {
-        if (active) setSessions((data ?? []) as unknown as ConnectedSession[]);
-      });
-
-    const channel = supabase
-      .channel(`sessions-${eventId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'match_access_sessions', filter: `event_id=eq.${eventId}` },
-        (payload) => {
-          const row = payload.new as { id: string; staff_name: string };
-          setSessions((prev) => (prev.some((s) => s.id === row.id) ? prev : [...prev, { id: row.id, staff_name: row.staff_name }]));
-        },
-      )
-      .subscribe();
-
-    return () => {
-      active = false;
-      void supabase.removeChannel(channel);
-    };
-  }, [eventId]);
-
-  if (sessions.length === 0) {
-    return <p className="mt-4 text-center text-xs text-pr-black-soft/40">Aucun responsable connecté pour l'instant</p>;
-  }
-
-  return (
-    <div className="mt-4 border-t border-pr-stone/60 pt-4">
-      <p className="mb-2 text-xs uppercase tracking-wide text-pr-black-soft/40">
-        {sessions.length} responsable{sessions.length > 1 ? 's' : ''} connecté{sessions.length > 1 ? 's' : ''}
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {sessions.map((s) => (
-          <div key={s.id} className="flex items-center gap-2 rounded-full border border-pr-stone bg-white px-3 py-1.5 text-sm">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            <span className="font-medium">{s.staff_name}</span>
-            {s.space?.space_name && (
-              <>
-                <span className="text-pr-black-soft/40">·</span>
-                <span className="text-pr-black-soft/60">{s.space.space_name}</span>
-              </>
-            )}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

@@ -4,7 +4,8 @@
  */
 
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, RefreshCcw } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import type { MatchSession } from '@/hooks/useMatchSession';
 
 const SPACE_BADGE: Record<string, string> = {
@@ -16,6 +17,13 @@ const SPACE_BADGE: Record<string, string> = {
 export function MatchZoneHeader({ session, back }: { session: MatchSession; back?: boolean }) {
   const navigate = useNavigate();
   const st = session.service_type;
+
+  async function changeSpace() {
+    // Déconnexion propre de la session courante avant de rechoisir un espace.
+    await supabase.rpc('leave_session', { p_token: session.session_token });
+    navigate(session.match_access_code ? `/match/${session.match_access_code}` : '/');
+  }
+
   return (
     <header className="bg-[#1a1a2e] text-white">
       <div className="flex items-center gap-3 px-4 py-3">
@@ -39,6 +47,12 @@ export function MatchZoneHeader({ session, back }: { session: MatchSession; back
           </span>
         )}
       </div>
+      <button
+        onClick={() => void changeSpace()}
+        className="flex w-full items-center justify-center gap-1.5 border-t border-white/10 py-2 text-xs text-white/60 transition-colors hover:text-white"
+      >
+        <RefreshCcw className="h-3.5 w-3.5" /> Changer d'espace
+      </button>
     </header>
   );
 }

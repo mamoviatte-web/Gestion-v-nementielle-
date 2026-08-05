@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 
 export interface MatchSession {
   success: boolean;
@@ -14,6 +15,7 @@ export interface MatchSession {
   event_id: string;
   event_name: string;
   event_date: string;
+  match_access_code: string | null;
   space_id: string;
   space_name: string;
   service_type: 'vip' | 'bar' | 'buvette' | 'bodega' | null;
@@ -41,6 +43,9 @@ export function useMatchSession() {
       cancelled = true;
     };
   }, [sessionToken]);
+
+  // Présence live : heartbeat pour toutes les pages zone (centralisé ici).
+  useSessionHeartbeat(sessionToken);
 
   return { token: sessionToken ?? '', session, loading };
 }
