@@ -6,11 +6,12 @@
  */
 
 import { useMemo, useState } from 'react';
-import { X, ArrowLeft, ArrowRight, Plus, Zap, FileText } from 'lucide-react';
+import { X, ArrowLeft, ArrowRight, Plus, FileText } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useSpaces } from '@/hooks/useSpaces';
 import { useEventCreation } from '@/hooks/useEventCreation';
 import { EVENT_TYPE_META, EVENT_TYPES } from '@/lib/eventTypes';
+import { EventSpaceSelector } from '@/components/events/EventSpaceSelector';
 import { Alert, Button, Input, Select } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import type { EventType, Space, SpaceType } from '@/lib/types';
@@ -45,6 +46,7 @@ export function CreateEventModal({
   const [paxBySpace, setPaxBySpace] = useState<Record<string, number>>({});
   const [terrassesEnabled, setTerrassesEnabled] = useState(false);
   const [activeTerrasseZones, setActiveTerrasseZones] = useState<string[]>([]);
+  const [buvettesEnabled, setBuvettesEnabled] = useState(true);
   const [isSimulation, setIsSimulation] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,6 +77,14 @@ export function CreateEventModal({
     setSelected((prev) => {
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  }
+
+  function toggleMany(ids: string[], check: boolean) {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      ids.forEach((id) => (check ? n.add(id) : n.delete(id)));
       return n;
     });
   }
@@ -265,73 +275,19 @@ export function CreateEventModal({
             <div className="space-y-4">
               {isMatch ? (
                 <>
-                  <Alert variant="success">
-                    <Zap className="mr-1 inline h-4 w-4" />
-                    Match = tous les espaces du stade s'activent automatiquement.
-                  </Alert>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-pr-olive-dark">
-                      {selected.size}/{selectableSpaces.length} espaces ouverts
-                    </p>
-                    <button
-                      className="text-sm font-medium text-pr-olive hover:underline"
-                      onClick={() =>
-                        setSelected(
-                          selected.size === selectableSpaces.length
-                            ? new Set()
-                            : new Set(selectableSpaces.map((s) => s.space_id)),
-                        )
-                      }
-                    >
-                      {selected.size === selectableSpaces.length ? 'Tout désélectionner' : 'Tout activer'}
-                    </button>
-                  </div>
-                  <SpaceGrid spaces={selectableSpaces} selected={selected} onToggle={toggle} />
-
-                  {/* ── Terrasses VIP (MATCH uniquement) : sous-zones T2→T5 ── */}
-                  <div className="mt-4 border-t border-pr-stone pt-4">
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="text-base">🌿</span>
-                      <div>
-                        <p className="text-sm font-semibold text-pr-black">Terrasses VIP</p>
-                        <p className="text-xs text-pr-black-soft/50">Prestations supplémentaires — activez les zones selon le match</p>
-                      </div>
-                    </div>
-                    <label className="mb-3 flex cursor-pointer items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={terrassesEnabled}
-                        onChange={(e) => {
-                          setTerrassesEnabled(e.target.checked);
-                          if (!e.target.checked) setActiveTerrasseZones([]);
-                        }}
-                        className="h-4 w-4 rounded accent-pr-black"
-                      />
-                      <span className="text-sm font-semibold text-pr-black">Activer les terrasses pour ce match</span>
-                    </label>
-                    {terrassesEnabled && (
-                      <div className="ml-6 grid grid-cols-2 gap-2">
-                        {(['T2', 'T3', 'T4', 'T5'] as const).map((code) => (
-                          <label key={code} className="flex cursor-pointer items-center gap-2 rounded-xl border border-pr-stone bg-pr-cream/40 px-3 py-2.5 transition-colors hover:bg-pr-cream">
-                            <input
-                              type="checkbox"
-                              checked={activeTerrasseZones.includes(code)}
-                              onChange={(e) =>
-                                setActiveTerrasseZones((prev) => (e.target.checked ? [...prev, code] : prev.filter((z) => z !== code)))
-                              }
-                              className="h-4 w-4 rounded accent-pr-black"
-                            />
-                            <div>
-                              <p className="text-sm font-semibold text-pr-black">Terrasse {code}</p>
-                              <p className="text-xs text-pr-black-soft/50">
-                                {code === 'T2' ? 'Tribune gauche' : code === 'T3' ? 'Tribune centre' : code === 'T4' ? 'Tribune droite' : 'Côté virage'}
-                              </p>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <EventSpaceSelector
+                    eventType={type}
+                    spaces={selectableSpaces}
+                    selected={selected}
+                    onToggle={toggle}
+                    onToggleMany={toggleMany}
+                    buvettesEnabled={buvettesEnabled}
+                    setBuvettesEnabled={setBuvettesEnabled}
+                    terrassesEnabled={terrassesEnabled}
+                    setTerrassesEnabled={setTerrassesEnabled}
+                    activeTerrasseZones={activeTerrasseZones}
+                    setActiveTerrasseZones={setActiveTerrasseZones}
+                  />
 
                   {/* Pax attendus par espace VIP / Bar activé (capacité fixe). */}
                   {(() => {
