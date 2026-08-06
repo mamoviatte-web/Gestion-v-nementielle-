@@ -299,13 +299,18 @@ CREATE OR REPLACE VIEW dashboard_kpis AS
 SELECT
   COUNT(*) FILTER (WHERE status <> 'archivé')                       AS total_evenements,
   COUNT(*) FILTER (WHERE status = 'en_cours')                       AS en_cours,
+  -- Bornes HAUTES obligatoires : event_date est une DATE (aucun fuseau). Sans
+  -- borne supérieure, un match du mois/année suivant était compté « ce mois ».
   COUNT(*) FILTER (WHERE event_type = 'match'
-    AND event_date >= DATE_TRUNC('month', CURRENT_DATE))            AS matchs_ce_mois,
+    AND event_date >= DATE_TRUNC('month', CURRENT_DATE)::date
+    AND event_date <  (DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month')::date) AS matchs_ce_mois,
   COALESCE(SUM(total_fb_cost_ht) FILTER (
     WHERE status IN ('clôturé','archivé')
-      AND event_date >= DATE_TRUNC('year', CURRENT_DATE)), 0)       AS fb_annuel_ht,
+      AND event_date >= DATE_TRUNC('year', CURRENT_DATE)::date
+      AND event_date <  (DATE_TRUNC('year', CURRENT_DATE) + INTERVAL '1 year')::date), 0) AS fb_annuel_ht,
   COUNT(*) FILTER (WHERE status IN ('clôturé','archivé')
-    AND event_date >= DATE_TRUNC('year', CURRENT_DATE))             AS clotures_annee
+    AND event_date >= DATE_TRUNC('year', CURRENT_DATE)::date
+    AND event_date <  (DATE_TRUNC('year', CURRENT_DATE) + INTERVAL '1 year')::date) AS clotures_annee
 FROM events;
 
 -- RG-003 : ces vues portent des coûts → réservées à l'admin authentifié.

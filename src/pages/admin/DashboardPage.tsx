@@ -117,7 +117,12 @@ export default function DashboardPage() {
 
       const events = (evts.data as EventRow[] | null) ?? [];
       const enCours = events.find((e) => e.status === 'en_cours') ?? null;
-      const prochain = events.find((e) => e.status === 'préparé') ?? null;
+      // Prochain = le plus proche événement préparé À VENIR (pas un préparé passé
+      // resté ouvert). Comparaison sur la date calendaire (event_date = DATE).
+      const today = new Date().toISOString().slice(0, 10);
+      const prochain = events
+        .filter((e) => e.status === 'préparé' && String(e.event_date).slice(0, 10) >= today)
+        .sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)))[0] ?? null;
       setActive(enCours);
       setNext(enCours ? null : prochain);
 
