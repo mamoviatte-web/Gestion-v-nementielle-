@@ -96,6 +96,34 @@ export function useRunnerPlanning(eventId: string | undefined) {
         (products ?? []).map((p) => [p.product_id, p as Product]),
       );
 
+      // Noms des espaces ciblés (le référentiel CDC est indexé par area_name).
+      const { data: spaceRows } = await supabase
+        .from('spaces')
+        .select('space_id, space_name')
+        .in('space_id', params.space_ids);
+      const spaceNameById = new Map<string, string>(
+        (spaceRows ?? []).map((s) => [s.space_id, s.space_name as string]),
+      );
+      const areaNames = [...new Set((spaceRows ?? []).map((s) => s.space_name as string))];
+
+      // Liste blanche CDC par espace (area_product_reference) — TOUTES gammes
+      // S/R/P/C : c'est un filtre d'APPARTENANCE (exclut les produits hors CDC,
+      // p.ex. VIP sur une buvette), pas un filtre de niveau d'affichage.
+      const cdcByArea = new Map<string, Set<string>>();
+      if (areaNames.length > 0) {
+        const { data: cdcRows } = await supabase
+          .from('area_product_reference')
+          .select('area_name, product_id')
+          .in('area_name', areaNames)
+          .not('product_id', 'is', null);
+        for (const r of cdcRows ?? []) {
+          const key = String(r.area_name).trim().toUpperCase();
+          const set = cdcByArea.get(key) ?? new Set<string>();
+          set.add(r.product_id as string);
+          cdcByArea.set(key, set);
+        }
+      }
+
       for (const spaceId of params.space_ids) {
         const token = uuid();
 
@@ -127,6 +155,29 @@ export function useRunnerPlanning(eventId: string | undefined) {
           ...stockMap.keys(),
           ...histByProduct.keys(),
         ]);
+
+        // ── Filtre CDC (RG produits par espace) ──────────────────────────────
+        // Ne garder que les produits autorisés par area_product_reference pour
+        // cet espace → 0 produit VIP sur une buvette. Un espace sans référentiel
+        // CDC n'est pas filtré (compatibilité : comportement antérieur).
+        const areaName = spaceNameById.get(spaceId);
+        const allow = areaName ? cdcByArea.get(areaName.trim().toUpperCase()) : undefined;
+        if (allow && allow.size > 0) {
+          for (const pid of [...productIds]) {
+            if (!allow.has(pid)) productIds.delete(pid);
+          }
+          // Purger les lignes hors CDC déjà générées (régénération propre).
+          const keep = [...productIds];
+          if (keep.length > 0) {
+            await supabase
+              .from('runner_auto_planning')
+              .delete()
+              .eq('event_id', params.event_id)
+              .eq('space_id', spaceId)
+              .not('product_id', 'in', `(${keep.join(',')})`);
+          }
+        }
+
         if (productIds.size === 0) continue;
 
         const rows = [...productIds].map((pid) => {
