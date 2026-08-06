@@ -13,6 +13,8 @@ import { RunnerPlanningTab } from '@/components/runner/RunnerPlanningTab';
 import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
 import { MatchConsumptionReport } from '@/components/analytics/MatchConsumptionReport';
 import { MatchAccessCode } from '@/components/events/MatchAccessCode';
+import { EventEditPanel } from '@/components/events/EventEditPanel';
+import { EventSpacesModal } from '@/components/events/EventSpacesModal';
 import { MatchLiveStatusPanel } from '@/components/events/MatchLiveStatusPanel';
 import { IntegrityBadge } from '@/components/events/IntegrityBadge';
 import { SeminaireSpacesTab } from '@/components/seminaire/SeminaireSpacesTab';
@@ -29,7 +31,7 @@ import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
-import { Zap, CheckCircle2, CalendarClock } from 'lucide-react';
+import { Zap, CheckCircle2, CalendarClock, Pencil } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 
 type Tab =
@@ -78,6 +80,8 @@ export default function EventDetailPage() {
   const [tab, setTab] = useState<Tab>('stocks');
   const [spaceId, setSpaceId] = useState<string>('');
   const [showRunnerModal, setShowRunnerModal] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [showSpacesModal, setShowSpacesModal] = useState(false);
 
   async function handleCloseEvent(eventName: string) {
     if (!window.confirm(`Confirmer la clôture de « ${eventName} » ?\n\nLes coûts finaux seront calculés et l'événement sera clôturé.`)) return;
@@ -183,7 +187,17 @@ export default function EventDetailPage() {
         <Badge tone="neutral">
           Débriefs : {stats.debriefsReceived}/{stats.spacesTotal}
         </Badge>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
+          {event.status !== 'clôturé' && event.status !== 'archivé' && (
+            <>
+              <Button size="sm" variant={editMode ? 'primary' : 'secondary'} onClick={() => setEditMode((v) => !v)}>
+                <Pencil className="h-4 w-4" /> {editMode ? 'Fermer l’édition' : 'Modifier'}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setShowSpacesModal(true)}>
+                🏟️ Gérer les espaces ({spaces.length})
+              </Button>
+            </>
+          )}
           {(event.status === 'brouillon' || event.status === 'préparé') && (
             <Button
               size="sm"
@@ -222,6 +236,12 @@ export default function EventDetailPage() {
           )}
         </div>
       </div>
+
+      {editMode && <EventEditPanel event={event} onClose={() => setEditMode(false)} />}
+
+      {showSpacesModal && (
+        <EventSpacesModal eventId={event.event_id} onClose={() => setShowSpacesModal(false)} />
+      )}
 
       {showRunnerModal && (
         <RunnerGenerationModal

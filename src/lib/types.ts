@@ -173,6 +173,8 @@ export interface Event {
   expected_attendees: number | null;
   status: EventStatus;
   created_at: string;
+  /** Notes internes admin (équipe stade). */
+  notes?: string | null;
   // Module Runner (colonnes ajoutées par runner_module.sql)
   weather_type?: WeatherType | null;
   temperature?: number | null;
