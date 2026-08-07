@@ -65,7 +65,15 @@ export function useRunnerPlanning(eventId: string | undefined) {
         p_event_id: params.event_id,
       });
       if (error) throw error;
-      return data as { success: boolean; event_id: string; lignes_generees: number };
+      return data as {
+        success: boolean;
+        event_id: string;
+        lignes_generees: number;
+        pax_total?: number;
+        vip_pax?: number;
+        grand_public_pax?: number;
+        ratio_grand_public?: number;
+      };
     },
     onSuccess: invalidate,
   });

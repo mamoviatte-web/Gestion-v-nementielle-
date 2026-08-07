@@ -59,6 +59,27 @@ export function RunnerGenerationModal({
   const { showToast } = useToast();
   const autoRef = useAutoReference(eventId);
 
+  // Split affluence : VIP & Bars (capacité fixe) vs Grand Public (buvettes).
+  const splitInfo = useQuery({
+    queryKey: ['runnerSplit', eventId],
+    queryFn: async (): Promise<{ expected: number | null; gpRef: number | null }> => {
+      const [ev, cfg] = await Promise.all([
+        supabase.from('events').select('expected_attendees').eq('event_id', eventId).single(),
+        supabase.from('attendance_config').select('reference_gp_pax').eq('id', 1).maybeSingle(),
+      ]);
+      return {
+        expected: (ev.data?.expected_attendees as number | null) ?? null,
+        gpRef: (cfg.data?.reference_gp_pax as number | null) ?? null,
+      };
+    },
+  });
+  const vipPax = spaces
+    .filter((s) => s.spaces?.service_type === 'vip' || s.spaces?.service_type === 'bar')
+    .reduce((sum, s) => sum + (s.spaces?.max_pax ?? 0), 0);
+  const expectedPax = splitInfo.data?.expected ?? null;
+  const gpPax = expectedPax != null ? Math.max(expectedPax - vipPax, 0) : null;
+  const gpRef = splitInfo.data?.gpRef ?? null;
+
   const [weather, setWeather] = useState<WeatherType>('normal');
   const [temperature, setTemperature] = useState('18');
   const [trend, setTrend] = useState<ConsumptionTrend>('stable');
@@ -89,7 +110,13 @@ export function RunnerGenerationModal({
         temperature: Number(temperature) || 0,
         consumption_trend: trend,
       });
-      showToast(`${result?.lignes_generees ?? 0} dotations générées`, 'success');
+      const gp = result?.grand_public_pax;
+      const ratio = result?.ratio_grand_public;
+      const split =
+        gp != null && ratio != null
+          ? ` · Grand Public ${gp} (×${ratio.toFixed(2)}) / VIP ${result?.vip_pax ?? 0}`
+          : '';
+      showToast(`${result?.lignes_generees ?? 0} dotations générées${split}`, 'success');
       onGenerated();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de la génération.');
@@ -143,6 +170,36 @@ export function RunnerGenerationModal({
             <Alert variant="warning" title="Aucun historique disponible">
               Les recommandations seront basées sur les modèles de base
               (runner_templates) uniquement.
+            </Alert>
+          )}
+
+          {/* Split affluence VIP / Grand Public (calibrage des buvettes). */}
+          {expectedPax != null ? (
+            <div className="rounded-lg bg-slate-50 p-3 text-sm ring-1 ring-slate-200">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-lg font-bold text-provence">{expectedPax}</p>
+                  <p className="text-xs text-slate-500">Affluence</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-provence">{vipPax}</p>
+                  <p className="text-xs text-slate-500">VIP &amp; Bars</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold text-provence">{gpPax}</p>
+                  <p className="text-xs text-slate-500">Grand Public</p>
+                </div>
+              </div>
+              {gpRef != null && (
+                <p className="mt-2 text-xs text-slate-500">
+                  🍺 Buvettes calibrées pour ~{gpPax} spectateurs Grand Public (réf. Vannes {gpRef}).
+                </p>
+              )}
+            </div>
+          ) : (
+            <Alert variant="warning" title="Affluence non renseignée">
+              Saisissez l'affluence attendue de l'événement pour calibrer les buvettes
+              (sinon dotations de référence appliquées).
             </Alert>
           )}
 
