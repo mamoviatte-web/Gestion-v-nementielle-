@@ -1,18 +1,13 @@
 /**
  * Page « Analyses » (ROLE_STADE) — Stadium Manager Analytics, visual-first.
  *
- * 4 zones : hero (4 métriques animées + filtre), heatmap buvettes B1→B9 +
- * donut catégories, classement produits (barres animées), suggestions de
- * commande pour le prochain match.
- *
- * Source : vues analytics_products_full + analytics_buvette_heatmap
- * (réservées à ROLE_STADE — RG-003, prix jamais exposés à anon).
- *
- * ⚠ PostgREST sérialise les colonnes numeric/decimal en CHAÎNES → toutes les
- * valeurs chiffrées sont coercées via Number() au chargement.
+ * Sélecteur d'événement : « Tous les matchs » (agrégé) ou un match précis, et
+ * idem séminaires. Les chiffres sont scopés via get_match_analysis(scope) /
+ * get_seminaire_analysis(scope) (source : match_consumption_report, porte event_id).
+ * Liste du sélecteur : get_events_list(type). RG-003 : prix réservés ROLE_STADE.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { ChevronRight, RefreshCw, Zap } from 'lucide-react';
@@ -33,7 +28,7 @@ const CAT_COLORS: Record<string, string> = {
 const OR_PR = '#C9A646';
 const BLEU_NUIT = '#1A1A2E';
 
-/* ─── Types (données normalisées côté client) ───────────────────────────── */
+/* ─── Types ──────────────────────────────────────────────────────────────── */
 
 interface ProductRow {
   product_id: string;
@@ -51,17 +46,40 @@ interface ProductRow {
 
 interface HeatCell {
   code: string;
-  label: string;
-  location: string | null;
-  sort_order: number;
   total_consumed: number;
-  avg_per_event: number;
   nb_events: number;
   total_cost: number;
   top_produit: string | null;
 }
 
 type EventFilter = 'tous' | 'match' | 'seminaire';
+
+interface EventItem {
+  event_id: string;
+  event_name: string;
+  event_date: string;
+}
+
+interface MatchData {
+  nb_matchs: number;
+  kpis: {
+    unites_consommees: number;
+    produits_actifs: number;
+    cout_ht: number;
+    taux_retour_moyen: number;
+    buvette_active: { code: string; unites: number } | null;
+  };
+  buvettes: HeatCell[];
+  categories: { categorie: string; unites: number }[];
+  classement: {
+    product_name: string;
+    category: string;
+    total_consumed: number;
+    taux_retour: number;
+    cout_unitaire: number | null;
+    nb_events: number;
+  }[];
+}
 
 /** Coercition sûre string|null → number. */
 const num = (v: unknown): number => {
@@ -148,41 +166,45 @@ function BuvetteHeatmap({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2.5">
-        {data.map((b) => {
-          const isSelected = selected === b.code;
-          const pct = b.total_consumed / max;
-          return (
-            <button
-              key={b.code}
-              onClick={() => onSelect(isSelected ? null : b.code)}
-              className={`relative rounded-2xl p-3 text-left transition-all hover:scale-105 active:scale-100 ${
-                isSelected ? 'ring-2 ring-amber-400 ring-offset-2' : ''
-              }`}
-              style={{ background: heatColor(b.total_consumed) }}
-            >
-              <p className={`text-xl font-black ${pct > 0.25 ? 'text-white' : 'text-stone-800'}`}>{b.code}</p>
-              <p className={`mt-1 text-sm font-bold ${pct > 0.25 ? 'text-white/90' : 'text-stone-700'}`}>
-                {b.total_consumed > 0 ? b.total_consumed : '—'}
-              </p>
-              <p className={`mt-0.5 text-[10px] ${pct > 0.25 ? 'text-white/60' : 'text-stone-400'}`}>
-                {b.nb_events > 0 ? `${b.nb_events} évt` : ''}
-              </p>
-              {b.top_produit && (
-                <p className={`mt-1 truncate text-[9px] ${pct > 0.25 ? 'text-white/50' : 'text-stone-400'}`}>
-                  🏆 {b.top_produit}
+      {data.length === 0 ? (
+        <p className="py-12 text-center text-sm text-stone-400">Aucune consommation buvette sur cette sélection.</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-2.5">
+          {data.map((b) => {
+            const isSelected = selected === b.code;
+            const pct = b.total_consumed / max;
+            return (
+              <button
+                key={b.code}
+                onClick={() => onSelect(isSelected ? null : b.code)}
+                className={`relative rounded-2xl p-3 text-left transition-all hover:scale-105 active:scale-100 ${
+                  isSelected ? 'ring-2 ring-amber-400 ring-offset-2' : ''
+                }`}
+                style={{ background: heatColor(b.total_consumed) }}
+              >
+                <p className={`text-xl font-black ${pct > 0.25 ? 'text-white' : 'text-stone-800'}`}>{b.code}</p>
+                <p className={`mt-1 text-sm font-bold ${pct > 0.25 ? 'text-white/90' : 'text-stone-700'}`}>
+                  {b.total_consumed > 0 ? b.total_consumed : '—'}
                 </p>
-              )}
-              <div className="absolute bottom-0 left-0 right-0 h-1 overflow-hidden rounded-b-2xl">
-                <div className="h-full bg-amber-400/70" style={{ width: `${pct * 100}%` }} />
-              </div>
-            </button>
-          );
-        })}
-      </div>
+                <p className={`mt-0.5 text-[10px] ${pct > 0.25 ? 'text-white/60' : 'text-stone-400'}`}>
+                  {b.nb_events > 0 ? `${b.nb_events} évt` : ''}
+                </p>
+                {b.top_produit && (
+                  <p className={`mt-1 truncate text-[9px] ${pct > 0.25 ? 'text-white/50' : 'text-stone-400'}`}>
+                    🏆 {b.top_produit}
+                  </p>
+                )}
+                <div className="absolute bottom-0 left-0 right-0 h-1 overflow-hidden rounded-b-2xl">
+                  <div className="h-full bg-amber-400/70" style={{ width: `${pct * 100}%` }} />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <p className="text-center text-xs text-stone-400">
-        Intensité = consommation totale sur événements clôturés
+        Intensité = consommation totale sur la sélection
       </p>
     </div>
   );
@@ -281,7 +303,7 @@ function ProductBar({
             </span>
           )}
           {unit_price !== null && (
-            <span className="text-[10px] text-stone-400">{unit_price.toFixed(2)} €/{' '}u</span>
+            <span className="text-[10px] text-stone-400">{unit_price.toFixed(2)} €/{' '}u</span>
           )}
         </div>
       </div>
@@ -294,19 +316,74 @@ function ProductBar({
 
 export default function AnalyticsPage() {
   const [filter, setFilter] = useState<EventFilter>('tous');
-  const [products, setProducts] = useState<ProductRow[]>([]);
-  const [heatmap, setHeatmap] = useState<HeatCell[]>([]);
+  const [scope, setScope] = useState<'all' | string>('all');
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [data, setData] = useState<MatchData | null>(null);
+  const [suggestions, setSuggestions] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalc] = useState(false);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
 
-  async function fetchAll() {
+  const isSemi = filter === 'seminaire';
+
+  // Liste d'événements du sélecteur (dépend de l'onglet) ; reset du scope au changement d'onglet.
+  useEffect(() => {
+    setScope('all');
+    setSelectedCode(null);
+    let active = true;
+    (async () => {
+      const { data: ev } = await supabase.rpc('get_events_list', {
+        p_type: filter === 'seminaire' ? 'seminaire' : 'match',
+      });
+      if (active) setEvents((ev as EventItem[] | null) ?? []);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [filter]);
+
+  const fetchData = useCallback(async () => {
     setLoading(true);
-    const [{ data: prods }, { data: heat }] = await Promise.all([
+    // Le séminaire est rendu par <AnalyseSeminaire scope=…> ; ici on ne charge que
+    // les suggestions agrégées (prochain match) + les données match/tous scopées.
+    if (filter === 'seminaire') {
+      setLoading(false);
+      return;
+    }
+    const [{ data: m }, { data: prods }] = await Promise.all([
+      supabase.rpc('get_match_analysis', { p_scope: scope }),
       supabase.from('analytics_products_full').select('*'),
-      supabase.from('analytics_buvette_heatmap').select('*').order('sort_order'),
     ]);
-    setProducts(
+    const md = m as Partial<MatchData> | null;
+    const kp = (md?.kpis ?? {}) as Partial<MatchData['kpis']>;
+    const ba = kp.buvette_active as { code?: unknown; unites?: unknown } | null | undefined;
+    setData({
+      nb_matchs: num(md?.nb_matchs),
+      kpis: {
+        unites_consommees: num(kp.unites_consommees),
+        produits_actifs: num(kp.produits_actifs),
+        cout_ht: num(kp.cout_ht),
+        taux_retour_moyen: num(kp.taux_retour_moyen),
+        buvette_active: ba ? { code: String(ba.code ?? '—'), unites: num(ba.unites) } : null,
+      },
+      buvettes: (md?.buvettes ?? []).map((b) => ({
+        code: String(b.code),
+        nb_events: num(b.nb_events),
+        total_consumed: num(b.total_consumed),
+        total_cost: num(b.total_cost),
+        top_produit: b.top_produit == null ? null : String(b.top_produit),
+      })),
+      categories: (md?.categories ?? []).map((c) => ({ categorie: String(c.categorie), unites: num(c.unites) })),
+      classement: (md?.classement ?? []).map((p) => ({
+        product_name: String(p.product_name),
+        category: String(p.category ?? 'Autre'),
+        total_consumed: num(p.total_consumed),
+        taux_retour: num(p.taux_retour),
+        cout_unitaire: p.cout_unitaire == null ? null : num(p.cout_unitaire),
+        nb_events: num(p.nb_events),
+      })),
+    });
+    setSuggestions(
       (prods ?? []).map((p): ProductRow => ({
         product_id: String(p.product_id),
         product_name: String(p.product_name ?? '—'),
@@ -321,79 +398,32 @@ export default function AnalyticsPage() {
         total_cost_ht: num(p.total_cost_ht),
       })),
     );
-    setHeatmap(
-      (heat ?? []).map((b): HeatCell => ({
-        code: String(b.code),
-        label: String(b.label ?? b.code),
-        location: b.location == null ? null : String(b.location),
-        sort_order: num(b.sort_order),
-        total_consumed: num(b.total_consumed),
-        avg_per_event: num(b.avg_per_event),
-        nb_events: num(b.nb_events),
-        total_cost: num(b.total_cost),
-        top_produit: b.top_produit == null ? null : String(b.top_produit),
-      })),
-    );
     setLoading(false);
-  }
+  }, [filter, scope]);
 
   useEffect(() => {
-    void fetchAll();
-  }, []);
+    void fetchData();
+  }, [fetchData]);
 
   async function handleRecalc() {
     setRecalc(true);
-    await fetchAll();
+    await fetchData();
     setRecalc(false);
   }
 
-  /* Produits filtrés + total conso agrégée. */
-  const filtered = useMemo(() => {
-    return products
-      .filter((p) => {
-        if (filter === 'match') return p.nb_matchs > 0;
-        if (filter === 'seminaire') return p.nb_semis > 0;
-        return true;
-      })
-      .map((p) => ({
-        ...p,
-        total_conso: p.avg_conso_match * p.nb_matchs + p.avg_conso_semi * p.nb_semis,
-      }))
-      .filter((p) => p.total_conso > 0)
-      .sort((a, b) => b.total_conso - a.total_conso);
-  }, [products, filter]);
-
-  const kpis = useMemo(() => {
-    const totalUnits = filtered.reduce((s, p) => s + p.total_conso, 0);
-    const totalCost = filtered.reduce((s, p) => s + p.total_cost_ht, 0);
-    const avgRetour = filtered.length > 0 ? filtered.reduce((s, p) => s + p.taux_retour_pct, 0) / filtered.length : 0;
-    const topBuvette = [...heatmap].sort((a, b) => b.total_consumed - a.total_consumed)[0];
-    return { totalUnits, totalCost, avgRetour, topBuvette };
-  }, [filtered, heatmap]);
-
-  const donutData = useMemo(() => {
-    const map: Record<string, number> = {};
-    filtered.forEach((p) => {
-      map[p.category] = (map[p.category] ?? 0) + p.total_conso;
-    });
-    return Object.entries(map)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [filtered]);
-
-  const maxConso = filtered[0]?.total_conso ?? 1;
-
-  if (loading) {
-    return (
-      <div className="animate-pulse space-y-4 p-8">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="h-32 rounded-2xl bg-stone-100" />
-        ))}
-      </div>
-    );
-  }
+  const heatmap = data?.buvettes ?? [];
+  const donutData = useMemo(
+    () =>
+      (data?.categories ?? [])
+        .map((c) => ({ name: c.categorie, value: c.unites }))
+        .sort((a, b) => b.value - a.value),
+    [data],
+  );
+  const classement = data?.classement ?? [];
+  const maxConso = Math.max(...classement.map((c) => c.total_consumed), 1);
 
   const filterLabel: Record<EventFilter, string> = { tous: 'Tout', match: '🏉 Match', seminaire: '📋 Séminaire' };
+  const aggLabel = isSemi ? 'Tous les séminaires' : 'Tous les matchs';
 
   return (
     <div className="min-h-screen" style={{ background: '#FAFAF8' }}>
@@ -406,10 +436,10 @@ export default function AnalyticsPage() {
               <h1 className="text-3xl font-black text-stone-900">Analyses</h1>
             </div>
             <p className="ml-3.5 mt-1 text-sm text-stone-400">
-              Moteur d'apprentissage — précision croissante à chaque clôture
+              Vue agrégée ou détail par événement — chiffres scopés à la sélection
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="flex overflow-hidden rounded-xl border border-stone-200 bg-white text-sm shadow-sm">
               {(['tous', 'match', 'seminaire'] as EventFilter[]).map((f) => (
                 <button
@@ -424,6 +454,19 @@ export default function AnalyticsPage() {
                 </button>
               ))}
             </div>
+            {/* Sélecteur d'événement (agrégé vs précis) */}
+            <select
+              value={scope}
+              onChange={(e) => setScope(e.target.value)}
+              className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-700 shadow-sm focus:outline-none"
+            >
+              <option value="all">{aggLabel}</option>
+              {events.map((ev) => (
+                <option key={ev.event_id} value={ev.event_id}>
+                  {ev.event_name} — {new Date(ev.event_date).toLocaleDateString('fr-FR')}
+                </option>
+              ))}
+            </select>
             <button
               onClick={() => void handleRecalc()}
               disabled={recalculating}
@@ -435,161 +478,169 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {filter === 'seminaire' ? (
-          <AnalyseSeminaire />
+        {isSemi ? (
+          <AnalyseSeminaire scope={scope} />
+        ) : loading ? (
+          <div className="animate-pulse space-y-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-32 rounded-2xl bg-stone-100" />
+            ))}
+          </div>
         ) : (
-        <>
-        {/* HERO — 4 métriques animées */}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          {[
-            {
-              label: 'Unités consommées',
-              value: <AnimatedNumber value={kpis.totalUnits} />,
-              sub: `${filtered.length} produit(s) actif(s)`,
-              icon: '📦',
-              accent: BLEU_NUIT,
-            },
-            {
-              label: 'Coût consommations HT',
-              value: <AnimatedNumber value={kpis.totalCost} suffix=" €" decimals={2} />,
-              sub: 'F&B consommé',
-              icon: '💰',
-              accent: '#059669',
-            },
-            {
-              label: 'Taux retour moyen',
-              value: <AnimatedNumber value={kpis.avgRetour} suffix=" %" decimals={1} />,
-              sub: kpis.avgRetour > 20 ? '⚠️ À optimiser' : '✅ Bon niveau',
-              icon: '↩️',
-              accent: kpis.avgRetour > 25 ? '#DC2626' : '#F97316',
-            },
-            {
-              label: 'Buvette la + active',
-              value: <span>{kpis.topBuvette && kpis.topBuvette.total_consumed > 0 ? kpis.topBuvette.code : '—'}</span>,
-              sub:
-                kpis.topBuvette && kpis.topBuvette.total_consumed > 0
-                  ? `${kpis.topBuvette.total_consumed} unités`
-                  : 'Pas encore de données',
-              icon: '🏆',
-              accent: OR_PR,
-            },
-          ].map((kpi, i) => (
-            <div key={i} className="relative overflow-hidden rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
-              <div className="absolute left-0 right-0 top-0 h-1 rounded-t-2xl" style={{ background: kpi.accent }} />
-              <div className="mb-3 flex items-start justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">{kpi.label}</p>
-                <span className="text-xl">{kpi.icon}</span>
-              </div>
-              <p className="text-3xl font-black text-stone-900">{kpi.value}</p>
-              <p className="mt-1 text-xs text-stone-400">{kpi.sub}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* LIGNE 2 — Heatmap + Donut */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm lg:col-span-2">
-            <BuvetteHeatmap data={heatmap} onSelect={setSelectedCode} selected={selectedCode} />
-          </div>
-          <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
-            <h3 className="mb-4 font-bold text-stone-800">Répartition par catégorie</h3>
-            {donutData.length > 0 ? (
-              <>
-                <CategoryDonut data={donutData} />
-                <div className="mt-3 space-y-1.5">
-                  {donutData.slice(0, 5).map((d) => (
-                    <div key={d.name} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: CAT_COLORS[d.name] ?? '#9CA3AF' }} />
-                        <span className="text-stone-600">{d.name}</span>
-                      </div>
-                      <span className="font-semibold text-stone-800">{Math.round(d.value)}</span>
-                    </div>
-                  ))}
+          <>
+            {/* HERO — 4 métriques */}
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              {[
+                {
+                  label: 'Unités consommées',
+                  value: <AnimatedNumber value={data?.kpis.unites_consommees ?? 0} />,
+                  sub: `${data?.kpis.produits_actifs ?? 0} produit(s) actif(s)`,
+                  icon: '📦',
+                  accent: BLEU_NUIT,
+                },
+                {
+                  label: 'Coût consommations HT',
+                  value: <AnimatedNumber value={data?.kpis.cout_ht ?? 0} suffix=" €" decimals={2} />,
+                  sub: 'F&B consommé',
+                  icon: '💰',
+                  accent: '#059669',
+                },
+                {
+                  label: 'Taux retour moyen',
+                  value: <AnimatedNumber value={data?.kpis.taux_retour_moyen ?? 0} suffix=" %" decimals={1} />,
+                  sub: (data?.kpis.taux_retour_moyen ?? 0) > 20 ? '⚠️ À optimiser' : '✅ Bon niveau',
+                  icon: '↩️',
+                  accent: (data?.kpis.taux_retour_moyen ?? 0) > 25 ? '#DC2626' : '#F97316',
+                },
+                {
+                  label: 'Buvette la + active',
+                  value: <span>{data?.kpis.buvette_active?.code ?? '—'}</span>,
+                  sub: data?.kpis.buvette_active
+                    ? `${data.kpis.buvette_active.unites} unités`
+                    : 'Pas encore de données',
+                  icon: '🏆',
+                  accent: OR_PR,
+                },
+              ].map((kpi, i) => (
+                <div key={i} className="relative overflow-hidden rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
+                  <div className="absolute left-0 right-0 top-0 h-1 rounded-t-2xl" style={{ background: kpi.accent }} />
+                  <div className="mb-3 flex items-start justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">{kpi.label}</p>
+                    <span className="text-xl">{kpi.icon}</span>
+                  </div>
+                  <p className="text-3xl font-black text-stone-900">{kpi.value}</p>
+                  <p className="mt-1 text-xs text-stone-400">{kpi.sub}</p>
                 </div>
-              </>
-            ) : (
-              <p className="py-12 text-center text-sm text-stone-400">Aucune consommation sur ce filtre.</p>
-            )}
-          </div>
-        </div>
+              ))}
+            </div>
 
-        {/* LIGNE 3 — Classement produits */}
-        <div className="rounded-2xl border border-stone-100 bg-white shadow-sm">
-          <div className="flex items-center justify-between px-5 pb-3 pt-5">
-            <div>
-              <h3 className="text-lg font-bold text-stone-900">🏅 Classement produits</h3>
-              <p className="mt-0.5 text-xs text-stone-400">
-                {filtered.length} produit(s) · triés par consommation totale
+            {/* Heatmap + Donut */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm lg:col-span-2">
+                <BuvetteHeatmap data={heatmap} onSelect={setSelectedCode} selected={selectedCode} />
+              </div>
+              <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
+                <h3 className="mb-4 font-bold text-stone-800">Répartition par catégorie</h3>
+                {donutData.length > 0 ? (
+                  <>
+                    <CategoryDonut data={donutData} />
+                    <div className="mt-3 space-y-1.5">
+                      {donutData.slice(0, 5).map((d) => (
+                        <div key={d.name} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: CAT_COLORS[d.name] ?? '#9CA3AF' }} />
+                            <span className="text-stone-600">{d.name}</span>
+                          </div>
+                          <span className="font-semibold text-stone-800">{Math.round(d.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="py-12 text-center text-sm text-stone-400">Aucune consommation sur cette sélection.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Classement produits */}
+            <div className="rounded-2xl border border-stone-100 bg-white shadow-sm">
+              <div className="flex items-center justify-between px-5 pb-3 pt-5">
+                <div>
+                  <h3 className="text-lg font-bold text-stone-900">🏅 Classement produits</h3>
+                  <p className="mt-0.5 text-xs text-stone-400">
+                    {classement.length} produit(s) · triés par consommation
+                  </p>
+                </div>
+              </div>
+              <div className="divide-y divide-stone-50 px-3 pb-4">
+                {classement.length === 0 ? (
+                  <p className="py-12 text-center text-sm text-stone-400">Aucun produit consommé sur cette sélection.</p>
+                ) : (
+                  classement.slice(0, 25).map((p, i) => (
+                    <ProductBar
+                      key={`${p.product_name}-${i}`}
+                      rank={i + 1}
+                      name={p.product_name}
+                      category={p.category}
+                      value={p.total_consumed}
+                      max={maxConso}
+                      taux_retour={p.taux_retour}
+                      unit_price={p.cout_unitaire}
+                      nb_events={p.nb_events}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Suggestions prochain match (agrégées, indépendantes du scope) */}
+            <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl" style={{ background: OR_PR }}>
+                  <Zap size={16} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-stone-900">Suggestions pour le prochain match</h3>
+                  <p className="text-xs text-stone-400">Basé sur la moyenne historique · +20 % marge de sécurité</p>
+                </div>
+              </div>
+
+              {(() => {
+                const sug = suggestions
+                  .filter((p) => p.avg_conso_match > 0)
+                  .sort((a, b) => b.avg_conso_match - a.avg_conso_match)
+                  .slice(0, 8);
+                if (sug.length === 0) {
+                  return <p className="py-6 text-center text-sm text-stone-400">Aucun match clôturé pour établir des suggestions.</p>;
+                }
+                return (
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {sug.map((p) => {
+                      const suggested = Math.ceil(p.avg_conso_match * 1.2);
+                      return (
+                        <div key={p.product_id} className="rounded-xl border border-stone-100 bg-stone-50 p-3">
+                          <p className="mb-1 truncate text-xs font-semibold text-stone-700">{p.product_name}</p>
+                          <p className="text-2xl font-black" style={{ color: CAT_COLORS[p.category] ?? '#6B7280' }}>
+                            {suggested}
+                          </p>
+                          <p className="mt-0.5 text-xs text-stone-400">
+                            {p.unit} · moy. {p.avg_conso_match.toFixed(1)}
+                          </p>
+                          {p.taux_retour_pct > 20 && (
+                            <p className="mt-1 text-[10px] text-orange-600">⚠️ {p.taux_retour_pct.toFixed(0)}% retour</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              <p className="mt-4 text-center text-xs text-stone-300">
+                Quantités indicatives basées sur l'historique des matchs clôturés.
               </p>
             </div>
-          </div>
-          <div className="divide-y divide-stone-50 px-3 pb-4">
-            {filtered.length === 0 ? (
-              <p className="py-12 text-center text-sm text-stone-400">Aucun produit consommé pour ce filtre.</p>
-            ) : (
-              filtered.slice(0, 25).map((p, i) => (
-                <ProductBar
-                  key={p.product_id}
-                  rank={i + 1}
-                  name={p.product_name}
-                  category={p.category}
-                  value={p.total_conso}
-                  max={maxConso}
-                  taux_retour={p.taux_retour_pct}
-                  unit_price={p.unit_price_ht}
-                  nb_events={p.nb_matchs + p.nb_semis}
-                />
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* LIGNE 4 — Suggestions prochain match */}
-        <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl" style={{ background: OR_PR }}>
-              <Zap size={16} className="text-white" />
-            </div>
-            <div>
-              <h3 className="font-bold text-stone-900">Suggestions pour le prochain match</h3>
-              <p className="text-xs text-stone-400">Basé sur la moyenne historique · +20 % marge de sécurité</p>
-            </div>
-          </div>
-
-          {(() => {
-            const suggestions = products.filter((p) => p.avg_conso_match > 0).sort((a, b) => b.avg_conso_match - a.avg_conso_match).slice(0, 8);
-            if (suggestions.length === 0) {
-              return <p className="py-6 text-center text-sm text-stone-400">Aucun match clôturé pour établir des suggestions.</p>;
-            }
-            return (
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                {suggestions.map((p) => {
-                  const suggested = Math.ceil(p.avg_conso_match * 1.2);
-                  return (
-                    <div key={p.product_id} className="rounded-xl border border-stone-100 bg-stone-50 p-3">
-                      <p className="mb-1 truncate text-xs font-semibold text-stone-700">{p.product_name}</p>
-                      <p className="text-2xl font-black" style={{ color: CAT_COLORS[p.category] ?? '#6B7280' }}>
-                        {suggested}
-                      </p>
-                      <p className="mt-0.5 text-xs text-stone-400">
-                        {p.unit} · moy. {p.avg_conso_match.toFixed(1)}
-                      </p>
-                      {p.taux_retour_pct > 20 && (
-                        <p className="mt-1 text-[10px] text-orange-600">⚠️ {p.taux_retour_pct.toFixed(0)}% retour</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-
-          <p className="mt-4 text-center text-xs text-stone-300">
-            Quantités indicatives basées sur l'historique des matchs clôturés.
-          </p>
-        </div>
-        </>
+          </>
         )}
       </div>
     </div>

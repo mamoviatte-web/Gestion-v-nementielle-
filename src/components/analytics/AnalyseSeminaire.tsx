@@ -74,7 +74,7 @@ interface SemAnalysis {
 
 const euro = (v: number): string => `${v.toFixed(2)} € HT`;
 
-export function AnalyseSeminaire() {
+export function AnalyseSeminaire({ scope = 'all' }: { scope?: string }) {
   const [data, setData] = useState<SemAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -82,7 +82,7 @@ export function AnalyseSeminaire() {
     let active = true;
     (async () => {
       setLoading(true);
-      const { data: res } = await supabase.rpc('get_seminaire_analysis', { p_scope: 'all' });
+      const { data: res } = await supabase.rpc('get_seminaire_analysis', { p_scope: scope });
       if (!active) return;
       const r = res as Partial<SemAnalysis> | null;
       setData({
@@ -102,7 +102,7 @@ export function AnalyseSeminaire() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [scope]);
 
   if (loading) {
     return (
