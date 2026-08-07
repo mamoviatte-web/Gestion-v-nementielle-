@@ -74,5 +74,9 @@ returns json language sql security definer set search_path to 'public' as $$
 $$;
 
 -- RG-003 : jamais aux clients anonymes ; réservé à ROLE_STADE (authenticated).
-revoke all on function get_seminaire_analysis(text) from anon;
+-- IMPORTANT : Postgres accorde EXECUTE à PUBLIC par défaut à la création d'une
+-- fonction → il faut révoquer PUBLIC (et anon) explicitement, sinon les coûts
+-- fuient vers les clients anonymes.
+revoke execute on function get_seminaire_analysis(text) from public;
+revoke execute on function get_seminaire_analysis(text) from anon;
 grant execute on function get_seminaire_analysis(text) to authenticated;
