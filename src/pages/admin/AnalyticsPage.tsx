@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { ChevronRight, RefreshCw, Zap } from 'lucide-react';
+import { AnalyseSeminaire } from '@/components/analytics/AnalyseSeminaire';
 
 /* ─── Constantes visuelles ──────────────────────────────────────────────── */
 
@@ -434,6 +435,10 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
+        {filter === 'seminaire' ? (
+          <AnalyseSeminaire />
+        ) : (
+        <>
         {/* HERO — 4 métriques animées */}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
@@ -584,6 +589,8 @@ export default function AnalyticsPage() {
             Quantités indicatives basées sur l'historique des matchs clôturés.
           </p>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
