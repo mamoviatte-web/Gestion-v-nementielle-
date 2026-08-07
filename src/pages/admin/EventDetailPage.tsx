@@ -10,6 +10,7 @@ import { ProvidersPanel } from '@/components/providers/ProvidersPanel';
 import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { AreaRunnersPanel } from '@/components/runner/AreaRunnersPanel';
+import { RunnerPdfButton } from '@/components/runner/RunnerPdfButton';
 import { BuvetteRunnersPanel } from '@/components/runner/BuvetteRunnersPanel';
 import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
 import { MatchConsumptionReport } from '@/components/analytics/MatchConsumptionReport';
@@ -392,7 +393,17 @@ export default function EventDetailPage() {
         </div>
       )}
       {activeTab === 'runner' && (
-        <AreaRunnersPanel eventId={event.event_id} spaces={spaces} />
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <RunnerPdfButton
+              eventId={event.event_id}
+              matchNom={event.event_name}
+              matchDate={new Date(event.event_date).toLocaleDateString('fr-FR')}
+              pax={event.expected_attendees}
+            />
+          </div>
+          <AreaRunnersPanel eventId={event.event_id} spaces={spaces} />
+        </div>
       )}
       {activeTab === 'runner_buvettes' && <BuvetteRunnersPanel eventId={event.event_id} />}
       {activeTab === 'analyse' && <ConsumptionAnalysisTab event={event} spaces={spaces} />}
