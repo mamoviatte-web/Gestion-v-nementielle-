@@ -36,6 +36,7 @@ interface IndexRow {
   nb_total: number;
   depots: string[] | null;
 }
+type DotationSource = 'reel' | 'profil' | 'plancher' | 'option';
 interface RunnerLine {
   product_family: string;
   product_name: string;
@@ -45,8 +46,17 @@ interface RunnerLine {
   depot_type: string | null;
   stock_espace: number;
   moy_hist: number;
-  reco: number;
+  coeff: number;
+  a_monter: number;
+  dotation_source: DotationSource;
 }
+
+const SOURCE_PILL: Record<DotationSource, { label: string; cls: string }> = {
+  reel: { label: 'réel', cls: 'bg-green-100 text-green-700' },
+  profil: { label: 'profil', cls: 'bg-blue-100 text-blue-700' },
+  plancher: { label: 'plancher', cls: 'bg-stone-100 text-stone-500' },
+  option: { label: 'option', cls: 'border border-stone-300 text-stone-400' },
+};
 interface RunnerSheet {
   buvette_code: string;
   libelle: string;
@@ -130,10 +140,20 @@ export function BuvetteRunnersPanel({ eventId }: { eventId: string }) {
           <Spinner label="Chargement…" />
         ) : (
           <>
-            <div>
-              <h3 className="text-lg font-black text-stone-900">Runner — {sheet.libelle} <span className="text-stone-400">({sheet.buvette_code})</span></h3>
-              <p className="text-sm text-stone-500">{sheet.lines.length} produit{sheet.lines.length > 1 ? 's' : ''} à monter · niveau {sheet.show_level}</p>
-            </div>
+            {(() => {
+              const reco = sheet.lines.filter((l) => l.a_monter > 0);
+              const units = sheet.lines.reduce((s, l) => s + (l.a_monter || 0), 0);
+              return (
+                <div>
+                  <h3 className="text-lg font-black text-stone-900">Runner — {sheet.libelle} <span className="text-stone-400">({sheet.buvette_code})</span></h3>
+                  <p className="text-sm text-stone-500">
+                    <span className="font-bold text-stone-800">{reco.length}</span> produit{reco.length > 1 ? 's' : ''} recommandé{reco.length > 1 ? 's' : ''} ·{' '}
+                    <span className="font-bold text-stone-800">{units}</span> unité{units > 1 ? 's' : ''} à monter · niveau {sheet.show_level}
+                  </p>
+                  <p className="mt-0.5 text-xs text-stone-400">Base : consommations réelles (Vannes) · marge +20 %</p>
+                </div>
+              );
+            })()}
 
             {families.map((fam) => (
               <div key={fam} className="overflow-hidden rounded-2xl border border-stone-200">
@@ -144,23 +164,28 @@ export function BuvetteRunnersPanel({ eventId }: { eventId: string }) {
                       <tr className="border-b border-stone-100 text-left text-xs uppercase tracking-wide text-stone-400">
                         <th className="px-4 py-2">Produit</th>
                         <th className="px-3 py-2">Niveau</th>
-                        <th className="px-3 py-2 text-right">Stock espace</th>
+                        <th className="px-3 py-2 text-right">Coeff.</th>
                         <th className="px-3 py-2 text-right">Moy. hist.</th>
-                        <th className="px-3 py-2 text-right">Reco</th>
+                        <th className="px-3 py-2 text-right">À monter</th>
+                        <th className="px-3 py-2">Source</th>
                         <th className="px-4 py-2">Dépôt</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-50">
-                      {sheet.lines.filter((l) => l.product_family === fam).map((l) => (
+                      {sheet.lines.filter((l) => l.product_family === fam).map((l) => {
+                        const src = SOURCE_PILL[l.dotation_source] ?? SOURCE_PILL.option;
+                        return (
                         <tr key={l.product_name} className={l.association_level === 'C' || l.association_level === 'P' ? 'text-stone-400' : 'text-stone-800'}>
                           <td className="px-4 py-2.5 font-medium">{l.product_name}</td>
                           <td className="px-3 py-2.5"><LevelBadge level={l.association_level} /></td>
-                          <td className="px-3 py-2.5 text-right">{l.stock_espace || '—'}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">×{Number(l.coeff).toFixed(2)}</td>
                           <td className="px-3 py-2.5 text-right">{l.moy_hist ? Number(l.moy_hist).toFixed(1) : '—'}</td>
-                          <td className="px-3 py-2.5 text-right font-semibold">{l.reco || '—'}</td>
+                          <td className="px-3 py-2.5 text-right text-base font-bold text-stone-900">{l.a_monter || '—'}</td>
+                          <td className="px-3 py-2.5"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${src.cls}`}>{src.label}</span></td>
                           <td className="px-4 py-2.5"><DepotBadge type={l.depot_type} label={l.depot_label} /></td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
