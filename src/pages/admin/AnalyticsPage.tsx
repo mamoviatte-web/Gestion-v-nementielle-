@@ -333,7 +333,7 @@ export default function AnalyticsPage() {
     let active = true;
     (async () => {
       const { data: ev } = await supabase.rpc('get_events_list', {
-        p_type: filter === 'seminaire' ? 'seminaire' : 'match',
+        p_type: filter === 'seminaire' ? 'seminaire' : filter === 'match' ? 'match' : 'tous',
       });
       if (active) setEvents((ev as EventItem[] | null) ?? []);
     })();
@@ -351,7 +351,7 @@ export default function AnalyticsPage() {
       return;
     }
     const [{ data: m }, { data: prods }] = await Promise.all([
-      supabase.rpc('get_match_analysis', { p_scope: scope }),
+      supabase.rpc(filter === 'tous' ? 'get_all_analysis' : 'get_match_analysis', { p_scope: scope }),
       supabase.from('analytics_products_full').select('*'),
     ]);
     const md = m as Partial<MatchData> | null;
