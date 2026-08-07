@@ -9,7 +9,7 @@ import { StockDotationsTable } from '@/components/stock/StockDotationsTable';
 import { ProvidersPanel } from '@/components/providers/ProvidersPanel';
 import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
-import { RunnerPlanningTab } from '@/components/runner/RunnerPlanningTab';
+import { AreaRunnersPanel } from '@/components/runner/AreaRunnersPanel';
 import { BuvetteRunnersPanel } from '@/components/runner/BuvetteRunnersPanel';
 import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
 import { MatchConsumptionReport } from '@/components/analytics/MatchConsumptionReport';
@@ -392,11 +392,7 @@ export default function EventDetailPage() {
         </div>
       )}
       {activeTab === 'runner' && (
-        <RunnerPlanningTab
-          event={event}
-          spaces={spaces}
-          onOpenModal={() => setShowRunnerModal(true)}
-        />
+        <AreaRunnersPanel eventId={event.event_id} spaces={spaces} />
       )}
       {activeTab === 'runner_buvettes' && <BuvetteRunnersPanel eventId={event.event_id} />}
       {activeTab === 'analyse' && <ConsumptionAnalysisTab event={event} spaces={spaces} />}
