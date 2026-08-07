@@ -44,6 +44,14 @@ export function RunnerPlanningTab({
     return map;
   }, [plans.data]);
 
+  // Les buvettes (B1→B9) ont leur propre runner piloté par le CDC + la conso
+  // réelle (onglet « 🍺 Runner Buvettes »). On les exclut de l'estimateur
+  // générique ici pour éviter la double source et les espaces superviseurs.
+  const nonBuvetteSpaces = useMemo(
+    () => spaces.filter((s) => s.spaces?.service_type !== 'buvette'),
+    [spaces],
+  );
+
   if (plans.isLoading) return <Spinner fullPage label="Chargement…" />;
 
   const list = plans.data ?? [];
@@ -90,9 +98,13 @@ export function RunnerPlanningTab({
         <Kpi label="Coût estimé HT" value={formatEuro(kpis.estimatedCostHT)} />
       </div>
 
-      {/* Cards par espace */}
+      <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-200">
+        🍺 Les buvettes (B1→B9) sont gérées dans l'onglet <strong>« Runner Buvettes »</strong> (dotations réelles pilotées par le CDC).
+      </p>
+
+      {/* Cards par espace (hors buvettes) */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {spaces
+        {nonBuvetteSpaces
           .filter((s) => bySpace.has(s.space_id))
           .map((s) => {
             const rows = bySpace.get(s.space_id) ?? [];
