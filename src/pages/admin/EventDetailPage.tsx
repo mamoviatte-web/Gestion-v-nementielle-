@@ -10,6 +10,7 @@ import { ProvidersPanel } from '@/components/providers/ProvidersPanel';
 import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { RunnerPlanningTab } from '@/components/runner/RunnerPlanningTab';
+import { BuvetteRunnersPanel } from '@/components/runner/BuvetteRunnersPanel';
 import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
 import { MatchConsumptionReport } from '@/components/analytics/MatchConsumptionReport';
 import { MatchAccessCode } from '@/components/events/MatchAccessCode';
@@ -42,6 +43,7 @@ type Tab =
   | 'debriefs'
   | 'route'
   | 'runner'
+  | 'runner_buvettes'
   | 'analyse'
   | 'gpvip'
   | 'espaces'
@@ -57,6 +59,7 @@ const MATCH_TABS: { key: Tab; label: string }[] = [
   { key: 'debriefs', label: 'Débriefs' },
   { key: 'route', label: '📄 Feuille de route' },
   { key: 'runner', label: '🚀 Runner Auto' },
+  { key: 'runner_buvettes', label: '🍺 Runner Buvettes' },
   { key: 'analyse', label: '📈 Analyse conso' },
   { key: 'gpvip', label: '⭐ GP / VIP' },
 ];
@@ -395,6 +398,7 @@ export default function EventDetailPage() {
           onOpenModal={() => setShowRunnerModal(true)}
         />
       )}
+      {activeTab === 'runner_buvettes' && <BuvetteRunnersPanel eventId={event.event_id} />}
       {activeTab === 'analyse' && <ConsumptionAnalysisTab event={event} spaces={spaces} />}
       {activeTab === 'gpvip' && <MatchConsumptionReport eventId={event.event_id} />}
     </div>
