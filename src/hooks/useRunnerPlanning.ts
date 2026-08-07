@@ -7,45 +7,10 @@ import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import {
-  buildCoefficients,
-  computeConsumptionReference,
-  computeQtyToMove,
-  computeRecommendedQty,
-  detectAlertType,
-} from '@/lib/runnerCalculations';
 import type {
-  Product,
   RunnerGenerationParams,
   RunnerPlanWithDetails,
 } from '@/lib/types';
-
-/** UUID portable (navigateur + Node). */
-function uuid(): string {
-  return crypto.randomUUID();
-}
-
-/** Moyenne historique de consommation (5 derniers événements similaires). */
-export async function getHistoricalAvg(
-  spaceId: string,
-  productId: string,
-  eventType: string,
-  limit = 5,
-): Promise<number | null> {
-  const { data, error } = await supabase
-    .from('event_consumptions')
-    .select('consumed_qty, created_at')
-    .eq('space_id', spaceId)
-    .eq('product_id', productId)
-    .eq('event_type', eventType)
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-  const rows = data ?? [];
-  if (rows.length === 0) return null;
-  const sum = rows.reduce((s, r) => s + (r.consumed_qty ?? 0), 0);
-  return sum / rows.length;
-}
 
 export function useRunnerPlanning(eventId: string | undefined) {
   const queryClient = useQueryClient();
@@ -73,166 +38,15 @@ export function useRunnerPlanning(eventId: string | undefined) {
   /* 1. Génération automatique. */
   const generateMutation = useMutation({
     mutationFn: async (params: RunnerGenerationParams) => {
-     try {
-      // Événement (affluence, type)
-      const { data: ev, error: evErr } = await supabase
+      // Contexte de génération mémorisé sur l'événement (météo / tendance / référence).
+      // Référence = match précédent (chaînage) sinon la référence éventuellement fournie.
+      const { data: ev } = await supabase
         .from('events')
-        .select('event_id, event_type, expected_attendees, previous_event_id')
+        .select('previous_event_id')
         .eq('event_id', params.event_id)
         .single();
-      if (evErr) throw evErr;
-      const expected = ev.expected_attendees ?? 0;
-      const eventType = (ev.event_type as string) ?? 'autre';
-      // Référence automatique = match précédent (chaînage). Pas de choix manuel.
       const autoReferenceId =
-        (ev.previous_event_id as string | null) ?? params.reference_event_id ?? null;
-
-      // Catalogue (catégorie + prix)
-      const { data: products, error: pErr } = await supabase
-        .from('products')
-        .select('*');
-      if (pErr) throw pErr;
-      const productMap = new Map<string, Product>(
-        (products ?? []).map((p) => [p.product_id, p as Product]),
-      );
-
-      // Noms des espaces ciblés (le référentiel CDC est indexé par area_name).
-      const { data: spaceRows } = await supabase
-        .from('spaces')
-        .select('space_id, space_name')
-        .in('space_id', params.space_ids);
-      const spaceNameById = new Map<string, string>(
-        (spaceRows ?? []).map((s) => [s.space_id, s.space_name as string]),
-      );
-      const areaNames = [...new Set((spaceRows ?? []).map((s) => s.space_name as string))];
-
-      // Liste blanche CDC par espace (area_product_reference) — TOUTES gammes
-      // S/R/P/C : c'est un filtre d'APPARTENANCE (exclut les produits hors CDC,
-      // p.ex. VIP sur une buvette), pas un filtre de niveau d'affichage.
-      const cdcByArea = new Map<string, Set<string>>();
-      if (areaNames.length > 0) {
-        const { data: cdcRows } = await supabase
-          .from('area_product_reference')
-          .select('area_name, product_id')
-          .in('area_name', areaNames)
-          .not('product_id', 'is', null);
-        for (const r of cdcRows ?? []) {
-          const key = String(r.area_name).trim().toUpperCase();
-          const set = cdcByArea.get(key) ?? new Set<string>();
-          set.add(r.product_id as string);
-          cdcByArea.set(key, set);
-        }
-      }
-
-      for (const spaceId of params.space_ids) {
-        const token = uuid();
-
-        // Stocks de l'espace
-        const { data: stocks } = await supabase
-          .from('area_stocks')
-          .select('product_id, current_qty')
-          .eq('area_id', spaceId);
-        const stockMap = new Map<string, number>(
-          (stocks ?? []).map((s) => [s.product_id, s.current_qty]),
-        );
-
-        // Historique de l'espace pour ce type d'événement
-        const { data: hist } = await supabase
-          .from('event_consumptions')
-          .select('product_id, consumed_qty, created_at')
-          .eq('space_id', spaceId)
-          .eq('event_type', eventType)
-          .order('created_at', { ascending: false });
-        const histByProduct = new Map<string, number[]>();
-        for (const h of hist ?? []) {
-          const arr = histByProduct.get(h.product_id) ?? [];
-          arr.push(h.consumed_qty ?? 0);
-          histByProduct.set(h.product_id, arr);
-        }
-
-        // Produits candidats = stock espace ∪ historique
-        const productIds = new Set<string>([
-          ...stockMap.keys(),
-          ...histByProduct.keys(),
-        ]);
-
-        // ── Filtre CDC (RG produits par espace) ──────────────────────────────
-        // Ne garder que les produits autorisés par area_product_reference pour
-        // cet espace → 0 produit VIP sur une buvette. Un espace sans référentiel
-        // CDC n'est pas filtré (compatibilité : comportement antérieur).
-        const areaName = spaceNameById.get(spaceId);
-        const allow = areaName ? cdcByArea.get(areaName.trim().toUpperCase()) : undefined;
-        if (allow && allow.size > 0) {
-          for (const pid of [...productIds]) {
-            if (!allow.has(pid)) productIds.delete(pid);
-          }
-          // Purger les lignes hors CDC déjà générées (régénération propre).
-          const keep = [...productIds];
-          if (keep.length > 0) {
-            await supabase
-              .from('runner_auto_planning')
-              .delete()
-              .eq('event_id', params.event_id)
-              .eq('space_id', spaceId)
-              .not('product_id', 'in', `(${keep.join(',')})`);
-          }
-        }
-
-        if (productIds.size === 0) continue;
-
-        const rows = [...productIds].map((pid) => {
-          const product = productMap.get(pid);
-          const category = product?.category ?? 'autre';
-          const price = product?.unit_price_ht ?? null;
-          const hvals = histByProduct.get(pid) ?? [];
-          const historicalAvg =
-            hvals.length > 0
-              ? hvals.slice(0, 5).reduce((s, v) => s + v, 0) / Math.min(5, hvals.length)
-              : null;
-          const lastSimilar = hvals.length > 0 ? hvals[0] : null;
-          const reference = computeConsumptionReference(historicalAvg, lastSimilar);
-          const coeffs = buildCoefficients({
-            expected,
-            weather: params.weather_type,
-            category,
-            eventType,
-            trend: params.consumption_trend,
-          });
-          const recommended = computeRecommendedQty(reference, coeffs);
-          const areaStock = stockMap.get(pid) ?? 0;
-          const { qty, sufficient } = computeQtyToMove(recommended, areaStock);
-          const alert = detectAlertType(recommended, historicalAvg, sufficient);
-          const estimatedCost = price === null ? null : recommended * price;
-
-          return {
-            event_id: params.event_id,
-            space_id: spaceId,
-            product_id: pid,
-            initial_area_stock: areaStock,
-            historical_avg_consumption: historicalAvg,
-            last_similar_event_consumption: lastSimilar,
-            consumption_reference: reference,
-            attendance_coefficient: coeffs.attendance,
-            weather_coefficient: coeffs.weather,
-            event_type_coefficient: coeffs.event_type,
-            trend_coefficient: coeffs.trend,
-            recommended_quantity: recommended,
-            quantity_to_move: qty,
-            stock_sufficient: sufficient,
-            estimated_cost_ht: estimatedCost,
-            alert_type: alert,
-            validation_status: 'brouillon',
-            terrain_token: token,
-          };
-        });
-
-        const { error: upErr } = await supabase
-          .from('runner_auto_planning')
-          .upsert(rows, { onConflict: 'event_id,space_id,product_id' });
-        if (upErr) throw upErr;
-      }
-
-      // Mémoriser les paramètres sur l'événement
+        (ev?.previous_event_id as string | null) ?? params.reference_event_id ?? null;
       await supabase
         .from('events')
         .update({
@@ -242,18 +56,16 @@ export function useRunnerPlanning(eventId: string | undefined) {
           reference_event_id: autoReferenceId,
         })
         .eq('event_id', params.event_id);
-     } catch (err) {
-        // Diagnostic détaillé (code / message / details / hint Supabase).
-        const e = err as { code?: string; message?: string; details?: string; hint?: string };
-        console.error('[Runner] Échec de génération des fiches', {
-          code: e?.code,
-          message: e?.message,
-          details: e?.details,
-          hint: e?.hint,
-          params,
-        });
-        throw err;
-     }
+
+      // Génération SERVEUR (source unique de vérité) : remplit runner_auto_planning
+      // depuis le référentiel socle + space_product_coefficients (dotations réelles).
+      // Purge les lignes « brouillon », préserve les lignes déjà validées. On ne
+      // calcule plus rien côté client (l'ancienne source event_consumptions est vide).
+      const { data, error } = await supabase.rpc('generate_runner_dotations', {
+        p_event_id: params.event_id,
+      });
+      if (error) throw error;
+      return data as { success: boolean; event_id: string; lignes_generees: number };
     },
     onSuccess: invalidate,
   });

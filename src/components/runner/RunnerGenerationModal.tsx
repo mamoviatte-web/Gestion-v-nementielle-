@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Zap, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useRunnerPlanning } from '@/hooks/useRunnerPlanning';
+import { useToast } from '@/context/ToastContext';
 import { supabase } from '@/lib/supabase';
 import { WEATHER_LABELS, TREND_LABELS } from '@/lib/runnerCalculations';
 import { Alert, Button, Input, Select } from '@/components/ui';
@@ -55,6 +56,7 @@ export function RunnerGenerationModal({
   onGenerated: () => void;
 }) {
   const { generateRunnerPlans, submitting } = useRunnerPlanning(eventId);
+  const { showToast } = useToast();
   const autoRef = useAutoReference(eventId);
 
   const [weather, setWeather] = useState<WeatherType>('normal');
@@ -80,13 +82,14 @@ export function RunnerGenerationModal({
       return;
     }
     try {
-      await generateRunnerPlans({
+      const result = await generateRunnerPlans({
         event_id: eventId,
         space_ids: [...selected],
         weather_type: weather,
         temperature: Number(temperature) || 0,
         consumption_trend: trend,
       });
+      showToast(`${result?.lignes_generees ?? 0} dotations générées`, 'success');
       onGenerated();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de la génération.');
