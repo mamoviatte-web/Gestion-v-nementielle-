@@ -11,6 +11,7 @@ import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { AreaRunnersPanel } from '@/components/runner/AreaRunnersPanel';
 import { RunnerPdfButton } from '@/components/runner/RunnerPdfButton';
+import { genererRapportMatch, genererRapportSeminaire } from '@/lib/rapportExcel';
 import { BuvetteRunnersPanel } from '@/components/runner/BuvetteRunnersPanel';
 import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
 import { MatchConsumptionReport } from '@/components/analytics/MatchConsumptionReport';
@@ -234,9 +235,24 @@ export default function EventDetailPage() {
           )}
           <DeleteEventButton event={{ event_id: event.event_id, event_name: event.event_name, event_type: event.event_type }} />
           {(event.status === 'clôturé' || event.status === 'archivé') && (
-            <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700">
-              <CheckCircle2 className="h-4 w-4" /> Événement clôturé
-            </span>
+            <>
+              {(event.event_type === 'match' || event.event_type === 'séminaire') && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    event.event_type === 'séminaire'
+                      ? void genererRapportSeminaire(event.event_id)
+                      : void genererRapportMatch(event.event_id)
+                  }
+                >
+                  📊 Rapport Excel
+                </Button>
+              )}
+              <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700">
+                <CheckCircle2 className="h-4 w-4" /> Événement clôturé
+              </span>
+            </>
           )}
         </div>
       </div>
