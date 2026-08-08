@@ -16,8 +16,13 @@ export interface MatchSession {
   event_name: string;
   event_date: string;
   match_access_code: string | null;
+  /** Espace CANONIQUE — point d'appui de toutes les requêtes par espace. */
   space_id: string;
   space_name: string;
+  /** Espace brut de la session (peut être un doublon). Diagnostic seulement. */
+  session_space_id?: string;
+  /** true si l'espace de session est un alias résolu vers un canonique. */
+  is_alias?: boolean;
   service_type: 'vip' | 'bar' | 'buvette' | 'bodega' | null;
   staff_name: string;
   error?: string;

@@ -18,6 +18,7 @@ import {
   Users,
   UserPlus,
   Ruler,
+  Building2,
   ChevronLeft,
   ChevronRight,
   MoreHorizontal,
@@ -48,6 +49,7 @@ const NAV: NavItem[] = [
   { to: '/admin/analytics/coefficients', label: 'Coefficients espace', short: 'Coeff.', icon: Ruler },
   { to: '/admin/rh/preplan', label: 'Planning RH Match', short: 'Planning RH', icon: UserPlus },
   { to: '/admin/catalog', label: 'Catalogue', icon: Package },
+  { to: '/admin/spaces', label: 'Espaces', icon: Building2 },
   { to: '/admin/export', label: 'Export', icon: Download },
 ];
 const MAIN = NAV.slice(0, 4); // Accueil · Événements · Stocks · Analyses
