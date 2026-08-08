@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, ChevronDown, ChevronRight, Lock, LogOut, Plus, Sparkles, Trash2, RefreshCw, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { ExcelRHImporter, type ExtractedAgent } from '@/components/rh/ExcelRHImporter';
+import { ExcelRHImporter } from '@/components/rh/ExcelRHImporter';
 import { AgentSwapModal, type SwapTarget } from '@/components/rh/AgentSwapModal';
 
 const ROLES = ['Serveur', 'Chef de rang', 'Barman', 'Agent de sécurité', 'Runner', 'Hôte / Hôtesse', 'Responsable espace', 'Autre'];
@@ -95,21 +95,10 @@ export default function RHPlanningPage() {
 
   const rhSpaces = (preplan?.by_space ?? []).map((s) => ({ space_id: s.space_id, space_name: s.space_name }));
 
-  async function handleAgentsImported(imported: ExtractedAgent[]) {
-    let ok = 0;
-    let ko = 0;
-    for (const a of imported) {
-      if (!a.space_id || !a.nom || !a.prenom) { ko++; continue; }
-      const { data } = await supabase.rpc('rh_upsert_agent_by_token', {
-        p_token: token, p_space_id: a.space_id, p_agent_id: null,
-        p_nom: a.nom, p_prenom: a.prenom, p_role: a.role,
-        p_start: a.start_time || '00:00', p_end: a.end_time || null, p_rate: a.hourly_rate,
-      });
-      if ((data as { success?: boolean } | null)?.success) ok += 1; else ko += 1;
-    }
+  function handleImportDone(inserted: number) {
     setShowImporter(false);
-    setImportBanner(`✅ ${ok} agent(s) importé(s)${ko > 0 ? ` · ⚠️ ${ko} non importé(s)` : ''}`);
-    await loadPreplan();
+    setImportBanner(`✅ ${inserted} agent(s) importé(s)`);
+    void loadPreplan();
   }
 
   if (loading)
@@ -246,7 +235,7 @@ export default function RHPlanningPage() {
       {showImporter && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 md:items-center">
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
-            <ExcelRHImporter token={token} spaces={rhSpaces} onImported={handleAgentsImported} onClose={() => setShowImporter(false)} />
+            <ExcelRHImporter token={token} spaces={rhSpaces} onDone={handleImportDone} onClose={() => setShowImporter(false)} />
           </div>
         </div>
       )}

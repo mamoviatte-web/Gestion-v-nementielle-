@@ -1,9 +1,8 @@
 /**
- * ExcelRHImporter — import du planning prestataire RH.
- * Excel → CSV (SheetJS, côté client) → fonction edge read-rh-planning (Claude,
- * clé côté serveur) → répartition des agents par espace (matching client) →
- * revue/édition → upsert. ⚠ Aucun appel direct à l'API Anthropic depuis le
- * navigateur (clé jamais exposée).
+ * ExcelRHImporter — import du planning prestataire RH, 100 % côté client.
+ * Excel (SheetJS) → détection des blocs par feuille → resolve_space (restauration)
+ * ou pôle (hors resto) → revue/édition → insertion via rh_import_agents_by_token.
+ * Plus AUCUN appel Edge Function (cause de « Failed to send a request… »).
  */
 
 import { useCallback, useRef, useState } from 'react';
@@ -16,68 +15,126 @@ export interface ImporterSpace {
   space_name: string;
   service_type?: string;
 }
-export interface ExtractedAgent {
+
+interface ReviewAgent {
+  key: string;
+  titre: string;
+  pole: string | null;
   nom: string;
   prenom: string;
+  poste: string;
   role: string;
-  space_code: string;
   space_id: string | null;
   space_name: string | null;
-  start_time: string;
-  end_time: string;
-  hourly_rate: number | null;
-  confidence: 'high' | 'medium' | 'low';
-}
-interface RawAgent {
-  nom?: string; prenom?: string; role?: string; space_code?: string;
-  start_time?: string; end_time?: string; hourly_rate?: number | string | null;
+  start: string;
+  end: string;
+  hours: number;
+  rate: number;
+  confidence: number;
+  a_confirmer: boolean;
 }
 
-const norm = (s: string) =>
-  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-const num = (v: unknown): number | null => {
-  const n = typeof v === 'string' ? parseFloat(v) : (v as number);
-  return Number.isFinite(n) ? n : null;
+const POLES: Record<string, string> = {
+  CASHLESSMEN: 'Cashless',
+  'SECU MASCOTTE': 'Sécurité/Mascotte',
+  'SCAN ACCUEIL': 'Accueil/Scanettes',
+  AUTRES: 'Autres',
 };
+const HEADER_TOKENS = ['poste', 'nom', 'arriv', 'départ', 'depart', 'temps', 'signature'];
+const ROLE_ENUM = [
+  'Serveur', 'Chef de rang', 'Barman', 'Agent de sécurité', 'Runner', 'Hôte / Hôtesse', 'Responsable espace', 'Autre',
+] as const;
+
+const nettoie = (v: unknown): string => String(v ?? '').replace(/[✅]/g, '').replace(/#REF!/g, '').trim();
+const estLigneEntete = (cells: string[]): boolean => {
+  const t = cells.map((c) => c.toLowerCase()).join(' ');
+  return HEADER_TOKENS.filter((k) => t.includes(k)).length >= 3;
+};
+const toMin = (h: string): number | null => {
+  const m = String(h).match(/(\d{1,2})[:hH.](\d{2})/);
+  return m ? +m[1] * 60 + +m[2] : null;
+};
+const heuresCalc = (arr: string, dep: string, temps: string): number => {
+  const t = toMin(temps);
+  if (t != null && t > 0 && t < 24 * 60) return +(t / 60).toFixed(2);
+  const a = toMin(arr), d = toMin(dep);
+  if (a == null || d == null) return 0;
+  let diff = d - a;
+  if (diff < 0) diff += 24 * 60;
+  return +(diff / 60).toFixed(2);
+};
+/** HH:MM depuis un libellé (« 9h30 », « 09:00 »), sinon '' */
+const toTime = (h: string): string => {
+  const m = String(h).match(/(\d{1,2})[:hH.](\d{2})/);
+  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
+};
+const mapRole = (poste: string): string => {
+  const p = poste.toLowerCase();
+  if (/respo/.test(p)) return 'Responsable espace';
+  if (/chef.*rang/.test(p)) return 'Chef de rang';
+  if (/barman|\bbar\b/.test(p)) return 'Barman';
+  if (/s[ée]cu|securit|mascotte/.test(p)) return 'Agent de sécurité';
+  if (/runner/.test(p)) return 'Runner';
+  if (/h[oô]te|hotesse|accueil|scan/.test(p)) return 'Hôte / Hôtesse';
+  if (/serveur|\bserv\b/.test(p)) return 'Serveur';
+  return 'Autre';
+};
+const taux = (poste: string): number => (/respo/i.test(poste) ? 12 : 16.5);
+
+interface RawBloc {
+  titre: string;
+  pole: string | null;
+  agents: { poste: string; nomPrenom: string; arr: string; dep: string; temps: string }[];
+}
+
+function parseFeuille(ws: XLSX.WorkSheet, sheetName: string): RawBloc[] {
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false, defval: '' });
+  const poleFeuille = POLES[sheetName.trim().toUpperCase()] ?? null;
+  const blocs: RawBloc[] = [];
+  let cur: (RawBloc & { headerVu: boolean }) | null = null;
+  for (const row of rows) {
+    const cells = (row as unknown[]).map(nettoie);
+    const premier = cells[0] ?? '';
+    const texte = cells.join(' ').trim();
+    if (!texte) continue;
+    if (/merci d'envoyer/i.test(texte)) continue;
+    if (estLigneEntete(cells)) {
+      if (cur) cur.headerVu = true;
+      continue;
+    }
+    if (cur && cur.headerVu && (cells[1] || premier)) {
+      const nomPrenom = nettoie(cells[1]);
+      const poste = nettoie(cells[0]);
+      if (!nomPrenom && !poste) continue;
+      cur.agents.push({
+        poste, nomPrenom,
+        arr: nettoie(cells[2]),
+        dep: nettoie(cells[4] || cells[3]),
+        temps: nettoie(cells[5]),
+      });
+      continue;
+    }
+    cur = { titre: nettoie(premier || texte), pole: poleFeuille, headerVu: false, agents: [] };
+    blocs.push(cur);
+  }
+  return blocs.filter((b) => b.agents.length > 0);
+}
 
 export function ExcelRHImporter({
-  token, spaces, onImported, onClose,
+  token, spaces, onDone, onClose,
 }: {
   token: string;
   spaces: ImporterSpace[];
-  onImported: (agents: ExtractedAgent[]) => void;
+  onDone: (inserted: number) => void;
   onClose: () => void;
 }) {
   const [step, setStep] = useState<'upload' | 'reading' | 'review' | 'error'>('upload');
-  const [agents, setAgents] = useState<ExtractedAgent[]>([]);
+  const [agents, setAgents] = useState<ReviewAgent[]>([]);
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const matchSpace = useCallback(
-    (rawName: string): { id: string | null; name: string | null; conf: ExtractedAgent['confidence'] } => {
-      if (!rawName) return { id: null, name: null, conf: 'low' };
-      const bMatch = rawName.trim().match(/^B\s*(\d+)$/i);
-      if (bMatch) {
-        const n = parseInt(bMatch[1], 10);
-        const found = spaces.find((s) => s.space_name === `B${n}` || norm(s.space_name).includes(`buvette ${n}`));
-        if (found) return { id: found.space_id, name: found.space_name, conf: 'high' };
-      }
-      const rawWords = norm(rawName).split(' ').filter((w) => w.length > 2);
-      let best: ImporterSpace | null = null;
-      let bestScore = 0;
-      for (const sp of spaces) {
-        const spWords = norm(sp.space_name).split(' ').filter((w) => w.length > 2);
-        const common = rawWords.filter((w) => spWords.some((sw) => sw.includes(w) || w.includes(sw)));
-        const score = rawWords.length > 0 ? common.length / rawWords.length : 0;
-        if (score > bestScore) { bestScore = score; best = sp; }
-      }
-      if (!best || bestScore < 0.3) return { id: null, name: null, conf: 'low' };
-      return { id: best.space_id, name: best.space_name, conf: bestScore >= 0.8 ? 'high' : bestScore >= 0.5 ? 'medium' : 'low' };
-    },
-    [spaces],
-  );
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -86,54 +143,104 @@ export function ExcelRHImporter({
       setFileName(file.name);
       setStep('reading');
       try {
-        const buffer = await file.arrayBuffer();
-        const wb = XLSX.read(buffer, { type: 'array' });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
-
-        const { data, error: fnError } = await supabase.functions.invoke('read-rh-planning', {
-          body: { csv, token, spaces: spaces.map((s) => ({ space_name: s.space_name, service_type: s.service_type })) },
-        });
-        const res = data as { success?: boolean; error?: string; agents?: RawAgent[] } | null;
-        if (fnError || !res?.success) { setError(res?.error ?? fnError?.message ?? 'Lecture impossible.'); setStep('error'); return; }
-
-        const matched: ExtractedAgent[] = (res.agents ?? []).map((a) => {
-          const m = matchSpace(a.space_code ?? '');
-          return {
-            nom: (a.nom ?? '').toUpperCase().trim(),
-            prenom: (a.prenom ?? '').trim(),
-            role: a.role ?? 'Autre',
-            space_code: a.space_code ?? '',
-            space_id: m.id,
-            space_name: m.name,
-            start_time: a.start_time ?? '',
-            end_time: a.end_time ?? '',
-            hourly_rate: num(a.hourly_rate),
-            confidence: m.conf,
-          };
-        });
-        setAgents(matched);
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array', cellDates: false });
+        // 1) Parser tous les blocs de toutes les feuilles.
+        const blocs = wb.SheetNames.flatMap((name) => parseFeuille(wb.Sheets[name], name));
+        if (blocs.length === 0) { setError('Aucun bloc agent détecté dans le fichier.'); setStep('error'); return; }
+        // 2) Résoudre l'espace de chaque bloc restauration (pôles = hors resto).
+        const review: ReviewAgent[] = [];
+        for (const b of blocs) {
+          let spaceId: string | null = null;
+          let spaceName: string | null = null;
+          let confidence = 1;
+          let aConfirmer = false;
+          if (!b.pole) {
+            const { data } = await supabase.rpc('resolve_space', { p_label: b.titre });
+            const r = data as { space_id?: string | null; space_name?: string | null; confidence?: number; a_confirmer?: boolean } | null;
+            spaceId = r?.space_id ?? null;
+            spaceName = r?.space_name ?? null;
+            confidence = Number(r?.confidence ?? 0);
+            aConfirmer = r?.a_confirmer === true || !spaceId || confidence < 0.6;
+          }
+          for (const a of b.agents) {
+            review.push({
+              key: crypto.randomUUID(),
+              titre: b.titre,
+              pole: b.pole,
+              nom: (a.nomPrenom.split(/\s+/).filter(Boolean)[0] ?? a.nomPrenom ?? 'Agent').toUpperCase(),
+              prenom: a.nomPrenom.split(/\s+/).filter(Boolean).slice(1).join(' ') || '-',
+              poste: a.poste,
+              role: mapRole(a.poste),
+              space_id: spaceId,
+              space_name: spaceName,
+              start: toTime(a.arr),
+              end: toTime(a.dep),
+              hours: heuresCalc(a.arr, a.dep, a.temps),
+              rate: taux(a.poste),
+              confidence,
+              a_confirmer: aConfirmer,
+            });
+          }
+        }
+        setAgents(review);
         setStep('review');
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Erreur lors de la lecture.');
         setStep('error');
       }
     },
-    [matchSpace, spaces, token],
+    [],
   );
 
-  const nbHigh = agents.filter((a) => a.confidence === 'high' && a.space_id).length;
-  const nbMedium = agents.filter((a) => a.confidence === 'medium' && a.space_id).length;
-  const nbLow = agents.filter((a) => !a.space_id).length;
+  const update = (key: string, patch: Partial<ReviewAgent>) =>
+    setAgents((prev) => prev.map((a) => (a.key === key ? { ...a, ...patch } : a)));
 
-  const update = (i: number, patch: Partial<ExtractedAgent>) =>
-    setAgents((prev) => prev.map((a, j) => (j === i ? { ...a, ...patch } : a)));
+  // Choix d'espace sur un bloc « à confirmer » → applique à tous les agents du bloc + mémorise l'alias.
+  async function pickSpace(titre: string, spaceId: string) {
+    const sp = spaces.find((s) => s.space_id === spaceId);
+    setAgents((prev) =>
+      prev.map((a) => (a.titre === titre ? { ...a, space_id: spaceId || null, space_name: sp?.space_name ?? null, a_confirmer: false } : a)),
+    );
+    if (spaceId) await supabase.rpc('learn_space_alias', { p_label: titre, p_space_id: spaceId });
+  }
+
+  const valides = agents.filter((a) => a.nom && (a.pole || a.space_id));
+  const nbAuto = agents.filter((a) => !a.pole && a.space_id && !a.a_confirmer).length;
+  const nbPole = agents.filter((a) => a.pole).length;
+  const nbConfirm = agents.filter((a) => !a.pole && a.a_confirmer).length;
+
+  async function confirmer() {
+    setSaving(true);
+    try {
+      const rows = valides.map((a) => ({
+        space_id: a.pole ? null : a.space_id,
+        nom: a.nom,
+        prenom: a.prenom,
+        role: a.role,
+        start: a.start || '00:00',
+        end: a.end || null,
+        hours: a.hours || null,
+        rate: a.rate || null,
+        note: a.pole ? `Pôle: ${a.pole}` : null,
+      }));
+      const { data, error: err } = await supabase.rpc('rh_import_agents_by_token', { p_token: token, p_agents: rows });
+      const res = data as { success?: boolean; inserted?: number; error?: string } | null;
+      if (err || !res?.success) { setError(res?.error ?? err?.message ?? 'Échec de l\'enregistrement.'); setStep('error'); return; }
+      onDone(res.inserted ?? rows.length);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur lors de l\'enregistrement.');
+      setStep('error');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (step === 'upload')
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-2"><Sparkles size={16} className="text-amber-500" /><p className="text-sm font-semibold text-stone-800">Import Excel prestataire RH</p></div>
-        <p className="text-xs text-stone-500">Déposez le fichier du prestataire. Claude lit le planning et répartit chaque agent dans son espace.</p>
+        <div className="flex items-center gap-2"><Sparkles size={16} className="text-amber-500" /><p className="text-sm font-semibold text-stone-800">Importer le planning Excel prestataire</p></div>
+        <p className="text-xs text-stone-500">Déposez le fichier d'émargement. Chaque feuille/bloc est réparti par espace (restauration) ou par pôle (hors resto).</p>
         <div
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
@@ -157,8 +264,8 @@ export function ExcelRHImporter({
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-200 bg-amber-50"><Sparkles size={24} className="animate-pulse text-amber-500" /></div>
           <div className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-stone-900"><Loader size={10} className="animate-spin text-white" /></div>
         </div>
-        <div><p className="font-bold text-stone-900">Claude analyse le planning…</p><p className="mt-1 text-xs text-stone-400">{fileName}</p></div>
-        <div className="space-y-1 text-xs text-stone-400"><p>✓ Lecture du fichier Excel</p><p>✓ Extraction noms, prénoms, horaires</p><p>✓ Répartition par espace</p></div>
+        <div><p className="font-bold text-stone-900">Lecture du planning…</p><p className="mt-1 text-xs text-stone-400">{fileName}</p></div>
+        <div className="space-y-1 text-xs text-stone-400"><p>✓ Lecture des feuilles Excel</p><p>✓ Détection des blocs & agents</p><p>✓ Rattachement des espaces</p></div>
       </div>
     );
 
@@ -166,37 +273,49 @@ export function ExcelRHImporter({
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-bold text-stone-800">{agents.length} agents extraits</p>
+          <p className="text-sm font-bold text-stone-800">{agents.length} agents détectés</p>
           <button onClick={() => { setStep('upload'); setAgents([]); }} className="text-xs text-stone-400 hover:text-stone-700">↩ Réimporter</button>
         </div>
         <div className="flex flex-wrap gap-2">
-          <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">✅ {nbHigh} reconnus</span>
-          {nbMedium > 0 && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">⚠️ {nbMedium} à vérifier</span>}
-          {nbLow > 0 && <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">❌ {nbLow} non assignés</span>}
+          <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">✅ {nbAuto} auto-rattachés</span>
+          {nbPole > 0 && <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">🏷 {nbPole} hors resto</span>}
+          {nbConfirm > 0 && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">⚠️ {nbConfirm} à confirmer</span>}
         </div>
         <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-          {agents.map((a, i) => (
-            <div key={i} className={`rounded-xl border p-3 ${a.space_id ? (a.confidence === 'high' ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50') : 'border-red-200 bg-red-50'}`}>
+          {agents.map((a) => (
+            <div key={a.key} className={`rounded-xl border p-3 ${a.pole ? 'border-blue-200 bg-blue-50' : a.space_id && !a.a_confirmer ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-stone-800">{a.prenom} {a.nom}</p>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[10px] text-stone-500">{a.role}</span>
-                    {a.start_time && <span className="text-[10px] text-stone-500">⏰ {a.start_time}→{a.end_time || '—'}</span>}
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-stone-500">
+                    <span>{a.role}</span>
+                    {a.start && <span>⏰ {a.start}→{a.end || '—'}</span>}
+                    <span>· {a.hours.toFixed(1)} h · {a.rate} €/h</span>
+                    <span className="italic text-stone-400">({a.titre})</span>
                   </div>
+                  {a.pole ? (
+                    <p className="mt-2 rounded-lg bg-white px-2 py-1.5 text-xs font-medium text-blue-700">🏷 Pôle : {a.pole} (hors restauration)</p>
+                  ) : (
+                    <select
+                      value={a.space_id ?? ''}
+                      onChange={(e) => void pickSpace(a.titre, e.target.value)}
+                      className={`mt-2 w-full rounded-lg border px-2 py-1.5 text-xs ${a.space_id && !a.a_confirmer ? 'border-stone-200 bg-white' : 'border-amber-300 bg-white'}`}
+                    >
+                      <option value="">{`⚠️ « ${a.titre} » — choisir l'espace`}</option>
+                      {spaces.map((s) => <option key={s.space_id} value={s.space_id}>{s.space_name}</option>)}
+                    </select>
+                  )}
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <button onClick={() => setAgents((prev) => prev.filter((x) => x.key !== a.key))} className="px-1 text-[10px] text-stone-300 hover:text-red-500">✕</button>
                   <select
-                    value={a.space_id ?? ''}
-                    onChange={(e) => {
-                      const sp = spaces.find((s) => s.space_id === e.target.value);
-                      update(i, { space_id: e.target.value || null, space_name: sp?.space_name ?? null, confidence: e.target.value ? 'high' : 'low' });
-                    }}
-                    className={`mt-2 w-full rounded-lg border px-2 py-1.5 text-xs ${a.space_id ? 'border-stone-200 bg-white' : 'border-red-300 bg-white'}`}
+                    value={a.role}
+                    onChange={(e) => update(a.key, { role: e.target.value })}
+                    className="rounded border border-stone-200 bg-white px-1 py-0.5 text-[10px]"
                   >
-                    <option value="">{a.space_code ? `❌ « ${a.space_code} » — choisir l'espace` : "-- Choisir l'espace --"}</option>
-                    {spaces.map((s) => <option key={s.space_id} value={s.space_id}>{s.space_name}</option>)}
+                    {ROLE_ENUM.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
-                <button onClick={() => setAgents((prev) => prev.filter((_, j) => j !== i))} className="shrink-0 px-1 text-[10px] text-stone-300 hover:text-red-500">✕</button>
               </div>
             </div>
           ))}
@@ -204,11 +323,11 @@ export function ExcelRHImporter({
         <div className="flex gap-3">
           <button onClick={onClose} className="flex-1 rounded-xl border border-stone-200 py-2.5 text-sm text-stone-600">Annuler</button>
           <button
-            onClick={() => onImported(agents.filter((a) => a.space_id && a.nom && a.prenom))}
-            disabled={agents.filter((a) => a.space_id && a.nom && a.prenom).length === 0}
+            onClick={() => void confirmer()}
+            disabled={valides.length === 0 || saving}
             className="flex-1 rounded-xl bg-stone-900 py-2.5 text-sm font-bold text-white disabled:opacity-40"
           >
-            Importer {agents.filter((a) => a.space_id && a.nom && a.prenom).length} agents →
+            {saving ? 'Enregistrement…' : `Confirmer l'import (${valides.length}) →`}
           </button>
         </div>
       </div>
