@@ -6,8 +6,9 @@
  */
 
 import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, Lock, Plus, Trash2 } from 'lucide-react';
+import { Lock, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { RhPlanningFamilyBoard } from '@/components/rh/RhPlanningFamilyBoard';
 
 const ROLES = ['Serveur', 'Chef de rang', 'Barman', 'Agent de sécurité', 'Runner', 'Hôte / Hôtesse', 'Responsable espace', 'Autre'];
 const ROLE_ICONS: Record<string, string> = {
@@ -99,8 +100,9 @@ export default function HRPreplanPage() {
   const [preplan, setPreplan] = useState<Preplan | null>(null);
   const [loading, setLoading] = useState(false);
   const [locking, setLocking] = useState(false);
-  const [openSpaces, setOpenSpaces] = useState<Set<string>>(new Set());
   const [hrName, setHrName] = useState('');
+  const [refreshSignal, setRefreshSignal] = useState(0);
+  const bump = () => setRefreshSignal((n) => n + 1);
 
   useEffect(() => {
     void supabase.from('events').select('event_id, event_name, event_date, event_type, status')
@@ -139,13 +141,17 @@ export default function HRPreplanPage() {
       p_nom: agent.nom, p_prenom: agent.prenom, p_role: agent.role,
       p_start: agent.start, p_end: agent.end, p_rate: agent.rate, p_created_by: hrName || 'RH',
     });
-    if ((data as { success?: boolean } | null)?.success) await reload();
+    if ((data as { success?: boolean } | null)?.success) {
+      await reload();
+      bump();
+    }
   }
 
   async function deleteAgent(agentId: string) {
     if (isLocked) return;
     await supabase.from('event_staff_preplan').delete().eq('id', agentId);
     await reload();
+    bump();
   }
 
   async function lockPreplan() {
@@ -158,6 +164,7 @@ export default function HRPreplanPage() {
     if (r?.success) {
       alert(`✅ ${r.agents_locked} agent(s) verrouillés et transmis aux responsables de zone.`);
       await reload();
+      bump();
     }
   }
 
@@ -217,55 +224,38 @@ export default function HRPreplanPage() {
 
       {loading ? (
         <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-stone-100" />)}</div>
-      ) : (
-        <div className="space-y-3">
-          {preplan?.by_space?.map((space) => {
-            const isOpen = openSpaces.has(space.space_id);
-            const pct = space.nb_planifies > 0 ? Math.round((space.nb_pointes / space.nb_planifies) * 100) : 0;
+      ) : selectedEvent ? (
+        <RhPlanningFamilyBoard
+          eventId={selectedEvent}
+          refreshSignal={refreshSignal}
+          onExternalChange={() => void reload()}
+          renderSpaceDetail={({ id, nom }) => {
+            const space = preplan?.by_space?.find((s) => s.space_id === id);
+            if (!space) return <p className="text-sm text-stone-400">Aucun agent pour {nom}.</p>;
             return (
-              <div key={space.space_id} className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
-                <button onClick={() => setOpenSpaces((prev) => { const n = new Set(prev); n.has(space.space_id) ? n.delete(space.space_id) : n.add(space.space_id); return n; })} className="flex w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-stone-50">
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-bold text-stone-900">{space.space_name}</p>
-                      <span className="rounded-lg bg-stone-100 px-2 py-0.5 text-xs text-stone-500">{space.nb_planifies} agent{space.nb_planifies > 1 ? 's' : ''}</span>
-                      {space.nb_pointes > 0 && <span className="rounded-lg bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">{space.nb_pointes} pointé{space.nb_pointes > 1 ? 's' : ''}</span>}
-                    </div>
-                    {space.nb_planifies > 0 && (
-                      <div className="mt-1.5 flex items-center gap-2">
-                        <div className="h-1 w-32 overflow-hidden rounded-full bg-stone-100"><div className="h-full rounded-full bg-green-500" style={{ width: `${pct}%` }} /></div>
-                        <span className="text-xs text-stone-400">{pct}% pointé</span>
+              <div className="space-y-2">
+                {(space.agents ?? []).map((agent) => {
+                  const meta = STATUS_META[agent.status] ?? STATUS_META.planifié;
+                  return (
+                    <div key={agent.id} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${meta.card}`}>
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-800 text-xs font-black text-white">{agent.prenom?.[0]}{agent.nom?.[0]}</div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-stone-800">{agent.prenom} {agent.nom}</p>
+                        <p className="text-xs text-stone-400">{ROLE_ICONS[agent.role]} {agent.role} · {agent.planned_start?.slice(0, 5)}{agent.planned_end ? ` → ${agent.planned_end.slice(0, 5)}` : ''}{agent.planned_hours ? ` (${agent.planned_hours}h)` : ''}</p>
                       </div>
-                    )}
-                  </div>
-                  {isOpen ? <ChevronDown size={16} className="text-stone-400" /> : <ChevronRight size={16} className="text-stone-400" />}
-                </button>
-                {isOpen && (
-                  <div className="space-y-2 border-t border-stone-100 p-4">
-                    {(space.agents ?? []).map((agent) => {
-                      const meta = STATUS_META[agent.status] ?? STATUS_META.planifié;
-                      return (
-                        <div key={agent.id} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${meta.card}`}>
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-800 text-xs font-black text-white">{agent.prenom?.[0]}{agent.nom?.[0]}</div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold text-stone-800">{agent.prenom} {agent.nom}</p>
-                            <p className="text-xs text-stone-400">{ROLE_ICONS[agent.role]} {agent.role} · {agent.planned_start?.slice(0, 5)}{agent.planned_end ? ` → ${agent.planned_end.slice(0, 5)}` : ''}{agent.planned_hours ? ` (${agent.planned_hours}h)` : ''}</p>
-                          </div>
-                          <span className={`shrink-0 rounded-lg px-2 py-0.5 text-xs font-bold ${meta.badge}`}>{STATUS_LABEL[agent.status] ?? agent.status}</span>
-                          {!isLocked && (
-                            <button onClick={() => void deleteAgent(agent.id)} className="p-1 text-stone-300 transition-colors hover:text-red-400"><Trash2 size={13} /></button>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {!isLocked && <AddAgentForm onAdd={(a) => void addAgent(space.space_id, a)} />}
-                  </div>
-                )}
+                      <span className={`shrink-0 rounded-lg px-2 py-0.5 text-xs font-bold ${meta.badge}`}>{STATUS_LABEL[agent.status] ?? agent.status}</span>
+                      {!isLocked && (
+                        <button onClick={() => void deleteAgent(agent.id)} className="p-1 text-stone-300 transition-colors hover:text-red-400"><Trash2 size={13} /></button>
+                      )}
+                    </div>
+                  );
+                })}
+                {!isLocked && <AddAgentForm onAdd={(a) => void addAgent(id, a)} />}
               </div>
             );
-          })}
-        </div>
-      )}
+          }}
+        />
+      ) : null}
     </div>
   );
 }
