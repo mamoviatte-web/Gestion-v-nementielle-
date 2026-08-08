@@ -9,6 +9,7 @@ import {
   AlertTriangle, ChevronDown, ChevronRight, TrendingUp, Users, Package,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { SuiviRhBlock } from './SuiviRhBlock';
 
 type StatutEspace = 'complet' | 'cloture_partielle' | 'ouverture_seule' | 'aucun_stock';
 
@@ -175,6 +176,9 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
           </div>
         ))}
       </div>
+
+      {/* ── SUIVI RH (espaces + pôles hors resto + agents) ── */}
+      <SuiviRhBlock eventId={eventId} fbCost={totals.fb} />
 
       {/* ── ALERTES ── */}
       {alerts.length > 0 && (

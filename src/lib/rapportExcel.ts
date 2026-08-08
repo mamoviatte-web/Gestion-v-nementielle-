@@ -41,6 +41,20 @@ interface CategorieRow {
   unites: number;
   cout: number;
 }
+interface RhData {
+  kpis: {
+    nb_agents: number;
+    nb_espaces: number;
+    total_heures: number | null;
+    cout_rh_ht: number | null;
+    cout_resto: number;
+    cout_hors_resto: number;
+    cout_par_pax: number | null;
+  };
+  par_espace: { espace: string; agents: number; heures: number; cout: number }[];
+  par_pole: { pole: string; agents: number; heures: number; cout: number }[];
+  agents: { nom: string; prenom: string; role: string; rattachement: string; heures: number; taux: number; cout: number }[];
+}
 interface MatchReport {
   match: { name: string; date: string; pax: number };
   segments: Segment[];
@@ -48,6 +62,7 @@ interface MatchReport {
   espaces: EspaceMatch[];
   futs: Fut[];
   produits: Produit[];
+  rh?: RhData | null;
 }
 interface EspaceSem {
   espace: string;
@@ -284,6 +299,18 @@ export async function genererRapportMatch(eventId: string): Promise<void> {
     8,
   );
   const pax = rep.match.pax || 1;
+  // Ligne 4 : Coût RH + Coût total événement (F&B + RH).
+  const rhCost = rep.rh?.kpis?.cout_rh_ht ?? 0;
+  s.getCell(4, 1).value = 'COÛT RH HT';
+  s.getCell(4, 1).font = { name: 'Arial', size: 8, bold: true, color: { argb: GREY } };
+  s.getCell(4, 2).value = rhCost;
+  s.getCell(4, 2).numFmt = EUR;
+  s.getCell(4, 2).font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FF2F6FED' } };
+  s.getCell(4, 4).value = 'COÛT TOTAL ÉVÉNEMENT';
+  s.getCell(4, 4).font = { name: 'Arial', size: 8, bold: true, color: { argb: GREY } };
+  s.getCell(4, 5).value = { formula: `Produits!G${totProd}+${rhCost}` };
+  s.getCell(4, 5).numFmt = EUR;
+  s.getCell(4, 5).font = { name: 'Arial', size: 12, bold: true, color: { argb: NAVY } };
   const kpis: KpiDef[] = [
     ['COÛT F&B HT', { formula: `Produits!G${totProd}` }, EUR, NAVY, 1],
     ['COÛT / SPECTATEUR', { formula: `Produits!G${totProd}/${pax}` }, EURpax, 'FF12B3A6', 3],
@@ -416,9 +443,80 @@ export async function genererRapportMatch(eventId: string): Promise<void> {
   [24, 12, 14, 16, 12].forEach((w, i) => (f.getColumn(i + 1).width = w));
   dataBar(f, `B5:B${4 + rep.futs.length}`, 'FFC9A227');
 
+  // --- RH (charges personnel) ---
+  const rh = rep.rh;
+  if (rh) {
+    const w = wb.addWorksheet('RH', { views: [{ showGridLines: false }] });
+    [26, 12, 12, 16, 12].forEach((wd, i) => (w.getColumn(i + 1).width = wd));
+    band(
+      w,
+      'SUIVI RH — CHARGES PERSONNEL',
+      `${rh.kpis.nb_agents} agents · ${rh.kpis.total_heures ?? 0} h · Respo 12 €/h · autres 16,5 €/h`,
+      5,
+    );
+    const rhKpis: [string, number, string][] = [
+      ['Coût RH total', rh.kpis.cout_rh_ht ?? 0, 'FF2F6FED'],
+      ['dont Restauration', rh.kpis.cout_resto ?? 0, 'FF1D7A46'],
+      ['dont Hors restauration', rh.kpis.cout_hors_resto ?? 0, 'FFE0447A'],
+      ['Coût RH / spectateur', rh.kpis.cout_par_pax ?? 0, 'FFC9A227'],
+    ];
+    rhKpis.forEach(([lab, val, color], i) => {
+      const r = 5 + i;
+      w.getCell(r, 1).value = lab;
+      w.getCell(r, 1).font = { name: 'Arial', bold: true };
+      const v = w.getCell(r, 2);
+      v.value = val;
+      v.numFmt = lab.includes('spectateur') ? EURpax : EUR;
+      v.font = { color: { argb: color }, bold: true };
+    });
+    // Par espace (restauration)
+    const rE = 11;
+    w.getCell(rE, 1).value = 'PAR ESPACE (restauration)';
+    w.getCell(rE, 1).font = { name: 'Arial', bold: true, color: { argb: NAVY } };
+    ['Espace', 'Agents', 'Heures', 'Coût HT'].forEach((h, i) => hdr(w, rE + 1, i + 1, h));
+    rh.par_espace.forEach((x, i) => {
+      const r = rE + 2 + i;
+      bordered(w.getCell(r, 1)).value = x.espace;
+      bordered(w.getCell(r, 2)).value = x.agents;
+      bordered(w.getCell(r, 3)).value = x.heures;
+      bordered(w.getCell(r, 4)).value = x.cout;
+      w.getCell(r, 4).numFmt = EUR;
+    });
+    if (rh.par_espace.length) dataBar(w, `D${rE + 2}:D${rE + 1 + rh.par_espace.length}`, 'FF1D7A46');
+    // Par pôle (hors restauration)
+    const rP = rE + 3 + rh.par_espace.length;
+    w.getCell(rP, 1).value = 'PAR PÔLE (hors restauration)';
+    w.getCell(rP, 1).font = { name: 'Arial', bold: true, color: { argb: NAVY } };
+    ['Pôle', 'Agents', 'Heures', 'Coût HT'].forEach((h, i) => hdr(w, rP + 1, i + 1, h));
+    rh.par_pole.forEach((x, i) => {
+      const r = rP + 2 + i;
+      bordered(w.getCell(r, 1)).value = x.pole;
+      bordered(w.getCell(r, 2)).value = x.agents;
+      bordered(w.getCell(r, 3)).value = x.heures;
+      bordered(w.getCell(r, 4)).value = x.cout;
+      w.getCell(r, 4).numFmt = EUR;
+    });
+    if (rh.par_pole.length) dataBar(w, `D${rP + 2}:D${rP + 1 + rh.par_pole.length}`, 'FFE0447A');
+    // Détail agents
+    const rA = rP + 3 + rh.par_pole.length;
+    w.getCell(rA, 1).value = 'DÉTAIL AGENTS';
+    w.getCell(rA, 1).font = { name: 'Arial', bold: true, color: { argb: NAVY } };
+    ['Nom', 'Rôle', 'Rattachement', 'Heures', 'Coût HT'].forEach((h, i) => hdr(w, rA + 1, i + 1, h));
+    rh.agents.forEach((a, i) => {
+      const r = rA + 2 + i;
+      bordered(w.getCell(r, 1)).value = `${a.prenom} ${a.nom}`.trim();
+      bordered(w.getCell(r, 2)).value = a.role;
+      bordered(w.getCell(r, 3)).value = a.rattachement;
+      bordered(w.getCell(r, 4)).value = a.heures;
+      bordered(w.getCell(r, 5)).value = a.cout;
+      w.getCell(r, 5).numFmt = EUR;
+    });
+  }
+
   sheetParametres(wb, [
     ['Événement', rep.match.name],
     ['Date', longDate(rep.match.date)],
+    ['Coût RH HT', rep.rh?.kpis?.cout_rh_ht != null ? `${rep.rh.kpis.cout_rh_ht} €` : '— (émargement non importé)'],
     ['Spectateurs (PAX)', rep.match.pax],
     ['Espaces couverts', rep.espaces.length],
     ['Produits', rep.produits.length],
