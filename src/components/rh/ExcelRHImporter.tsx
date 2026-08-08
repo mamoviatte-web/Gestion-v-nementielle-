@@ -54,19 +54,43 @@ const toMin = (h: string): number | null => {
   const m = String(h).match(/(\d{1,2})[:hH.](\d{2})/);
   return m ? +m[1] * 60 + +m[2] : null;
 };
-const heuresCalc = (arr: string, dep: string, temps: string): number => {
-  const t = toMin(temps);
-  if (t != null && t > 0 && t < 24 * 60) return +(t / 60).toFixed(2);
-  const a = toMin(arr), d = toMin(dep);
+/** HH:MM valide depuis un libellé OU un nombre Excel (fraction de jour). Sinon ''. */
+const toTime = (raw: unknown): string => {
+  if (raw == null) return '';
+  const str = String(raw).trim();
+  if (str === '') return '';
+  // Excel : les heures sont souvent des fractions de jour (0.375 = 09:00).
+  const asNum = Number(str.replace(',', '.'));
+  if (Number.isFinite(asNum) && asNum > 0 && asNum < 1) {
+    const tot = Math.round(asNum * 24 * 60);
+    const h = Math.floor(tot / 60) % 24, m = tot % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+  // « 9h30 », « 09:00 », « 9.30 » (fraction déjà traitée au-dessus).
+  const m = str.match(/(\d{1,2})\s*[:hH.]\s*(\d{1,2})/);
+  if (m) {
+    let hh = parseInt(m[1], 10);
+    let mm = parseInt(m[2], 10);
+    if (mm > 59) mm = 0; // minute invalide → 0 (jamais « 00:89 »)
+    if (hh > 23) hh = hh % 24;
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  }
+  // « 9 » / « 9h » (heure seule).
+  const hOnly = str.match(/^(\d{1,2})\s*[hH]?$/);
+  if (hOnly) return `${String(Math.min(23, parseInt(hOnly[1], 10))).padStart(2, '0')}:00`;
+  return '';
+};
+/** Heures travaillées : TEMPS (durée) prioritaire, sinon départ − arrivée (sur HH:MM propres). */
+const heuresCalc = (startHHMM: string, endHHMM: string, temps: string): number => {
+  const tn = Number(String(temps).replace(',', '.'));
+  if (Number.isFinite(tn) && tn > 0 && tn < 1) return +(tn * 24).toFixed(2); // durée = fraction de jour
+  const td = String(temps).match(/^(\d{1,2})[:hH](\d{2})$/);
+  if (td) { const h = +td[1] + +td[2] / 60; if (h > 0 && h < 24) return +h.toFixed(2); }
+  const a = toMin(startHHMM), d = toMin(endHHMM);
   if (a == null || d == null) return 0;
   let diff = d - a;
   if (diff < 0) diff += 24 * 60;
   return +(diff / 60).toFixed(2);
-};
-/** HH:MM depuis un libellé (« 9h30 », « 09:00 »), sinon '' */
-const toTime = (h: string): string => {
-  const m = String(h).match(/(\d{1,2})[:hH.](\d{2})/);
-  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
 };
 const mapRole = (poste: string): string => {
   const p = poste.toLowerCase();
@@ -164,6 +188,8 @@ export function ExcelRHImporter({
             aConfirmer = r?.a_confirmer === true || !spaceId || confidence < 0.6;
           }
           for (const a of b.agents) {
+            const startC = toTime(a.arr);
+            const endC = toTime(a.dep);
             review.push({
               key: crypto.randomUUID(),
               titre: b.titre,
@@ -174,9 +200,9 @@ export function ExcelRHImporter({
               role: mapRole(a.poste),
               space_id: spaceId,
               space_name: spaceName,
-              start: toTime(a.arr),
-              end: toTime(a.dep),
-              hours: heuresCalc(a.arr, a.dep, a.temps),
+              start: startC,
+              end: endC,
+              hours: heuresCalc(startC, endC, a.temps),
               rate: taux(a.poste),
               confidence,
               a_confirmer: aConfirmer,

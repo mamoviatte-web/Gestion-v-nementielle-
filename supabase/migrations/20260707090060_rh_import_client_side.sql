@@ -4,7 +4,7 @@
 -- (contrainte CHECK) → 'Autre' par défaut ; status='planifié' (accent, CHECK).
 create or replace function rh_import_agents_by_token(p_token text, p_agents jsonb)
 returns json language plpgsql security definer set search_path to 'public' as $$
-declare v_event uuid; v_rh text; v_ins int := 0; a jsonb; v_role text; v_start time;
+declare v_event uuid; v_rh text; v_ins int := 0; a jsonb; v_role text; v_start time; v_end time;
 begin
   select event_id, rh_nom into v_event, v_rh from rh_sessions
     where session_token = p_token and is_active = true;
@@ -17,6 +17,7 @@ begin
     then v_role := 'Autre'; end if;
 
     begin v_start := (a->>'start')::time; exception when others then v_start := time '00:00'; end;
+    begin v_end := (a->>'end')::time; exception when others then v_end := null; end;
 
     insert into event_staff_preplan (event_id, space_id, agent_nom, agent_prenom, agent_role,
       planned_start, planned_end, hourly_rate, status, note, created_by)
@@ -27,7 +28,7 @@ begin
       coalesce(nullif(btrim(a->>'prenom'),''),'-'),
       v_role,
       coalesce(v_start, time '00:00'),
-      (nullif(a->>'end','')::time),
+      v_end,
       nullif(a->>'rate','')::numeric,
       'planifié',
       nullif(a->>'note',''),
