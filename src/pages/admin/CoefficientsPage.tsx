@@ -15,6 +15,7 @@ interface Row {
   space_name: string; service_type: string | null; product_name: string; category: string; unit: string;
   moy_historique: number; coeff_espace: number; qte_recommandee: number | null; nb_matchs_historique: number;
   confidence_level: string; min_consumption: number; max_consumption: number;
+  conso_per_100_pax: number; pax_normalized: boolean; avg_pax_match: number;
 }
 
 const num = (v: unknown): number => {
@@ -56,6 +57,7 @@ export default function CoefficientsPage() {
   const [filterSpace, setFilterSpace] = useState('');
   const [filterCat, setFilterCat] = useState('');
   const [sortBy, setSortBy] = useState<'coeff_desc' | 'coeff_asc' | 'moy'>('coeff_desc');
+  const [simulPax, setSimulPax] = useState<number>(0);
 
   async function fetchData() {
     setLoading(true);
@@ -67,6 +69,8 @@ export default function CoefficientsPage() {
       qte_recommandee: r.qte_recommandee == null ? null : num(r.qte_recommandee),
       nb_matchs_historique: num(r.nb_matchs_historique), confidence_level: String(r.confidence_level ?? 'faible'),
       min_consumption: num(r.min_consumption), max_consumption: num(r.max_consumption),
+      conso_per_100_pax: num(r.conso_per_100_pax), pax_normalized: r.pax_normalized === true,
+      avg_pax_match: num(r.avg_pax_match),
     })));
     setLoading(false);
   }
@@ -211,6 +215,29 @@ export default function CoefficientsPage() {
         <span className="self-center text-xs text-stone-400">{filtered.length} résultats</span>
       </div>
 
+      {/* Simulateur de jauge : recalcule la dotation recommandée pour un PAX donné */}
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
+        <span className="shrink-0 text-sm font-semibold text-stone-700">🎟️ Simuler une jauge :</span>
+        <input
+          type="number"
+          min={0}
+          value={simulPax || ''}
+          onChange={(e) => setSimulPax(parseInt(e.target.value) || 0)}
+          placeholder="ex. 8500 spectateurs"
+          className="w-44 rounded-lg border border-stone-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+        />
+        {simulPax > 0 && (
+          <span className="text-xs text-stone-500">
+            → dotations « Recommandé » recalculées pour {simulPax.toLocaleString('fr-FR')} pax (produits normalisés PAX)
+          </span>
+        )}
+        {simulPax > 0 && (
+          <button onClick={() => setSimulPax(0)} className="text-xs text-stone-400 hover:text-stone-700">
+            ✕ Réinitialiser
+          </button>
+        )}
+      </div>
+
       <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -241,7 +268,30 @@ export default function CoefficientsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${s.bg}`} style={{ color: s.color }}>{s.label}</span></td>
-                    <td className="px-4 py-3"><span className="font-black text-stone-900">{row.qte_recommandee ?? '—'}</span><span className="ml-1 text-xs text-stone-400">{row.unit}</span></td>
+                    <td className="px-4 py-3">
+                      {simulPax > 0 && row.pax_normalized && row.conso_per_100_pax > 0 ? (
+                        <div>
+                          <span className="text-base font-black text-stone-900">
+                            {Math.ceil((simulPax / 100) * row.conso_per_100_pax * 1.2)}
+                          </span>
+                          <span className="ml-1 text-xs text-stone-400">{row.unit}</span>
+                          <p className="mt-0.5 text-[10px] text-amber-600">
+                            ↗ {simulPax.toLocaleString('fr-FR')} pax
+                            {row.avg_pax_match > 0 && Math.abs(simulPax / row.avg_pax_match - 1) > 0.25 && (
+                              <span className="ml-1">⚠️ réf. {row.avg_pax_match.toLocaleString('fr-FR')}</span>
+                            )}
+                          </p>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="font-black text-stone-900">{row.qte_recommandee ?? '—'}</span>
+                          <span className="ml-1 text-xs text-stone-400">{row.unit}</span>
+                          {row.pax_normalized && row.conso_per_100_pax > 0 && (
+                            <p className="mt-0.5 text-[10px] text-stone-400">{row.conso_per_100_pax.toFixed(2)} / 100 pax</p>
+                          )}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3"><div className="flex items-center gap-1"><span className="font-mono text-xs text-stone-500">{CONFIDENCE_DOTS[row.confidence_level] ?? '○○○○'}</span><span className="text-[10px] text-stone-400">{row.nb_matchs_historique}M</span></div></td>
                     <td className="px-4 py-3 text-xs text-stone-400">{row.min_consumption.toFixed(0)}–{row.max_consumption.toFixed(0)}</td>
                   </tr>
