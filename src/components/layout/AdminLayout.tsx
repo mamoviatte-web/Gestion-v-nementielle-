@@ -48,6 +48,7 @@ const NAV: NavItem[] = [
   { to: '/admin/analytics/staff', label: 'Staff & RH', icon: Users },
   { to: '/admin/analytics/coefficients', label: 'Coefficients espace', short: 'Coeff.', icon: Ruler },
   { to: '/admin/rh/preplan', label: 'Planning RH Match', short: 'Planning RH', icon: UserPlus },
+  { to: '/admin/rh/populations', label: 'Populations RH', short: 'Populations', icon: Users },
   { to: '/admin/catalog', label: 'Catalogue', icon: Package },
   { to: '/admin/spaces', label: 'Espaces', icon: Building2 },
   { to: '/admin/export', label: 'Export', icon: Download },

@@ -31,6 +31,7 @@ import { RoadmapEditor } from '@/components/admin/RoadmapEditor';
 import { MatchClosedView } from '@/components/events/MatchClosedView';
 import { DeleteEventButton } from '@/components/events/DeleteEventButton';
 import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
+import { RhOperationalBoard } from '@/components/rh/RhOperationalBoard';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
@@ -46,6 +47,7 @@ type Tab =
   | 'route'
   | 'runner'
   | 'runner_buvettes'
+  | 'rh'
   | 'analyse'
   | 'gpvip'
   | 'espaces'
@@ -62,6 +64,7 @@ const MATCH_TABS: { key: Tab; label: string }[] = [
   { key: 'route', label: '📄 Feuille de route' },
   { key: 'runner', label: '🚀 Runner Auto' },
   { key: 'runner_buvettes', label: '🍺 Runner Buvettes' },
+  { key: 'rh', label: '👥 RH opérationnel' },
   { key: 'analyse', label: '📈 Analyse conso' },
   { key: 'gpvip', label: '⭐ GP / VIP' },
 ];
@@ -422,6 +425,7 @@ export default function EventDetailPage() {
         </div>
       )}
       {activeTab === 'runner_buvettes' && <BuvetteRunnersPanel eventId={event.event_id} />}
+      {activeTab === 'rh' && <RhOperationalBoard eventId={event.event_id} />}
       {activeTab === 'analyse' && <ConsumptionAnalysisTab event={event} spaces={spaces} />}
       {activeTab === 'gpvip' && <MatchConsumptionReport eventId={event.event_id} />}
     </div>
