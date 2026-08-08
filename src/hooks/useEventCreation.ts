@@ -151,7 +151,28 @@ export function useEventCreation() {
       }
 
       if (spaceIds.length > 0) {
-        const pax = draft.space_pax ?? {};
+        // Dédoublonnage à la source : résoudre les doublons connus vers leur
+        // espace canonique (« Buvette N » → « BN ») puis dédupliquer, pour ne
+        // jamais attacher deux fois le même espace physique. Le match active
+        // « tous les espaces actifs », ce qui inclut à la fois le doublon et son
+        // canonique ; sans cette étape, le trigger de canonisation les ferait
+        // collisionner sur le même id. (Les triggers en base protègent aussi —
+        // ceinture + bretelles.)
+        const { data: dupRows } = await supabase
+          .from('space_canonical_map')
+          .select('ghost_space_id, canonical_space_id');
+        const canon = new Map<string, string>(
+          (dupRows ?? []).map((d) => [d.ghost_space_id as string, d.canonical_space_id as string]),
+        );
+        const toCanon = (id: string): string => canon.get(id) ?? id;
+        spaceIds = Array.from(new Set(spaceIds.map(toCanon)));
+
+        // pax ré-indexé sur les ids canoniques.
+        const pax: Record<string, number> = {};
+        for (const [sid, val] of Object.entries(draft.space_pax ?? {})) {
+          if (val != null) pax[toCanon(sid)] = val;
+        }
+
         // Enrichi (expected_pax) si des pax ont été saisis ; repli si les
         // colonnes ne sont pas encore provisionnées en base.
         const enriched = spaceIds.map((space_id) => ({
@@ -159,16 +180,25 @@ export function useEventCreation() {
           space_id,
           ...(pax[space_id] != null ? { expected_pax: pax[space_id] } : {}),
         }));
-        const { error: esErr } = await supabase.from('event_spaces').insert(enriched);
-        if (esErr) {
-          if (/expected_pax|service_mode|column/i.test(esErr.message)) {
-            const { error: retryErr } = await supabase
-              .from('event_spaces')
-              .insert(spaceIds.map((space_id) => ({ event_id: eventId, space_id })));
-            if (retryErr) throw retryErr;
-          } else {
-            throw esErr;
+
+        // Rollback : si l'attache des espaces échoue (pour quelque cause que ce
+        // soit), on supprime l'événement tout juste créé pour ne pas laisser
+        // d'événement orphelin sans espace.
+        try {
+          const { error: esErr } = await supabase.from('event_spaces').insert(enriched);
+          if (esErr) {
+            if (/expected_pax|service_mode|column/i.test(esErr.message)) {
+              const { error: retryErr } = await supabase
+                .from('event_spaces')
+                .insert(spaceIds.map((space_id) => ({ event_id: eventId, space_id })));
+              if (retryErr) throw retryErr;
+            } else {
+              throw esErr;
+            }
           }
+        } catch (e) {
+          await supabase.from('events').delete().eq('event_id', eventId);
+          throw e;
         }
       }
       return { event_id: eventId };
