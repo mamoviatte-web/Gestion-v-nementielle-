@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { ChevronRight, RefreshCw, Zap } from 'lucide-react';
 import { AnalyseSeminaire } from '@/components/analytics/AnalyseSeminaire';
+import { SuiviFuts } from '@/components/analytics/SuiviFuts';
 
 /* ─── Constantes visuelles ──────────────────────────────────────────────── */
 
@@ -561,6 +562,9 @@ export default function AnalyticsPage() {
                 )}
               </div>
             </div>
+
+            {/* Suivi des fûts (masqué si aucun fût, ex. scope séminaire) */}
+            <SuiviFuts scope={scope} />
 
             {/* Classement produits */}
             <div className="rounded-2xl border border-stone-100 bg-white shadow-sm">
