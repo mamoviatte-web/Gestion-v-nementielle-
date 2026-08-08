@@ -85,6 +85,14 @@ const SEG: Record<string, string> = { VIP: 'FFC9A227', Bar: 'FF2F6FED', 'Grand P
 
 const fill = (argb: string): ExcelJS.FillPattern => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
 
+/** Date longue française : « dimanche 3 mai 2026 ». */
+const longDate = (d: string): string => {
+  const dt = new Date(d);
+  return isNaN(dt.getTime())
+    ? d
+    : dt.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+};
+
 function download(buf: ExcelJS.Buffer, name: string): void {
   const b = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const u = URL.createObjectURL(b);
@@ -233,6 +241,25 @@ function tableau(
   return startRow + rows.length;
 }
 
+/** Feuille « Paramètres » — traçabilité & méthodologie (commune match & séminaire). */
+function sheetParametres(wb: WB, rows: [string, string | number][]): void {
+  const ws = wb.addWorksheet('Paramètres', { views: [{ showGridLines: false }] });
+  ws.getColumn(1).width = 28;
+  ws.getColumn(2).width = 64;
+  band(ws, 'PARAMÈTRES DU RAPPORT', 'Traçabilité & méthodologie', 2);
+  rows.forEach((row, i) => {
+    const r = 5 + i;
+    const k = bordered(ws.getCell(r, 1));
+    k.value = row[0];
+    k.font = { name: 'Arial', size: 9, bold: true };
+    k.fill = fill(LIGHT);
+    const v = bordered(ws.getCell(r, 2));
+    v.value = row[1];
+    v.font = { name: 'Arial', size: 9 };
+    v.alignment = { wrapText: true, vertical: 'top' };
+  });
+}
+
 type KpiDef = [string, ExcelJS.CellValue, string, string, number];
 
 export async function genererRapportMatch(eventId: string): Promise<void> {
@@ -253,7 +280,7 @@ export async function genererRapportMatch(eventId: string): Promise<void> {
   band(
     s,
     `RAPPORT DE MATCH — ${String(rep.match.name).toUpperCase()}`,
-    `${rep.match.date} · ${rep.match.pax} spectateurs · Provence Rugby · Stade Maurice-David`,
+    `${longDate(rep.match.date)}  ·  ${rep.match.pax.toLocaleString('fr-FR')} spectateurs  ·  Provence Rugby · Stade Maurice-David`,
     8,
   );
   const pax = rep.match.pax || 1;
@@ -281,7 +308,8 @@ export async function genererRapportMatch(eventId: string): Promise<void> {
   s.getCell(9, 1).value = 'RÉPARTITION PAR SEGMENT';
   s.getCell(9, 1).font = { name: 'Arial', size: 12, bold: true, color: { argb: NAVY } };
   const hr = 10;
-  ['Segment', 'Espaces', 'Unités', 'Coût HT'].forEach((h, i) => hdr(s, hr, i + 1, h));
+  ['Segment', 'Espaces', 'Unités', 'Coût HT', '% coût', 'Coût / spectateur'].forEach((h, i) => hdr(s, hr, i + 1, h));
+  const segTot = hr + 1 + rep.segments.length; // ligne TOTAL
   rep.segments.forEach((x, i) => {
     const r = hr + 1 + i;
     const seg = s.getCell(r, 1);
@@ -293,9 +321,40 @@ export async function genererRapportMatch(eventId: string): Promise<void> {
     s.getCell(r, 3).numFmt = INT;
     s.getCell(r, 4).value = x.cout;
     s.getCell(r, 4).numFmt = EUR;
-    for (let c = 1; c <= 4; c++) bordered(s.getCell(r, c));
+    s.getCell(r, 5).value = { formula: `IFERROR(D${r}/D${segTot},0)` };
+    s.getCell(r, 5).numFmt = PCT;
+    s.getCell(r, 6).value = { formula: `D${r}/${pax}` };
+    s.getCell(r, 6).numFmt = EURpax;
+    for (let c = 1; c <= 6; c++) bordered(s.getCell(r, c));
   });
-  dataBar(s, `D${hr + 1}:D${hr + rep.segments.length}`, 'FF2F6FED');
+  // Ligne TOTAL
+  s.getCell(segTot, 1).value = 'TOTAL';
+  s.getCell(segTot, 3).value = { formula: `SUM(C${hr + 1}:C${segTot - 1})` };
+  s.getCell(segTot, 3).numFmt = INT;
+  s.getCell(segTot, 4).value = { formula: `SUM(D${hr + 1}:D${segTot - 1})` };
+  s.getCell(segTot, 4).numFmt = EUR;
+  s.getCell(segTot, 5).value = 1;
+  s.getCell(segTot, 5).numFmt = PCT;
+  s.getCell(segTot, 6).value = { formula: `D${segTot}/${pax}` };
+  s.getCell(segTot, 6).numFmt = EURpax;
+  for (let c = 1; c <= 6; c++) {
+    const x = s.getCell(segTot, c);
+    x.font = { name: 'Arial', bold: true };
+    x.fill = fill(GOLD);
+    bordered(x);
+  }
+  dataBar(s, `D${hr + 1}:D${segTot - 1}`, 'FF2F6FED');
+  // Note anomalie : consommation nette négative (fidèle à la source).
+  const negs = rep.produits.filter((p) => p.init - p.fin < 0);
+  if (negs.length > 0) {
+    const nr = segTot + 2;
+    s.mergeCells(nr, 1, nr, 6);
+    const n = s.getCell(nr, 1);
+    n.value = `Note : consommation nette négative sur ${negs.map((p) => p.produit).join(', ')} (stock final > initial — écart d'inventaire) ; donnée conservée fidèle à la source.`;
+    n.font = { name: 'Arial', size: 8, italic: true, color: { argb: GREY } };
+    n.alignment = { wrapText: true };
+    s.getRow(nr).height = 26;
+  }
 
   // --- Espaces ---
   const e = wb.addWorksheet('Espaces', { views: [{ showGridLines: false }] });
@@ -357,6 +416,21 @@ export async function genererRapportMatch(eventId: string): Promise<void> {
   [24, 12, 14, 16, 12].forEach((w, i) => (f.getColumn(i + 1).width = w));
   dataBar(f, `B5:B${4 + rep.futs.length}`, 'FFC9A227');
 
+  sheetParametres(wb, [
+    ['Événement', rep.match.name],
+    ['Date', longDate(rep.match.date)],
+    ['Spectateurs (PAX)', rep.match.pax],
+    ['Espaces couverts', rep.espaces.length],
+    ['Produits', rep.produits.length],
+    ['Fûts (types)', rep.futs.length],
+    ['Source de données', 'get_match_report · StockPilot MD'],
+    ['Généré le', new Date().toLocaleString('fr-FR')],
+    [
+      'Méthodologie',
+      "Consommé = Stock initial + réassort − Stock final. Coûts HT au catalogue. Cellules bleues (stocks & PU) éditables → Consommé, Coût, %, totaux se recalculent. Données fidèles à la source (aucun arrondi masquant).",
+    ],
+  ]);
+
   download(await wb.xlsx.writeBuffer(), `Rapport_Match_${rep.match.name}.xlsx`);
 }
 
@@ -377,7 +451,7 @@ export async function genererRapportSeminaire(eventId: string): Promise<void> {
   band(
     s,
     `RAPPORT SÉMINAIRE — ${String(rep.seminaire.name).toUpperCase()}`,
-    `${rep.seminaire.date} · ${rep.seminaire.participants} participants`,
+    `${longDate(rep.seminaire.date)}  ·  ${rep.seminaire.participants} participants  ·  Provence Rugby · Stade Maurice-David`,
     6,
   );
   const part = rep.seminaire.participants || 1;
@@ -438,6 +512,21 @@ export async function genererRapportSeminaire(eventId: string): Promise<void> {
     c.getCell(5 + i, 3).numFmt = EUR;
     c.getCell(5 + i, 2).numFmt = INT;
   });
+
+  sheetParametres(wb, [
+    ['Événement', rep.seminaire.name],
+    ['Date', longDate(rep.seminaire.date)],
+    ['Participants', rep.seminaire.participants],
+    ['Facturé / participant', rep.seminaire.facture_pax != null ? `${rep.seminaire.facture_pax} €` : '— (non renseigné)'],
+    ['Espaces (salons/loges)', rep.espaces.length],
+    ['Produits', rep.produits.length],
+    ['Source de données', 'get_seminaire_report · StockPilot MD'],
+    ['Généré le', new Date().toLocaleString('fr-FR')],
+    [
+      'Méthodologie',
+      "Consommé = Stock initial + réassort − Stock final. Coût F&B au catalogue. Coût/participant = Coût F&B ÷ participants ; marge = Facturé/participant − Coût/participant. Cellules bleues éditables.",
+    ],
+  ]);
 
   download(await wb.xlsx.writeBuffer(), `Rapport_Seminaire_${rep.seminaire.name}.xlsx`);
 }
