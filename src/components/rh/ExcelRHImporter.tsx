@@ -34,64 +34,70 @@ interface ReviewAgent {
   a_confirmer: boolean;
 }
 
-const POLES: Record<string, string> = {
-  CASHLESSMEN: 'Cashless',
-  'SECU MASCOTTE': 'Sécurité/Mascotte',
-  'SCAN ACCUEIL': 'Accueil/Scanettes',
-  AUTRES: 'Autres',
-};
-const HEADER_TOKENS = ['poste', 'nom', 'arriv', 'départ', 'depart', 'temps', 'signature'];
 const ROLE_ENUM = [
   'Serveur', 'Chef de rang', 'Barman', 'Agent de sécurité', 'Runner', 'Hôte / Hôtesse', 'Responsable espace', 'Autre',
 ] as const;
+/** Mots-clés pôle hors resto (détectés sur le titre du bandeau OU le nom de feuille). */
+const POLE_KW: [RegExp, string][] = [
+  [/cashless/i, 'Cashless'],
+  [/s[ée]cu|securit|mascotte/i, 'Sécurité/Mascotte'],
+  [/accueil|scan/i, 'Accueil/Scanettes'],
+  [/autre/i, 'Autres'],
+];
 
-const nettoie = (v: unknown): string => String(v ?? '').replace(/[✅]/g, '').replace(/#REF!/g, '').trim();
-const estLigneEntete = (cells: string[]): boolean => {
+const nettoie = (v: unknown): string =>
+  String(v ?? '').replace(/[✅☑✔]/g, '').replace(/#REF!/g, '').replace(/#+/g, '').trim();
+const estEntete = (cells: string[]): boolean => {
   const t = cells.map((c) => c.toLowerCase()).join(' ');
-  return HEADER_TOKENS.filter((k) => t.includes(k)).length >= 3;
+  return t.includes('poste') && t.includes('nom');
 };
-const toMin = (h: string): number | null => {
-  const m = String(h).match(/(\d{1,2})[:hH.](\d{2})/);
-  return m ? +m[1] * 60 + +m[2] : null;
-};
-/** HH:MM valide depuis un libellé OU un nombre Excel (fraction de jour). Sinon ''. */
-const toTime = (raw: unknown): string => {
-  if (raw == null) return '';
-  const str = String(raw).trim();
-  if (str === '') return '';
-  // Excel : les heures sont souvent des fractions de jour (0.375 = 09:00).
-  const asNum = Number(str.replace(',', '.'));
-  if (Number.isFinite(asNum) && asNum > 0 && asNum < 1) {
-    const tot = Math.round(asNum * 24 * 60);
-    const h = Math.floor(tot / 60) % 24, m = tot % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }
-  // « 9h30 », « 09:00 », « 9.30 » (fraction déjà traitée au-dessus).
-  const m = str.match(/(\d{1,2})\s*[:hH.]\s*(\d{1,2})/);
-  if (m) {
-    let hh = parseInt(m[1], 10);
-    let mm = parseInt(m[2], 10);
-    if (mm > 59) mm = 0; // minute invalide → 0 (jamais « 00:89 »)
-    if (hh > 23) hh = hh % 24;
-    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-  }
-  // « 9 » / « 9h » (heure seule).
-  const hOnly = str.match(/^(\d{1,2})\s*[hH]?$/);
-  if (hOnly) return `${String(Math.min(23, parseInt(hOnly[1], 10))).padStart(2, '0')}:00`;
+const premiereCelluleNonVide = (row: string[]): string => {
+  for (const c of row) { const v = nettoie(c); if (v) return v; }
   return '';
 };
-/** Heures travaillées : TEMPS (durée) prioritaire, sinon départ − arrivée (sur HH:MM propres). */
-const heuresCalc = (startHHMM: string, endHHMM: string, temps: string): number => {
-  const tn = Number(String(temps).replace(',', '.'));
-  if (Number.isFinite(tn) && tn > 0 && tn < 1) return +(tn * 24).toFixed(2); // durée = fraction de jour
-  const td = String(temps).match(/^(\d{1,2})[:hH](\d{2})$/);
-  if (td) { const h = +td[1] + +td[2] / 60; if (h > 0 && h < 24) return +h.toFixed(2); }
-  const a = toMin(startHHMM), d = toMin(endHHMM);
-  if (a == null || d == null) return 0;
-  let diff = d - a;
-  if (diff < 0) diff += 24 * 60;
-  return +(diff / 60).toFixed(2);
-};
+
+/** Normalise une cellule d'heure (Date, nombre Excel = fraction/heures, ou texte) → 'HH:MM' ou null. */
+function normHeure(v: unknown): string | null {
+  if (v == null || v === '') return null;
+  if (v instanceof Date) return `${String(v.getHours()).padStart(2, '0')}:${String(v.getMinutes()).padStart(2, '0')}`;
+  if (typeof v === 'number') {
+    let mins: number;
+    if (v > 0 && v <= 1) mins = Math.round(v * 24 * 60);          // fraction de jour (0.708 = 17:00)
+    else if (v > 1 && v <= 48) mins = Math.round(v * 60);         // heures décimales (17 = 17:00)
+    else mins = Math.round((v % 1) * 24 * 60);                     // série datetime → partie décimale
+    const h = Math.floor(mins / 60) % 24, m = ((mins % 60) + 60) % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+  const s = String(v).trim();
+  const m = s.match(/(\d{1,2})\s*[:hH.]\s*(\d{2})/);
+  if (m) { let mm = +m[2]; if (mm > 59) mm = 0; return `${String(+m[1] % 24).padStart(2, '0')}:${String(mm).padStart(2, '0')}`; }
+  const m2 = s.match(/^(\d{1,2})[hH]$/);
+  if (m2) return `${String(+m2[1] % 24).padStart(2, '0')}:00`;
+  return null;
+}
+
+/** Noms de famille en MAJUSCULES (éventuellement composés) + prénom en casse mixte. */
+function splitNom(sRaw: string): { nom: string; prenom: string } {
+  const s = String(sRaw ?? '').replace(/[✅☑✔]/g, '').replace(/\s+/g, ' ').trim();
+  const toks = s.split(' ').filter(Boolean);
+  if (toks.length <= 1) return { nom: toks[0] || s || 'Agent', prenom: '-' };
+  const estMaj = (t: string): boolean => t === t.toUpperCase() && /[A-ZÀ-Ý]/.test(t);
+  let k = 0;
+  while (k < toks.length && estMaj(toks[k])) k++;
+  if (k === 0) k = 1;
+  if (k === toks.length) k = toks.length - 1;
+  return { nom: toks.slice(0, k).join(' '), prenom: toks.slice(k).join(' ') || '-' };
+}
+
+/** Durée (heures décimales) entre deux 'HH:MM', gère le passage minuit. */
+function dureeH(arr: string, dep: string): number {
+  const A = arr.match(/(\d{2}):(\d{2})/), D = dep.match(/(\d{2}):(\d{2})/);
+  if (!A || !D) return 0;
+  let x = +D[1] * 60 + +D[2] - (+A[1] * 60 + +A[2]);
+  if (x < 0) x += 24 * 60;
+  return +(x / 60).toFixed(2);
+}
+
 const mapRole = (poste: string): string => {
   const p = poste.toLowerCase();
   if (/respo/.test(p)) return 'Responsable espace';
@@ -108,49 +114,42 @@ const taux = (poste: string): number => (/respo/i.test(poste) ? 12 : 16.5);
 interface RawBloc {
   titre: string;
   pole: string | null;
-  agents: { poste: string; nomPrenom: string; arr: string; dep: string; temps: string }[];
+  agents: { poste: string; nomPrenom: string; arr: string; dep: string }[];
 }
 
-/** Une ligne agent porte un NOM en colonne B ; une ligne titre a la colonne B vide. */
-const aDuNom = (cells: string[]): boolean => !!cells[1] && /[a-zA-ZÀ-ÿ]/.test(cells[1]);
-const nonVide = (cells: string[]): boolean => cells.join(' ').trim().length > 0;
-
 /**
- * Détection ancrée sur les EN-TÊTES : structure [titre][en-tête][agents]* répétée.
- * Un en-tête ouvre un bloc dont le titre est le dernier libellé « en attente ».
- * (L'ancienne version absorbait les titres suivants comme des agents → restauration jamais rapprochée.)
+ * Détection ancrée sur la ligne d'EN-TÊTES : le titre du bloc = 1re cellule non vide de la
+ * ligne juste au-dessus (le « bandeau noir » fusionné, dont la valeur est en colonne B ;
+ * colonne A = logo, vide). Gère 1 ou plusieurs blocs par feuille.
  */
 function parseFeuille(ws: XLSX.WorkSheet, sheetName: string): RawBloc[] {
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false, defval: '' });
-  const poleFeuille = POLES[sheetName.trim().toUpperCase()] ?? null;
+  const rowsFmt = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false, defval: '', raw: false });
+  const rowsRaw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false, defval: '', raw: true });
+  const txt = rowsFmt.map((r) => (r as unknown[]).map(nettoie));
+  const sheetPole = POLE_KW.find(([re]) => re.test(sheetName))?.[1] ?? null;
+  const cell = (arr: unknown[] | undefined, i: number): unknown => (arr ? arr[i] : undefined);
   const blocs: RawBloc[] = [];
-  let cur: RawBloc | null = null;
-  let pendingTitle = '';
-  for (const row of rows) {
-    const cells = (row as unknown[]).map(nettoie);
-    if (!nonVide(cells)) continue;
-    const txt = cells.join(' ').trim();
-    if (/merci d'envoyer/i.test(txt)) continue;
-    if (estLigneEntete(cells)) {
-      cur = { titre: pendingTitle || nettoie(cells[0]) || txt, pole: poleFeuille, agents: [] };
-      blocs.push(cur);
-      pendingTitle = '';
-      continue;
+  for (let i = 0; i < txt.length; i++) {
+    if (!estEntete(txt[i])) continue;
+    let titre = i >= 1 ? premiereCelluleNonVide(txt[i - 1]) : '';
+    if (!titre && i >= 2) titre = premiereCelluleNonVide(txt[i - 2]);
+    const agents: RawBloc['agents'] = [];
+    for (let j = i + 1; j < txt.length; j++) {
+      if (estEntete(txt[j])) break;
+      const c = txt[j];
+      const poste = c[0] ?? '', nomPrenom = c[1] ?? '';
+      if (!nomPrenom && !poste) { if (agents.length) break; else continue; }
+      if (/merci d'envoyer/i.test(c.join(' '))) continue;
+      if (!nomPrenom) continue;
+      const arr = normHeure(cell(rowsFmt[j] as unknown[], 2)) ?? normHeure(cell(rowsRaw[j] as unknown[], 2));
+      const dep =
+        normHeure(cell(rowsFmt[j] as unknown[], 4)) ?? normHeure(cell(rowsRaw[j] as unknown[], 4)) ??  // départ réel (E)
+        normHeure(cell(rowsFmt[j] as unknown[], 3)) ?? normHeure(cell(rowsRaw[j] as unknown[], 3));    // départ théorique (D)
+      agents.push({ poste, nomPrenom, arr: arr ?? '', dep: dep ?? '' });
     }
-    if (cur && aDuNom(cells)) {
-      cur.agents.push({
-        poste: nettoie(cells[0]),
-        nomPrenom: nettoie(cells[1]),
-        arr: nettoie(cells[2]),
-        dep: nettoie(cells[4] || cells[3]),
-        temps: nettoie(cells[5]),
-      });
-      continue;
-    }
-    // Ligne sans nom = libellé d'espace → titre du prochain bloc.
-    pendingTitle = nettoie(cells[0] || txt);
+    if (titre && agents.length) blocs.push({ titre, pole: sheetPole, agents });
   }
-  return blocs.filter((b) => b.agents.length > 0);
+  return blocs;
 }
 
 export function ExcelRHImporter({
@@ -177,18 +176,19 @@ export function ExcelRHImporter({
       setStep('reading');
       try {
         const buf = await file.arrayBuffer();
-        const wb = XLSX.read(buf, { type: 'array', cellDates: false });
+        const wb = XLSX.read(buf, { type: 'array', cellDates: true });
         // 1) Parser tous les blocs de toutes les feuilles.
         const blocs = wb.SheetNames.flatMap((name) => parseFeuille(wb.Sheets[name], name));
         if (blocs.length === 0) { setError('Aucun bloc agent détecté dans le fichier.'); setStep('error'); return; }
-        // 2) Résoudre l'espace de chaque bloc restauration (pôles = hors resto).
+        // 2) Résoudre l'espace de chaque bloc restauration (pôles = hors resto, par mot-clé du titre).
         const review: ReviewAgent[] = [];
         for (const b of blocs) {
+          const pole = b.pole ?? POLE_KW.find(([re]) => re.test(b.titre))?.[1] ?? null;
           let spaceId: string | null = null;
           let spaceName: string | null = null;
           let confidence = 1;
           let aConfirmer = false;
-          if (!b.pole) {
+          if (!pole) {
             const { data } = await supabase.rpc('resolve_space', { p_label: b.titre });
             const r = data as { space_id?: string | null; space_name?: string | null; confidence?: number; a_confirmer?: boolean } | null;
             spaceId = r?.space_id ?? null;
@@ -197,21 +197,20 @@ export function ExcelRHImporter({
             aConfirmer = r?.a_confirmer === true || !spaceId || confidence < 0.6;
           }
           for (const a of b.agents) {
-            const startC = toTime(a.arr);
-            const endC = toTime(a.dep);
+            const { nom, prenom } = splitNom(a.nomPrenom);
             review.push({
               key: crypto.randomUUID(),
               titre: b.titre,
-              pole: b.pole,
-              nom: (a.nomPrenom.split(/\s+/).filter(Boolean)[0] ?? a.nomPrenom ?? 'Agent').toUpperCase(),
-              prenom: a.nomPrenom.split(/\s+/).filter(Boolean).slice(1).join(' ') || '-',
+              pole,
+              nom,
+              prenom,
               poste: a.poste,
               role: mapRole(a.poste),
               space_id: spaceId,
               space_name: spaceName,
-              start: startC,
-              end: endC,
-              hours: heuresCalc(startC, endC, a.temps),
+              start: a.arr,
+              end: a.dep,
+              hours: dureeH(a.arr, a.dep),
               rate: taux(a.poste),
               confidence,
               a_confirmer: aConfirmer,
