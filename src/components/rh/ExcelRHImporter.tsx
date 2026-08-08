@@ -111,35 +111,44 @@ interface RawBloc {
   agents: { poste: string; nomPrenom: string; arr: string; dep: string; temps: string }[];
 }
 
+/** Une ligne agent porte un NOM en colonne B ; une ligne titre a la colonne B vide. */
+const aDuNom = (cells: string[]): boolean => !!cells[1] && /[a-zA-ZÀ-ÿ]/.test(cells[1]);
+const nonVide = (cells: string[]): boolean => cells.join(' ').trim().length > 0;
+
+/**
+ * Détection ancrée sur les EN-TÊTES : structure [titre][en-tête][agents]* répétée.
+ * Un en-tête ouvre un bloc dont le titre est le dernier libellé « en attente ».
+ * (L'ancienne version absorbait les titres suivants comme des agents → restauration jamais rapprochée.)
+ */
 function parseFeuille(ws: XLSX.WorkSheet, sheetName: string): RawBloc[] {
   const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false, defval: '' });
   const poleFeuille = POLES[sheetName.trim().toUpperCase()] ?? null;
   const blocs: RawBloc[] = [];
-  let cur: (RawBloc & { headerVu: boolean }) | null = null;
+  let cur: RawBloc | null = null;
+  let pendingTitle = '';
   for (const row of rows) {
     const cells = (row as unknown[]).map(nettoie);
-    const premier = cells[0] ?? '';
-    const texte = cells.join(' ').trim();
-    if (!texte) continue;
-    if (/merci d'envoyer/i.test(texte)) continue;
+    if (!nonVide(cells)) continue;
+    const txt = cells.join(' ').trim();
+    if (/merci d'envoyer/i.test(txt)) continue;
     if (estLigneEntete(cells)) {
-      if (cur) cur.headerVu = true;
+      cur = { titre: pendingTitle || nettoie(cells[0]) || txt, pole: poleFeuille, agents: [] };
+      blocs.push(cur);
+      pendingTitle = '';
       continue;
     }
-    if (cur && cur.headerVu && (cells[1] || premier)) {
-      const nomPrenom = nettoie(cells[1]);
-      const poste = nettoie(cells[0]);
-      if (!nomPrenom && !poste) continue;
+    if (cur && aDuNom(cells)) {
       cur.agents.push({
-        poste, nomPrenom,
+        poste: nettoie(cells[0]),
+        nomPrenom: nettoie(cells[1]),
         arr: nettoie(cells[2]),
         dep: nettoie(cells[4] || cells[3]),
         temps: nettoie(cells[5]),
       });
       continue;
     }
-    cur = { titre: nettoie(premier || texte), pole: poleFeuille, headerVu: false, agents: [] };
-    blocs.push(cur);
+    // Ligne sans nom = libellé d'espace → titre du prochain bloc.
+    pendingTitle = nettoie(cells[0] || txt);
   }
   return blocs.filter((b) => b.agents.length > 0);
 }

@@ -10,6 +10,9 @@ begin
     where session_token = p_token and is_active = true;
   if v_event is null then return json_build_object('success', false, 'error', 'Session invalide'); end if;
 
+  -- Anti-doublon : purger l'import précédent de CET événement (jamais les saisies manuelles).
+  delete from event_staff_preplan where event_id = v_event and created_by = 'Import émargement';
+
   for a in select * from jsonb_array_elements(p_agents) loop
     v_role := a->>'role';
     if v_role is null or v_role not in
@@ -32,9 +35,32 @@ begin
       nullif(a->>'rate','')::numeric,
       'planifié',
       nullif(a->>'note',''),
-      coalesce(v_rh, 'Import émargement'));
+      'Import émargement');
     v_ins := v_ins + 1;
   end loop;
   return json_build_object('success', true, 'inserted', v_ins);
 end $$;
 grant execute on function rh_import_agents_by_token(text, jsonb) to anon, authenticated;
+
+-- Agents hors restauration (space_id NULL) groupés par pôle + total d'agents.
+create or replace function rh_get_hors_resto_by_token(p_token text)
+returns json language plpgsql security definer set search_path to 'public' as $$
+declare v_event uuid;
+begin
+  select event_id into v_event from rh_sessions where session_token = p_token and is_active = true;
+  if v_event is null then return json_build_object('success', false, 'error', 'Session invalide'); end if;
+  return json_build_object(
+    'success', true,
+    'total_agents', (select count(*) from event_staff_preplan where event_id = v_event),
+    'poles', (
+      select coalesce(json_agg(json_build_object('pole', pole, 'agents', n, 'heures', h, 'liste', liste) order by n desc), '[]'::json)
+      from (
+        select coalesce(nullif(split_part(note, 'Pôle: ', 2), ''), 'Autres') pole,
+               count(*) n, round(sum(coalesce(planned_hours, 0)), 1) h,
+               json_agg(json_build_object('nom', agent_nom, 'prenom', agent_prenom, 'role', agent_role, 'heures', planned_hours) order by agent_nom) liste
+        from event_staff_preplan where event_id = v_event and space_id is null
+        group by 1
+      ) g)
+  );
+end $$;
+grant execute on function rh_get_hors_resto_by_token(text) to anon, authenticated;

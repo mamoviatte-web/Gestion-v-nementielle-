@@ -21,6 +21,9 @@ interface RHSession { success: boolean; event_id: string; event_name: string; ev
 interface Agent { id: string; nom: string; prenom: string; role: string; planned_start: string | null; planned_end: string | null; status: string }
 interface Space { space_id: string; space_name: string; agents: Agent[]; nb_planifies: number; nb_pointes: number }
 interface Preplan { success: boolean; total: number; by_space: Space[] }
+interface PoleAgent { nom: string; prenom: string; role: string; heures: number | null }
+interface Pole { pole: string; agents: number; heures: number; liste: PoleAgent[] }
+interface HorsResto { success: boolean; total_agents: number; poles: Pole[] }
 interface NewAgent { nom: string; prenom: string; role: string; start: string; end: string | null }
 
 export default function RHPlanningPage() {
@@ -36,11 +39,16 @@ export default function RHPlanningPage() {
   const [showImporter, setShowImporter] = useState(false);
   const [importBanner, setImportBanner] = useState<string | null>(null);
   const [swapAgent, setSwapAgent] = useState<SwapTarget | null>(null);
+  const [horsResto, setHorsResto] = useState<HorsResto | null>(null);
 
   const loadPreplan = useCallback(async () => {
-    const { data } = await supabase.rpc('rh_get_preplan_by_token', { p_token: token });
+    const [{ data }, { data: hr }] = await Promise.all([
+      supabase.rpc('rh_get_preplan_by_token', { p_token: token }),
+      supabase.rpc('rh_get_hors_resto_by_token', { p_token: token }),
+    ]);
     const r = data as Preplan | null;
     if (r?.success) setPreplan(r);
+    setHorsResto((hr as HorsResto | null)?.success ? (hr as HorsResto) : null);
   }, [token]);
 
   useEffect(() => {
@@ -58,6 +66,8 @@ export default function RHPlanningPage() {
   }, [token, navigate, loadPreplan]);
 
   const totalPlanifies = preplan?.by_space?.reduce((s, sp) => s + (sp.nb_planifies ?? 0), 0) ?? 0;
+  const totalAgents = horsResto?.total_agents ?? totalPlanifies;
+  const nbHorsResto = Math.max(0, totalAgents - totalPlanifies);
   const isLocked = preplan?.by_space?.some((sp) => sp.agents?.some((a) => a.status !== 'planifié')) ?? false;
 
   async function addAgent(spaceId: string, agent: NewAgent) {
@@ -131,7 +141,7 @@ export default function RHPlanningPage() {
       <div className="mx-auto max-w-2xl space-y-4 px-4 py-5">
         <div className="grid grid-cols-3 gap-3">
           <div className="rounded-2xl border border-stone-200 bg-white p-4 text-center">
-            <p className="text-2xl font-black text-stone-900">{totalPlanifies}</p>
+            <p className="text-2xl font-black text-stone-900">{totalAgents}</p>
             <p className="mt-0.5 text-xs text-stone-400">agents planifiés</p>
           </div>
           <div className="rounded-2xl border border-stone-200 bg-white p-4 text-center">
@@ -230,6 +240,34 @@ export default function RHPlanningPage() {
             </div>
           );
         })}
+
+        {/* Pôles hors restauration (space_id NULL) — sinon ces agents sont invisibles. */}
+        {(horsResto?.poles?.length ?? 0) > 0 && (
+          <div className="overflow-hidden rounded-2xl border border-blue-200 bg-white">
+            <div className="border-b border-blue-100 bg-blue-50 px-4 py-3">
+              <p className="font-bold text-blue-800">🏷 Pôles hors restauration</p>
+              <p className="text-xs text-blue-500">{nbHorsResto} agent{nbHorsResto > 1 ? 's' : ''} sans espace (Cashless · Sécurité · Accueil · Autres)</p>
+            </div>
+            <div className="divide-y divide-stone-100">
+              {horsResto!.poles.map((p) => (
+                <details key={p.pole} className="group">
+                  <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 hover:bg-stone-50">
+                    <span className="font-semibold text-stone-800">{p.pole}</span>
+                    <span className="text-xs text-stone-500">{p.agents} agent{p.agents > 1 ? 's' : ''}{p.heures > 0 ? ` · ${p.heures} h` : ''}</span>
+                  </summary>
+                  <div className="space-y-1 px-4 pb-3">
+                    {p.liste.map((a, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm text-stone-600">
+                        <span>{a.prenom} {a.nom}</span>
+                        <span className="text-xs text-stone-400">{a.role}{a.heures ? ` · ${a.heures} h` : ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {showImporter && (
