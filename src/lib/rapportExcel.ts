@@ -64,6 +64,17 @@ interface MatchReport {
   produits: Produit[];
   rh?: RhData | null;
 }
+/** Compte de résultat du match (get_event_pl). */
+interface PLReport {
+  recettes_ht: number; recettes_ttc: number; nb_ventes: number;
+  cout_fb_ht: number; cout_rh_ht: number; marge_ht: number; marge_pct: number;
+  panier_moyen: number; recette_par_pax: number;
+  par_pos: { label: string; type: string; ht: number; ttc: number; ventes: number | null }[];
+  par_type: { type: string; ht: number; ttc: number }[];
+}
+const POS_TYPE_LABEL: Record<string, string> = {
+  food_truck: 'Food truck', buvette: 'Buvette', bar: 'Bar', vip: 'VIP', autre: 'Autre',
+};
 interface EspaceSem {
   espace: string;
   profil: string;
@@ -284,6 +295,7 @@ export async function genererRapportMatch(eventId: string): Promise<void> {
     return;
   }
   const rep = data as MatchReport;
+  const pl = (await supabase.rpc('get_event_pl', { p_event: eventId })).data as PLReport | null;
   const XLSX = (await import('exceljs')).default;
   const wb = new XLSX.Workbook();
   wb.creator = 'StockPilot MD';
@@ -381,6 +393,35 @@ export async function genererRapportMatch(eventId: string): Promise<void> {
     n.font = { name: 'Arial', size: 8, italic: true, color: { argb: GREY } };
     n.alignment = { wrapText: true };
     s.getRow(nr).height = 26;
+  }
+
+  // --- Compte de résultat (CA − F&B − RH = marge) ---
+  if (pl) {
+    const cr = segTot + (negs.length > 0 ? 4 : 3);
+    s.getCell(cr, 1).value = 'COMPTE DE RÉSULTAT';
+    s.getCell(cr, 1).font = { name: 'Arial', size: 12, bold: true, color: { argb: NAVY } };
+    const crLines: [string, number, string][] = [
+      ['CA réalisé HT', pl.recettes_ht, 'FF1D7A46'],
+      ['Coût F&B HT', -pl.cout_fb_ht, 'FFB03A2E'],
+      ['Coût RH HT', -pl.cout_rh_ht, 'FFB03A2E'],
+      ['MARGE HT', pl.marge_ht, pl.marge_ht >= 0 ? 'FF1D7A46' : 'FFB03A2E'],
+    ];
+    crLines.forEach(([lab, val, color], i) => {
+      const r = cr + 1 + i;
+      const l = bordered(s.getCell(r, 1));
+      l.value = lab;
+      l.font = { name: 'Arial', bold: lab.startsWith('MARGE') };
+      const v = bordered(s.getCell(r, 2));
+      v.value = val;
+      v.numFmt = EUR;
+      v.font = { name: 'Arial', bold: lab.startsWith('MARGE'), color: { argb: color } };
+    });
+    const rPct = cr + 1 + crLines.length;
+    bordered(s.getCell(rPct, 1)).value = 'Marge %';
+    const vp = bordered(s.getCell(rPct, 2));
+    vp.value = pl.marge_pct / 100;
+    vp.numFmt = PCT;
+    vp.font = { name: 'Arial', bold: true, color: { argb: NAVY } };
   }
 
   // --- Espaces ---
@@ -511,6 +552,66 @@ export async function genererRapportMatch(eventId: string): Promise<void> {
       bordered(w.getCell(r, 5)).value = a.cout;
       w.getCell(r, 5).numFmt = EUR;
     });
+  }
+
+  // --- Recettes & Marge (CA par point de vente + compte de résultat) ---
+  if (pl) {
+    const w = wb.addWorksheet('Recettes & Marge', { views: [{ showGridLines: false }] });
+    [28, 14, 16, 16, 10].forEach((wd, i) => (w.getColumn(i + 1).width = wd));
+    band(
+      w,
+      "RECETTES D'ENCAISSEMENT",
+      `${pl.nb_ventes} ventes · panier moyen ${pl.panier_moyen.toLocaleString('fr-FR')} € · ${pl.recette_par_pax.toLocaleString('fr-FR')} €/spectateur`,
+      5,
+    );
+    ['Point de vente', 'Type', 'CA HT', 'CA TTC', 'Ventes'].forEach((h, i) => hdr(w, 4, i + 1, h));
+    pl.par_pos.forEach((x, i) => {
+      const r = 5 + i;
+      bordered(w.getCell(r, 1)).value = x.label;
+      bordered(w.getCell(r, 2)).value = POS_TYPE_LABEL[x.type] ?? x.type;
+      bordered(w.getCell(r, 3)).value = x.ht;
+      w.getCell(r, 3).numFmt = EUR;
+      bordered(w.getCell(r, 4)).value = x.ttc;
+      w.getCell(r, 4).numFmt = EUR;
+      bordered(w.getCell(r, 5)).value = x.ventes ?? 0;
+    });
+    const tot = 5 + pl.par_pos.length;
+    bordered(w.getCell(tot, 1)).value = 'TOTAL CA';
+    const tHt = bordered(w.getCell(tot, 3));
+    tHt.value = pl.par_pos.length ? { formula: `SUM(C5:C${tot - 1})` } : 0;
+    tHt.numFmt = EUR;
+    const tTtc = bordered(w.getCell(tot, 4));
+    tTtc.value = pl.par_pos.length ? { formula: `SUM(D5:D${tot - 1})` } : 0;
+    tTtc.numFmt = EUR;
+    [1, 3, 4].forEach((c) => {
+      w.getCell(tot, c).font = { name: 'Arial', bold: true };
+      w.getCell(tot, c).fill = fill(GOLD);
+    });
+    if (pl.par_pos.length) dataBar(w, `C5:C${tot - 1}`, 'FF1D7A46');
+    // Compte de résultat (formules à partir du total CA)
+    const cr = tot + 2;
+    w.getCell(cr, 1).value = 'COMPTE DE RÉSULTAT';
+    w.getCell(cr, 1).font = { name: 'Arial', size: 12, bold: true, color: { argb: NAVY } };
+    bordered(w.getCell(cr + 1, 1)).value = 'CA réalisé HT';
+    bordered(w.getCell(cr + 1, 3)).value = { formula: `C${tot}` };
+    w.getCell(cr + 1, 3).numFmt = EUR;
+    bordered(w.getCell(cr + 2, 1)).value = 'Coût F&B HT';
+    const fb = bordered(w.getCell(cr + 2, 3));
+    fb.value = -pl.cout_fb_ht;
+    fb.numFmt = EUR;
+    fb.font = { color: { argb: 'FFB03A2E' } };
+    bordered(w.getCell(cr + 3, 1)).value = 'Coût RH HT';
+    const rhc = bordered(w.getCell(cr + 3, 3));
+    rhc.value = -pl.cout_rh_ht;
+    rhc.numFmt = EUR;
+    rhc.font = { color: { argb: 'FFB03A2E' } };
+    bordered(w.getCell(cr + 4, 1)).value = 'MARGE HT (CA − F&B − RH)';
+    w.getCell(cr + 4, 1).font = { name: 'Arial', bold: true };
+    const mv = bordered(w.getCell(cr + 4, 3));
+    mv.value = { formula: `C${tot}-${pl.cout_fb_ht}-${pl.cout_rh_ht}` };
+    mv.numFmt = EUR;
+    mv.font = { name: 'Arial', bold: true, color: { argb: pl.marge_ht >= 0 ? 'FF1D7A46' : 'FFB03A2E' } };
+    mv.fill = fill(pl.marge_ht >= 0 ? 'FFE7F5EC' : 'FFFBE9E7');
   }
 
   sheetParametres(wb, [
