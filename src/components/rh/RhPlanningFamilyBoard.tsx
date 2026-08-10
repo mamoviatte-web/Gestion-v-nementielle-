@@ -6,19 +6,31 @@
  *
  * Barre de synthèse collante (compteurs animés + jauge de pointage), chips de
  * filtre par famille, sections repliables, cartes d'espace avec état + barre
- * « % pointé » animée, section hors-resto par pôle. Realtime sur
- * event_staff_preplan → refresh (debounce). Clic sur une carte → détail RH de
- * l'espace fourni par le parent (renderSpaceDetail), pour conserver le flux de
- * pointage existant. RG-003 : rh_planning_board réservé ROLE_STADE (garde base).
+ * « % pointé » animée, section hors-resto par pôle (Cashless/Sécurité/Accueil/
+ * Autres — cliquables). Clic sur une carte d'espace OU de pôle → gestion RH
+ * opérationnelle (GroupCard de rh_board : édition heures/facturation, ajout,
+ * déplacement, retrait). Realtime sur event_staff_preplan → refresh (debounce).
+ * RG-003 : rh_planning_board / rh_board réservés ROLE_STADE (garde base).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Crown, CupSoda, Martini, Sun, ScanLine, CreditCard, Shield, Users,
   ChevronDown, ChevronRight, ShieldCheck, type LucideIcon,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { Alert, Spinner } from '@/components/ui';
+import { GroupCard, type Agent } from '@/components/rh/RhOperationalBoard';
+
+/** Slice « agents » de rh_board (détails éditables : heures, facturation, statut). */
+interface OpsBoard {
+  hors_resto: Agent[];
+  resto: Agent[];
+  poles: string[];
+  espaces: { id: string; nom: string }[];
+}
 
 interface Espace {
   id: string; nom: string; agents: number; heures: number; cout: number;
@@ -92,24 +104,37 @@ function useCountUp(target: number, ms = 600): number {
 
 export function RhPlanningFamilyBoard({
   eventId,
-  renderSpaceDetail,
   onExternalChange,
   refreshSignal = 0,
 }: {
   eventId: string;
-  renderSpaceDetail: (space: { id: string; nom: string }) => ReactNode;
   onExternalChange?: () => void;
   refreshSignal?: number;
 }) {
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const by = user?.name ?? user?.email ?? 'RH';
+
   const [board, setBoard] = useState<PlanningBoard | null>(null);
+  const [ops, setOps] = useState<OpsBoard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [activeFamily, setActiveFamily] = useState<string | null>(null);
   const [closedFamilies, setClosedFamilies] = useState<Set<string>>(new Set());
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null); // space_id
+  const [expandedPole, setExpandedPole] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const { data } = await supabase.rpc('rh_planning_board', { p_event: eventId });
-    setBoard((data as PlanningBoard | null) ?? null);
+    const [pb, ob] = await Promise.all([
+      supabase.rpc('rh_planning_board', { p_event: eventId }),
+      supabase.rpc('rh_board', { p_event: eventId }),
+    ]);
+    setBoard((pb.data as PlanningBoard | null) ?? null);
+    const b = ob.data as { hors_resto?: Agent[]; resto?: Agent[]; poles?: string[]; espaces?: { id: string; nom: string }[] } | null;
+    setOps({
+      hors_resto: b?.hors_resto ?? [], resto: b?.resto ?? [],
+      poles: b?.poles ?? [], espaces: b?.espaces ?? [],
+    });
     setLoading(false);
   }, [eventId]);
 
@@ -118,7 +143,7 @@ export function RhPlanningFamilyBoard({
   }, [load, refreshSignal]);
 
   // Realtime : toute écriture sur event_staff_preplan de cet événement → refresh
-  // (debounce 300ms) + notification au parent pour recharger son détail.
+  // (debounce 300ms) + notification au parent (compteur pré-plan).
   useEffect(() => {
     const timer = { id: 0 as ReturnType<typeof setTimeout> | 0 };
     const schedule = () => {
@@ -142,7 +167,51 @@ export function RhPlanningFamilyBoard({
     };
   }, [eventId, load, onExternalChange]);
 
+  /** Exécute une RPC opérationnelle (édition/ajout/déplacement…) puis recharge. */
+  const run = useCallback(
+    async (fn: string, params: Record<string, unknown>, okMsg: string): Promise<boolean> => {
+      setBusy(true);
+      const { data, error } = await supabase.rpc(fn, params);
+      setBusy(false);
+      const res = data as { success?: boolean; error?: string } | null;
+      if (error || !res?.success) {
+        showToast(`Échec : ${res?.error ?? error?.message ?? 'erreur'}`, 'warning');
+        return false;
+      }
+      showToast(okMsg, 'success');
+      await load();
+      onExternalChange?.();
+      return true;
+    },
+    [load, showToast, onExternalChange],
+  );
+
+  const moveOptions = useMemo(() => {
+    if (!ops) return [];
+    return [
+      { value: '', label: '↪ Déplacer vers…' },
+      ...ops.poles.map((p) => ({ value: `pole:${p}`, label: `Pôle · ${p}` })),
+      ...ops.espaces.map((e) => ({ value: `space:${e.id}`, label: `Espace · ${e.nom}` })),
+    ];
+  }, [ops]);
+
   const closed = board?.event?.closed ?? false;
+
+  /** Rend un GroupCard opérationnel (édition heures/facturation, ajout, déplacement, retrait). */
+  const renderGroup = (title: string, agents: Agent[], onAddCtx: { pole: string | null; space: string | null }) => (
+    <GroupCard
+      title={title}
+      agents={agents}
+      closed={closed}
+      busy={busy}
+      moveOptions={moveOptions}
+      onEdit={(a, p) => run('rh_edit_agent', { p_agent: a.id, ...p, p_by: by }, 'Agent mis à jour.')}
+      onMove={(a, toPole, toSpace) => run('rh_move_agent', { p_agent: a.id, p_to_pole: toPole, p_to_space: toSpace, p_by: by }, 'Agent déplacé.')}
+      onRemove={(a, reason) => run('rh_remove_agent', { p_agent: a.id, p_reason: reason, p_by: by }, 'Agent retiré.')}
+      onRestore={(a) => run('rh_restore_agent', { p_agent: a.id, p_by: by }, 'Agent restauré.')}
+      onAdd={(p) => run('rh_add_agent', { p_event: eventId, p_pole: onAddCtx.pole, p_space: onAddCtx.space, ...p, p_by: by }, 'Agent ajouté.')}
+    />
+  );
   const familles = useMemo(() => board?.familles ?? [], [board]);
   const hr = board?.hors_resto ?? null;
 
@@ -172,6 +241,12 @@ export function RhPlanningFamilyBoard({
   if (loading) return <Spinner />;
   if (!board) return <Alert variant="error">Impossible de charger le planning.</Alert>;
   if (board.error) return <Alert variant="warning">{board.error}</Alert>;
+
+  // Cartes de pôles hors resto : union des pôles peuplés (stats) et des pôles
+  // standard (Cashless/Sécurité/Accueil/Autres) même vides → toujours accessibles.
+  const poleStats = new Map((hr?.poles ?? []).map((p) => [p.pole, p]));
+  const poleNames = Array.from(new Set([...(hr?.poles ?? []).map((p) => p.pole), ...(ops?.poles ?? [])]));
+  const poleCards: Pole[] = poleNames.map((n) => poleStats.get(n) ?? { pole: n, agents: 0, heures: 0, cout: 0 });
 
   const showFamily = (key: string) => activeFamily === null || activeFamily === key;
   const toggleClosed = (key: string) =>
@@ -314,13 +389,14 @@ export function RhPlanningFamilyBoard({
                     );
                   })}
                 </div>
-                {/* Détail RH de l'espace sélectionné (flux de pointage existant) */}
+                {/* Détail RH opérationnel de l'espace : édition heures/facturation, ajout, déplacement, retrait. */}
                 {expanded && f.espaces.some((e) => e.id === expanded) && (
-                  <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50/60 p-4">
-                    {renderSpaceDetail({
-                      id: expanded,
-                      nom: f.espaces.find((e) => e.id === expanded)?.nom ?? '',
-                    })}
+                  <div className="mt-4">
+                    {renderGroup(
+                      f.espaces.find((e) => e.id === expanded)?.nom ?? '',
+                      (ops?.resto ?? []).filter((a) => a.space_id === expanded),
+                      { pole: null, space: expanded },
+                    )}
                   </div>
                 )}
               </div>
@@ -330,7 +406,7 @@ export function RhPlanningFamilyBoard({
       })}
 
       {/* Section Hors restauration */}
-      {hr && hr.poles.length > 0 && showFamily('horsresto') && (
+      {poleCards.length > 0 && showFamily('horsresto') && (
         <section className="overflow-hidden rounded-2xl border" style={{ borderColor: FAMILY.horsresto.ring }}>
           <div className="flex items-center gap-3 px-4 py-3" style={{ background: FAMILY.horsresto.soft }}>
             <span className="flex h-9 w-9 items-center justify-center rounded-xl text-white" style={{ background: FAMILY.horsresto.accent }}>
@@ -338,29 +414,48 @@ export function RhPlanningFamilyBoard({
             </span>
             <div>
               <p className="font-bold" style={{ color: FAMILY.horsresto.accent }}>{FAMILY.horsresto.label}</p>
-              <p className="text-[11px]" style={{ color: FAMILY.horsresto.accent }}>agents sans espace physique</p>
+              <p className="text-[11px]" style={{ color: FAMILY.horsresto.accent }}>agents sans espace physique — cliquez un pôle pour gérer</p>
             </div>
             <span className="ml-auto flex items-center gap-3 text-xs" style={{ color: FAMILY.horsresto.accent }}>
-              <span>{num(hr.totaux.agents)} ag.</span>
-              <span>{num(hr.totaux.heures).toFixed(0)} h</span>
-              <span className="font-bold">{eur(num(hr.totaux.cout))}</span>
+              <span>{num(hr?.totaux.agents)} ag.</span>
+              <span>{num(hr?.totaux.heures).toFixed(0)} h</span>
+              <span className="font-bold">{eur(num(hr?.totaux.cout))}</span>
             </span>
           </div>
-          <div className="grid grid-cols-1 gap-3 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
-            {hr.poles.map((p) => {
-              const Icon = POLE_ICON[p.pole] ?? Users;
-              return (
-                <div key={p.pole} className="rounded-xl border border-stone-200 p-4" style={{ background: FAMILY.horsresto.soft }}>
-                  <div className="flex items-center gap-2">
-                    <Icon size={16} style={{ color: FAMILY.horsresto.accent }} />
-                    <p className="text-sm font-bold text-stone-800">{p.pole}</p>
-                  </div>
-                  <p className="mt-1 text-xs text-stone-500">
-                    {num(p.agents)} agents · {num(p.heures).toFixed(1)} h · {eur(num(p.cout))}
-                  </p>
-                </div>
-              );
-            })}
+          <div className="bg-white p-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {poleCards.map((p) => {
+                const Icon = POLE_ICON[p.pole] ?? Users;
+                const isOpen = expandedPole === p.pole;
+                return (
+                  <button
+                    key={p.pole}
+                    onClick={() => setExpandedPole(isOpen ? null : p.pole)}
+                    className="rounded-xl border border-stone-200 p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md"
+                    style={{ background: FAMILY.horsresto.soft, boxShadow: isOpen ? `0 0 0 2px ${FAMILY.horsresto.ring}` : undefined }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon size={16} style={{ color: FAMILY.horsresto.accent }} />
+                      <p className="text-sm font-bold text-stone-800">{p.pole}</p>
+                      <span className="ml-auto text-stone-400">{isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-stone-500">
+                      {num(p.agents)} agents · {num(p.heures).toFixed(1)} h · {eur(num(p.cout))}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+            {/* Détail RH opérationnel du pôle sélectionné */}
+            {expandedPole && (
+              <div className="mt-4">
+                {renderGroup(
+                  expandedPole,
+                  (ops?.hors_resto ?? []).filter((a) => (a.pole ?? 'Autres') === expandedPole),
+                  { pole: expandedPole, space: null },
+                )}
+              </div>
+            )}
           </div>
         </section>
       )}

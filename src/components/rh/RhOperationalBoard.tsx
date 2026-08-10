@@ -37,7 +37,7 @@ interface RhSummary {
   closed: boolean; closed_at: string | null; closed_by: string | null;
   kpis: Kpis | null;
 }
-interface Agent {
+export interface Agent {
   id: string; nom: string; prenom: string; role: string;
   heures: number; taux: number; status: string;
   billing_mode?: string; forfait?: number | null; cout?: number;
@@ -347,10 +347,10 @@ function ActionBadge({ action }: { action: string }) {
   );
 }
 
-interface EditParams { p_nom: string; p_prenom: string; p_role: string; p_hours: number; p_rate: number | null; p_billing_mode: string; p_forfait: number | null; }
-interface AddParams { p_nom: string; p_prenom: string; p_role: string; p_start: string; p_hours: number; p_rate: number | null; p_billing_mode: string; p_forfait: number | null; }
+export interface EditParams { p_nom: string; p_prenom: string; p_role: string; p_hours: number; p_rate: number | null; p_billing_mode: string; p_forfait: number | null; }
+export interface AddParams { p_nom: string; p_prenom: string; p_role: string; p_start: string; p_hours: number; p_rate: number | null; p_billing_mode: string; p_forfait: number | null; }
 
-function GroupCard({
+export function GroupCard({
   title, agents, closed, busy, moveOptions,
   onEdit, onMove, onRemove, onRestore, onAdd,
 }: {
