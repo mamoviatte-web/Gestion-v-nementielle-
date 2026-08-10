@@ -19,6 +19,7 @@ import {
   UserPlus,
   Ruler,
   Building2,
+  KeyRound,
   ChevronLeft,
   ChevronRight,
   MoreHorizontal,
@@ -51,6 +52,7 @@ const NAV: NavItem[] = [
   { to: '/admin/rh/populations', label: 'Populations RH', short: 'Populations', icon: Users },
   { to: '/admin/catalog', label: 'Catalogue', icon: Package },
   { to: '/admin/spaces', label: 'Espaces', icon: Building2 },
+  { to: '/admin/access', label: 'Gestion des accès', short: 'Accès', icon: KeyRound },
   { to: '/admin/export', label: 'Export', icon: Download },
 ];
 const MAIN = NAV.slice(0, 4); // Accueil · Événements · Stocks · Analyses

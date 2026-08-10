@@ -59,14 +59,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
         });
         if (signInError) {
-          setError(signInError.message);
+          // Certaines réponses GoTrue renvoient un message vide ou « {} » : on
+          // affiche alors un message clair au lieu de l'objet brut sérialisé.
+          const msg = signInError.message?.trim();
+          setError(!msg || msg === '{}' ? 'Échec de connexion : identifiants incorrects ou compte non activé.' : msg);
           return null;
         }
         const current = await getCurrentUser();
+        if (!current) {
+          setError('Connexion établie mais profil introuvable. Contactez un administrateur.');
+          await supabase.auth.signOut();
+          return null;
+        }
         setUser(current);
         return current;
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erreur de connexion');
+        setError(err instanceof Error ? err.message || 'Erreur de connexion' : 'Erreur de connexion');
         return null;
       } finally {
         setLoading(false);
