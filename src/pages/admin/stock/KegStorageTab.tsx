@@ -3,7 +3,7 @@
  * et fûts vides (retour fournisseur). Réservé ROLE_STADE.
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import {
   AlertTriangle,
@@ -11,12 +11,15 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Droplets,
+  FlaskConical,
   PackageCheck,
   Send,
+  Trash2,
   Truck,
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { Alert, Badge, Button, EmptyState, Input, Select, Spinner } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import {
@@ -80,6 +83,7 @@ function KegPleinsView() {
   const summary = useKegSummary();
   const [dispatchKeg, setDispatchKeg] = useState<KegSummaryRow | null>(null);
   const [receiveOpen, setReceiveOpen] = useState(false);
+  const [consume, setConsume] = useState<{ keg: KegSummaryRow | null } | null>(null);
 
   if (summary.isLoading) return <Spinner label="Chargement des fûts…" />;
   const data = summary.data;
@@ -99,6 +103,9 @@ function KegPleinsView() {
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" onClick={() => setReceiveOpen(true)}>
           <Truck className="h-4 w-4" /> Réceptionner des fûts
+        </Button>
+        <Button variant="secondary" onClick={() => setConsume({ keg: null })}>
+          <FlaskConical className="h-4 w-4" /> Purge tireuses
         </Button>
       </div>
 
@@ -140,13 +147,22 @@ function KegPleinsView() {
                   {k.unit_price_ht != null ? formatEuro(k.pleins * k.unit_price_ht) : '—'}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => setDispatchKeg(k)}
-                    disabled={k.pleins <= 0}
-                    className="rounded-lg border border-pr-olive/40 px-2.5 py-1 text-xs font-medium text-pr-olive-dark hover:bg-pr-olive/10 disabled:opacity-30"
-                  >
-                    Dispatcher
-                  </button>
+                  <div className="inline-flex gap-1.5">
+                    <button
+                      onClick={() => setDispatchKeg(k)}
+                      disabled={k.pleins <= 0}
+                      className="rounded-lg border border-pr-olive/40 px-2.5 py-1 text-xs font-medium text-pr-olive-dark hover:bg-pr-olive/10 disabled:opacity-30"
+                    >
+                      Dispatcher
+                    </button>
+                    <button
+                      onClick={() => setConsume({ keg: k })}
+                      disabled={k.pleins <= 0}
+                      className="rounded-lg border border-amber-400/50 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-30"
+                    >
+                      Consommer
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -156,6 +172,14 @@ function KegPleinsView() {
 
       {dispatchKeg && <DispatchKegModal keg={dispatchKeg} onClose={() => setDispatchKeg(null)} />}
       {receiveOpen && <KegReceiveModal onClose={() => setReceiveOpen(false)} />}
+      {consume && (
+        <ConsumePurgeModal
+          keg={consume.keg}
+          kegs={data.kegs}
+          onClose={() => setConsume(null)}
+          onDone={() => void summary.refetch()}
+        />
+      )}
     </div>
   );
 }
@@ -391,6 +415,194 @@ function DispatchKegModal({ keg, onClose }: { keg: KegSummaryRow; onClose: () =>
             <Send className="h-4 w-4" /> Dispatcher {qtyNum} fût(s)
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Modale purge tireuses ─────────────────────────── */
+
+interface PurgeLine { product_id: string; produit: string; qty: number; pu_ht: number | null; cout_ht: number }
+
+function ConsumePurgeModal({
+  keg, kegs, onClose, onDone,
+}: {
+  keg: KegSummaryRow | null;
+  kegs: KegSummaryRow[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const events = useOpenEventsForDispatch();
+  const [eventId, setEventId] = useState('');
+  const [productId, setProductId] = useState(keg?.product_id ?? '');
+  const [qty, setQty] = useState('1');
+  const [responsable, setResponsable] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [purges, setPurges] = useState<PurgeLine[]>([]);
+
+  const eventOptions = useMemo(
+    () => (events.data ?? []).map((e) => ({ value: e.event_id, label: e.event_name })),
+    [events.data],
+  );
+  const kegOptions = useMemo(
+    () => kegs.filter((k) => k.pleins > 0).map((k) => ({ value: k.product_id, label: k.product_name })),
+    [kegs],
+  );
+  const selectedKeg = kegs.find((k) => k.product_id === productId) ?? keg;
+  const dispo = selectedKeg?.pleins ?? 0;
+  const pu = selectedKeg?.unit_price_ht ?? null;
+  const qtyNum = Number(qty) || 0;
+  const value = pu != null ? qtyNum * pu : null;
+
+  const loadPurges = useCallback(async () => {
+    if (!eventId) { setPurges([]); return; }
+    const { data } = await supabase.rpc('get_event_purges', { p_event: eventId });
+    setPurges((data as PurgeLine[] | null) ?? []);
+  }, [eventId]);
+  useEffect(() => { void loadPurges(); }, [loadPurges]);
+
+  async function consume() {
+    setError(null);
+    if (!eventId) return setError('Sélectionnez un événement.');
+    if (!productId) return setError('Sélectionnez un fût.');
+    if (qtyNum < 1 || qtyNum > dispo) return setError(`Quantité entre 1 et ${dispo}.`);
+    if (responsable.trim().length < 2) return setError('Responsable requis (RG-001).');
+    setBusy(true);
+    const { data, error: err } = await supabase.rpc('consume_fut_purge', {
+      p_event: eventId, p_product: productId, p_qty: qtyNum, p_by: responsable.trim(), p_note: 'Purge tireuse',
+    });
+    setBusy(false);
+    const res = data as { success?: boolean; error?: string; cout_ht?: number } | null;
+    if (err || !res?.success) return setError(res?.error ?? err?.message ?? 'Erreur lors de la purge.');
+    onDone();
+    await loadPurges();
+    setQty('1');
+  }
+
+  async function cancel(pid: string, q: number) {
+    if (!window.confirm('Annuler cette purge ? Les fûts seront restaurés et la charge retirée.')) return;
+    setError(null);
+    setBusy(true);
+    const { data, error: err } = await supabase.rpc('cancel_fut_purge', {
+      p_event: eventId, p_product: pid, p_qty: q, p_by: responsable.trim() || 'Stade',
+    });
+    setBusy(false);
+    const res = data as { success?: boolean; error?: string } | null;
+    if (err || !res?.success) return setError(res?.error ?? err?.message ?? 'Erreur lors de l\'annulation.');
+    onDone();
+    await loadPurges();
+  }
+
+  const totalPurges = purges.reduce((s, p) => s + (Number(p.cout_ht) || 0), 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+        <div className="mb-4 flex items-start justify-between">
+          <h2 className="flex items-center gap-2 font-display text-lg font-black text-pr-black">
+            <FlaskConical className="h-5 w-5 text-amber-600" /> Purge tireuses
+          </h2>
+          <button onClick={onClose} aria-label="Fermer" className="text-pr-black-soft/40 hover:text-pr-black">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {error && <Alert variant="error" className="mb-3">{error}</Alert>}
+
+        <div className="space-y-3">
+          <Select
+            label="Événement *"
+            placeholder="Sélectionner un événement"
+            options={eventOptions}
+            value={eventId}
+            onChange={(e) => setEventId(e.target.value)}
+          />
+          <Select
+            label="Fût à consommer *"
+            placeholder="Sélectionner un fût"
+            options={kegOptions}
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+          />
+          {selectedKeg && (
+            <div className="rounded-lg border border-amber-300/50 bg-amber-50 p-3 text-sm text-amber-800">
+              {dispo} fût(s) plein(s) disponible(s)
+            </div>
+          )}
+          <Input
+            type="number" min="1" max={String(dispo)}
+            label="Quantité à consommer *"
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+          />
+          <Input
+            label="Responsable *"
+            placeholder="Prénom NOM"
+            value={responsable}
+            onChange={(e) => setResponsable(e.target.value)}
+          />
+          <div className="rounded-lg bg-pr-cream/60 p-3 text-sm text-pr-black-soft/80">
+            Valeur consommée (imputée F&B / Bières) :{' '}
+            {value != null ? (
+              <span className="font-medium text-pr-black">{qtyNum} × {pu?.toFixed(2)} € = {formatEuro(value)}</span>
+            ) : '—'}
+          </div>
+        </div>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Fermer</Button>
+          <Button loading={busy} onClick={() => void consume()}>
+            <FlaskConical className="h-4 w-4" /> Consommer {qtyNum} fût(s)
+          </Button>
+        </div>
+
+        {/* Récap des purges de l'événement */}
+        {eventId && (
+          <div className="mt-5 border-t border-pr-stone pt-4">
+            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-pr-black-soft/60">
+              Purges de cet événement
+            </h3>
+            {purges.length === 0 ? (
+              <p className="text-sm text-pr-black-soft/50">Aucune purge enregistrée.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-pr-black-soft/50">
+                    <th className="py-1">Fût</th>
+                    <th className="py-1 text-right">Qté</th>
+                    <th className="py-1 text-right">Coût HT</th>
+                    <th className="py-1" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-pr-stone">
+                  {purges.map((p) => (
+                    <tr key={p.product_id}>
+                      <td className="py-1.5 font-medium text-pr-black">{p.produit}</td>
+                      <td className="py-1.5 text-right">{p.qty}</td>
+                      <td className="py-1.5 text-right font-semibold">{formatEuro(Number(p.cout_ht) || 0)}</td>
+                      <td className="py-1.5 text-right">
+                        <button
+                          onClick={() => void cancel(p.product_id, p.qty)}
+                          disabled={busy}
+                          title="Annuler la purge"
+                          className="rounded-lg p-1 text-pr-black-soft/40 hover:bg-pr-rust/10 hover:text-pr-rust disabled:opacity-40"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="font-bold text-pr-black">
+                    <td className="py-1.5" colSpan={2}>Total imputé F&B</td>
+                    <td className="py-1.5 text-right">{formatEuro(totalPurges)}</td>
+                    <td />
+                  </tr>
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
