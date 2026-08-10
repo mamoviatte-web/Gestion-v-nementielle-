@@ -14,12 +14,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Lock, Plus, Pencil, ArrowRightLeft, UserMinus, RotateCcw, History,
-  ChevronDown, ChevronRight, Check, X, ShieldCheck,
+  ChevronDown, ChevronRight, Check, X, ShieldCheck, Receipt,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { Alert, Button, Input, Select, Spinner } from '@/components/ui';
+import { RhBillingGrid } from '@/components/rh/RhBillingGrid';
+import { BillingChip } from '@/components/rh/BillingChip';
 
 const ROLE_OPTIONS = [
   'Serveur', 'Chef de rang', 'Barman', 'Agent de sécurité',
@@ -29,6 +31,7 @@ const ROLE_OPTIONS = [
 interface Kpis {
   nb_agents: number; total_heures: number; cout_rh_ht: number;
   cout_resto: number; cout_hors_resto: number; cout_par_pax: number;
+  cout_previsionnel: number; cout_reel: number; nb_forfait: number; nb_horaire: number;
 }
 interface RhSummary {
   closed: boolean; closed_at: string | null; closed_by: string | null;
@@ -37,6 +40,7 @@ interface RhSummary {
 interface Agent {
   id: string; nom: string; prenom: string; role: string;
   heures: number; taux: number; status: string;
+  billing_mode?: string; forfait?: number | null; cout?: number;
   pole?: string; space_id?: string; space_name?: string;
 }
 interface Espace { id: string; nom: string; }
@@ -70,6 +74,7 @@ export function RhOperationalBoard({ eventId }: { eventId: string }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
+  const [showBilling, setShowBilling] = useState(false);
 
   const load = useCallback(async () => {
     const { data } = await supabase.rpc('rh_board', { p_event: eventId });
@@ -149,15 +154,42 @@ export function RhOperationalBoard({ eventId }: { eventId: string }) {
         </div>
       )}
 
-      {/* KPIs */}
+      {/* KPIs — prévisionnel vs réel (forfait-aware) */}
       {k && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Kpi label="Agents" value={String(k.nb_agents)} />
-          <Kpi label="Heures" value={num(k.total_heures).toFixed(0)} />
-          <Kpi label="Coût RH HT" value={eur(num(k.cout_rh_ht))} accent />
-          <Kpi label="Coût / spectateur" value={`${num(k.cout_par_pax).toFixed(2)} €`} />
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Kpi label="Agents" value={String(k.nb_agents)} />
+            <Kpi label="Heures" value={num(k.total_heures).toFixed(0)} />
+            <Kpi label="Budget RH prévisionnel" value={eur(num(k.cout_previsionnel))} />
+            <EcartKpi prev={num(k.cout_previsionnel)} reel={num(k.cout_reel)} />
+          </div>
+          <p className="text-xs text-stone-400">
+            {num(k.nb_horaire)} à l'heure · {num(k.nb_forfait)} au forfait · coût / spectateur {num(k.cout_par_pax).toFixed(2)} €
+          </p>
         </div>
       )}
+
+      {/* Grille de facturation (vue quantité + édition en masse) */}
+      <div>
+        <button
+          onClick={() => setShowBilling((v) => !v)}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-stone-900"
+        >
+          <Receipt size={15} /> Grille de facturation ({board.hors_resto.length + board.resto.length})
+          {showBilling ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        </button>
+        {showBilling && (
+          <div className="mt-3">
+            <RhBillingGrid
+              eventId={eventId}
+              agents={[...board.resto, ...board.hors_resto]}
+              closed={closed}
+              by={by}
+              onChanged={load}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Pôles hors restauration */}
       <section>
@@ -281,6 +313,24 @@ function Kpi({ label, value, accent }: { label: string; value: string; accent?: 
   );
 }
 
+/** Coût réel + écart réel−prévisionnel (vert = sous budget, rouge = dépassement). */
+function EcartKpi({ prev, reel }: { prev: number; reel: number }) {
+  const ecart = Math.round(reel - prev);
+  const over = ecart > 0;
+  const eur0 = (v: number) => v.toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' €';
+  return (
+    <div className="rounded-2xl border border-stone-900 bg-stone-900 p-4 text-white">
+      <p className="text-[11px] uppercase tracking-wide text-white/60">Coût RH réel</p>
+      <p className="mt-1 text-xl font-black tabular-nums">{eur0(reel)}</p>
+      {ecart !== 0 && (
+        <p className={`mt-0.5 text-[11px] font-bold ${over ? 'text-rose-400' : 'text-emerald-400'}`}>
+          {over ? '▲' : '▼'} {over ? '+' : ''}{eur0(ecart)} vs prév.
+        </p>
+      )}
+    </div>
+  );
+}
+
 const ACTION_STYLES: Record<string, string> = {
   ajout: 'bg-emerald-100 text-emerald-700',
   renommage: 'bg-blue-100 text-blue-700',
@@ -297,8 +347,8 @@ function ActionBadge({ action }: { action: string }) {
   );
 }
 
-interface EditParams { p_nom: string; p_prenom: string; p_role: string; p_hours: number; p_rate: number | null; }
-interface AddParams { p_nom: string; p_prenom: string; p_role: string; p_start: string; p_hours: number; p_rate: number | null; }
+interface EditParams { p_nom: string; p_prenom: string; p_role: string; p_hours: number; p_rate: number | null; p_billing_mode: string; p_forfait: number | null; }
+interface AddParams { p_nom: string; p_prenom: string; p_role: string; p_start: string; p_hours: number; p_rate: number | null; p_billing_mode: string; p_forfait: number | null; }
 
 function GroupCard({
   title, agents, closed, busy, moveOptions,
@@ -384,14 +434,18 @@ function AddForm({
   const [role, setRole] = useState<string>('Autre');
   const [start, setStart] = useState('17:00');
   const [hours, setHours] = useState('6');
+  const [billing, setBilling] = useState('horaire');
+  const [price, setPrice] = useState('');
 
   return (
-    <div className="grid grid-cols-2 gap-2 border-b border-stone-100 bg-stone-50/60 px-4 py-3 sm:grid-cols-6">
+    <div className="grid grid-cols-2 gap-2 border-b border-stone-100 bg-stone-50/60 px-4 py-3 sm:grid-cols-8">
       <Input placeholder="Nom" value={nom} onChange={(e) => setNom(e.target.value)} />
       <Input placeholder="Prénom" value={prenom} onChange={(e) => setPrenom(e.target.value)} />
       <Select value={role} onChange={(e) => setRole(e.target.value)} options={ROLE_OPTIONS.map((r) => ({ value: r, label: r }))} />
       <Input type="time" value={start} onChange={(e) => setStart(e.target.value)} />
       <Input type="number" step="0.25" placeholder="Heures" value={hours} onChange={(e) => setHours(e.target.value)} />
+      <Select value={billing} onChange={(e) => setBilling(e.target.value)} options={[{ value: 'horaire', label: 'Horaire' }, { value: 'forfait', label: 'Forfait' }]} />
+      <Input type="number" step="0.5" placeholder={billing === 'forfait' ? 'Forfait €' : '€/h'} value={price} onChange={(e) => setPrice(e.target.value)} />
       <div className="flex items-center gap-1">
         <Button
           size="sm"
@@ -403,7 +457,9 @@ function AddForm({
               p_role: role,
               p_start: start || '17:00',
               p_hours: num(hours),
-              p_rate: null,
+              p_rate: billing === 'horaire' && price ? num(price) : null,
+              p_billing_mode: billing,
+              p_forfait: billing === 'forfait' && price ? num(price) : null,
             })
           }
         >
@@ -435,18 +491,25 @@ function AgentLine({
   const [role, setRole] = useState(agent.role);
   const [hours, setHours] = useState(String(num(agent.heures)));
   const [rate, setRate] = useState(String(num(agent.taux)));
+  const [billing, setBilling] = useState(agent.billing_mode ?? 'horaire');
+  const [forfait, setForfait] = useState(String(num(agent.forfait ?? 0)));
 
   const removed = agent.status === 'retiré' || agent.status === 'absent';
 
   if (editing) {
     return (
-      <li className="grid grid-cols-2 gap-2 bg-blue-50/40 px-4 py-3 sm:grid-cols-6">
+      <li className="grid grid-cols-2 gap-2 bg-blue-50/40 px-4 py-3 sm:grid-cols-8">
         <Input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Nom" />
         <Input value={prenom} onChange={(e) => setPrenom(e.target.value)} placeholder="Prénom" />
         <Select value={role} onChange={(e) => setRole(e.target.value)} options={ROLE_OPTIONS.map((r) => ({ value: r, label: r }))} />
         <Input type="number" step="0.25" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="Heures" />
-        <Input type="number" step="0.5" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="Taux" />
-        <div className="flex items-center gap-1">
+        <Select value={billing} onChange={(e) => setBilling(e.target.value)} options={[{ value: 'horaire', label: 'Horaire' }, { value: 'forfait', label: 'Forfait' }]} />
+        {billing === 'forfait' ? (
+          <Input type="number" step="0.5" value={forfait} onChange={(e) => setForfait(e.target.value)} placeholder="Forfait €" />
+        ) : (
+          <Input type="number" step="0.5" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="€/h" />
+        )}
+        <div className="col-span-2 flex items-center gap-1">
           <Button
             size="sm"
             disabled={busy || nom.trim().length < 1}
@@ -454,6 +517,7 @@ function AgentLine({
               const ok = await onEdit(agent, {
                 p_nom: nom.trim(), p_prenom: prenom.trim(), p_role: role,
                 p_hours: num(hours), p_rate: num(rate),
+                p_billing_mode: billing, p_forfait: billing === 'forfait' ? num(forfait) : null,
               });
               if (ok) setEditing(false);
             }}
@@ -473,6 +537,7 @@ function AgentLine({
       <span className={`min-w-0 flex-1 text-sm ${removed ? 'text-stone-400 line-through' : 'text-stone-800'}`}>
         <span className="font-medium">{`${agent.prenom} ${agent.nom}`.trim()}</span>
         <span className="ml-2 text-xs text-stone-400">{agent.role}</span>
+        <span className="ml-2"><BillingChip mode={agent.billing_mode} taux={num(agent.taux)} forfait={agent.forfait} /></span>
       </span>
       <span className="text-xs tabular-nums text-stone-500">{num(agent.heures).toFixed(1)} h</span>
 
