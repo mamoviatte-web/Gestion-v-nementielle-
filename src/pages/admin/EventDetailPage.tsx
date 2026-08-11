@@ -6,13 +6,10 @@ import { useEvent, useEventSpaces, useEventActions, useEventsList } from '@/hook
 import { useEventStats } from '@/hooks/useEventStats';
 import { EVENT_STATUS_META } from '@/lib/labels';
 import { StockDotationsTable } from '@/components/stock/StockDotationsTable';
-import { ProvidersPanel } from '@/components/providers/ProvidersPanel';
 import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
-import { AreaRunnersPanel } from '@/components/runner/AreaRunnersPanel';
-import { RunnerPdfButton } from '@/components/runner/RunnerPdfButton';
+import { UnifiedRunnerPanel } from '@/components/runner/UnifiedRunnerPanel';
 import { genererRapportMatch, genererRapportSeminaire } from '@/lib/rapportExcel';
-import { BuvetteRunnersPanel } from '@/components/runner/BuvetteRunnersPanel';
 import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
 import { MatchConsumptionReport } from '@/components/analytics/MatchConsumptionReport';
 import { MatchAccessCode } from '@/components/events/MatchAccessCode';
@@ -33,6 +30,7 @@ import { DeleteEventButton } from '@/components/events/DeleteEventButton';
 import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
 import { RhOperationalBoard } from '@/components/rh/RhOperationalBoard';
 import { RevenueMarginPanel } from '@/components/events/RevenueMarginPanel';
+import { EventResetButton } from '@/components/events/EventResetButton';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
@@ -60,12 +58,10 @@ type Tab =
 const MATCH_TABS: { key: Tab; label: string }[] = [
   { key: 'stocks', label: 'Stocks & Dotations' },
   { key: 'buvettes', label: '🍺 Buvettes' },
-  { key: 'prestataires', label: 'Prestataires' },
   { key: 'horaires', label: 'Horaires Staff' },
   { key: 'debriefs', label: 'Débriefs' },
   { key: 'route', label: '📄 Feuille de route' },
-  { key: 'runner', label: '🚀 Runner Auto' },
-  { key: 'runner_buvettes', label: '🍺 Runner Buvettes' },
+  { key: 'runner', label: '🚀 Fiches Runner' },
   { key: 'rh', label: '👥 RH opérationnel' },
   { key: 'recettes', label: '💶 Recettes & Marge' },
   { key: 'analyse', label: '📈 Analyse conso' },
@@ -239,6 +235,13 @@ export default function EventDetailPage() {
               Clôturer l'événement
             </Button>
           )}
+          {isMatch && (
+            <EventResetButton
+              eventId={event.event_id}
+              eventName={event.event_name}
+              onDone={() => window.location.reload()}
+            />
+          )}
           <DeleteEventButton event={{ event_id: event.event_id, event_name: event.event_name, event_type: event.event_type }} />
           {(event.status === 'clôturé' || event.status === 'archivé') && (
             <>
@@ -377,9 +380,6 @@ export default function EventDetailPage() {
 
       {activeTab === 'buvettes' && <BuvetteGroupsTab />}
 
-      {activeTab === 'prestataires' && (
-        <ProvidersPanel eventId={event.event_id} spaces={spaces} />
-      )}
       {activeTab === 'horaires' && (
         <div className="space-y-6">
           {selectedSpace ? (
@@ -415,19 +415,12 @@ export default function EventDetailPage() {
         </div>
       )}
       {activeTab === 'runner' && (
-        <div className="space-y-4">
-          <div className="flex justify-end">
-            <RunnerPdfButton
-              eventId={event.event_id}
-              matchNom={event.event_name}
-              matchDate={new Date(event.event_date).toLocaleDateString('fr-FR')}
-              pax={event.expected_attendees}
-            />
-          </div>
-          <AreaRunnersPanel eventId={event.event_id} spaces={spaces} />
-        </div>
+        <UnifiedRunnerPanel
+          eventId={event.event_id}
+          matchNom={event.event_name}
+          matchDate={new Date(event.event_date).toLocaleDateString('fr-FR')}
+        />
       )}
-      {activeTab === 'runner_buvettes' && <BuvetteRunnersPanel eventId={event.event_id} />}
       {activeTab === 'rh' && <RhOperationalBoard eventId={event.event_id} />}
       {activeTab === 'recettes' && (
         <RevenueMarginPanel
