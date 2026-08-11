@@ -333,6 +333,7 @@ export function useRecordDelivery() {
       // Le trigger trg_delivery_update_balance crédite le solde → recharger la
       // vue d'alertes/valorisation (BLOC 1).
       void queryClient.invalidateQueries({ queryKey: ['stockLiveBalance'] });
+      void queryClient.invalidateQueries({ queryKey: ['stockAlerts'] });
     },
   });
   return {

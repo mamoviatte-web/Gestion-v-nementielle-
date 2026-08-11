@@ -9,16 +9,26 @@ import { supabase } from '@/lib/supabase';
 import { isDormantProduct } from '@/lib/stockCalculations';
 import type { Product, StockAlert } from '@/lib/types';
 
+/** Ligne de la vue stock_live_balance (source unique des alertes rupture/critique). */
+export interface LiveBalanceRow {
+  product_id: string;
+  product_name: string;
+  unit: string;
+  qty_total_depot: number | null;
+  min_stock: number | null;
+  alert_status: string;
+}
+
 interface AlertsInput {
-  products: Product[];
   /**
-   * Solde opérationnel courant par product_id, agrégé sur les emplacements
-   * NON-réserve (espaces). Les dépôts centraux (reserve_centrale) en sont
-   * exclus : ÉTAPE 8 — une alerte rupture ne concerne que le stock déployé sur
-   * un espace. Un produit absent de cette map n'est pas déployé → aucune alerte
-   * (évite les fausses ruptures sur le catalogue non encore mis en place).
+   * Soldes de réserve centrale (vue stock_live_balance) : source unique des
+   * alertes rupture/critique. La vue reflète l'inventaire (trigger) et respecte
+   * le drapeau track_central_stock (produits exclus absents de la liste). Un
+   * inventaire de la réserve met donc à jour les alertes automatiquement.
    */
-  operationalQty: Record<string, number>;
+  live: LiveBalanceRow[];
+  /** Catalogue actif (pour l'alerte « produit dormant »). */
+  products: Product[];
   /** Date de dernière consommation par product_id (null si jamais consommé). */
   lastConsumption: Record<string, string | null>;
   /** product_id ayant subi une perte/casse récente → message. */
@@ -29,34 +39,33 @@ interface AlertsInput {
 }
 
 export function computeStockAlerts(input: AlertsInput): StockAlert[] {
-  const { products, operationalQty, lastConsumption, losses, unresolvedVariance, nextWeather } = input;
+  const { live, products, lastConsumption, losses, unresolvedVariance, nextWeather } = input;
   const alerts: StockAlert[] = [];
   const byId = new Map(products.map((p) => [p.product_id, p]));
 
-  for (const p of products) {
-    // ÉTAPE 8 : un produit sans solde opérationnel (aucune ligne sur un espace)
-    // n'est pas déployé → on ne lève ni rupture ni critique.
-    const isDeployed = p.product_id in operationalQty;
-    const qty = operationalQty[p.product_id] ?? 0;
-    const min = p.min_stock ?? p.stock_min ?? 0;
-    if (isDeployed && qty <= 0) {
-      // 1. Rupture (prioritaire sur critique)
+  // 1/2. Rupture & critique depuis la réserve centrale (stock_live_balance).
+  for (const r of live) {
+    const qty = Number(r.qty_total_depot) || 0;
+    const min = r.min_stock ?? 0;
+    if (r.alert_status === 'rupture') {
       alerts.push({
         type: 'rupture',
         severity: 'error',
-        message: `${p.product_name} — rupture (0 ${p.unit})`,
+        message: `${r.product_name} — rupture (0 ${r.unit})`,
         action: 'Commander en urgence',
       });
-    } else if (isDeployed && min > 0 && qty < min) {
-      // 2. Stock critique
+    } else if (r.alert_status === 'critique') {
       alerts.push({
         type: 'critique',
         severity: 'error',
-        message: `${p.product_name} — ${qty} ${p.unit} (min: ${min})`,
+        message: `${r.product_name} — ${qty} ${r.unit} (min: ${min})`,
         action: 'Commander',
       });
     }
-    // 5. Produit dormant (uniquement s'il a un historique de conso)
+  }
+
+  // 5. Produit dormant (uniquement s'il a un historique de conso).
+  for (const p of products) {
     const last = lastConsumption[p.product_id];
     if (last !== undefined && isDormantProduct(last ? new Date(last) : null) && last) {
       alerts.push({
@@ -109,18 +118,12 @@ export function useStockAlerts() {
     queryKey: ['stockAlerts'],
     staleTime: 15_000,
     queryFn: async (): Promise<StockAlert[]> => {
-      // ÉTAPE 8 : identifier les dépôts centraux (il en existe désormais 2 —
-      // AUC + Stock EST) pour les EXCLURE des alertes opérationnelles.
-      const { data: reserveLocs } = await supabase
-        .from('stock_locations')
-        .select('id')
-        .eq('location_type', 'reserve_centrale');
-      const reserveIds = new Set(((reserveLocs ?? []) as { id: string }[]).map((r) => r.id));
-
-      const [{ data: products }, { data: balances }, { data: losses }, { data: consumptions }, { data: variances }] =
+      const [{ data: live }, { data: products }, { data: losses }, { data: consumptions }, { data: variances }] =
         await Promise.all([
+          // Source unique des ruptures/critiques : la réserve centrale (reflète
+          // l'inventaire, respecte track_central_stock).
+          supabase.from('stock_live_balance').select('product_id, product_name, unit, qty_total_depot, min_stock, alert_status'),
           supabase.from('products').select('*').eq('active', true),
-          supabase.from('stock_balances').select('product_id, location_id, current_quantity'),
           supabase
             .from('stock_movements')
             .select('product_id, qty')
@@ -136,17 +139,6 @@ export function useStockAlerts() {
           supabase.from('inventory_counts').select('variance, validated_at'),
         ]);
 
-      // Agrège les soldes des emplacements opérationnels (hors dépôts centraux).
-      const operationalQty: Record<string, number> = {};
-      for (const b of (balances ?? []) as {
-        product_id: string;
-        location_id: string;
-        current_quantity: number;
-      }[]) {
-        if (reserveIds.has(b.location_id)) continue;
-        operationalQty[b.product_id] = (operationalQty[b.product_id] ?? 0) + Number(b.current_quantity);
-      }
-
       const lastConsumption: Record<string, string | null> = {};
       for (const c of (consumptions ?? []) as { product_id: string; created_at: string }[]) {
         if (!(c.product_id in lastConsumption)) lastConsumption[c.product_id] = c.created_at;
@@ -157,8 +149,8 @@ export function useStockAlerts() {
       ).length;
 
       return computeStockAlerts({
+        live: (live ?? []) as LiveBalanceRow[],
         products: (products ?? []) as Product[],
-        operationalQty,
         lastConsumption,
         losses: ((losses ?? []) as { product_id: string; qty: number }[]).map((l) => ({
           productId: l.product_id,

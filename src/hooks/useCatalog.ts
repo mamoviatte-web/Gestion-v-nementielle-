@@ -103,6 +103,7 @@ export function useCatalog() {
     onSuccess: () => {
       invalidate();
       void queryClient.invalidateQueries({ queryKey: ['stockLiveBalance'] });
+      void queryClient.invalidateQueries({ queryKey: ['stockAlerts'] });
       void queryClient.invalidateQueries({ queryKey: ['criticalStatus'] });
     },
   });
