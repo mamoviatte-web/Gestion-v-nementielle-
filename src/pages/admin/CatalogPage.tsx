@@ -49,7 +49,7 @@ const EMPTY: FormState = {
 const PACKAGING_UNITS = ['', 'carton', 'palette', 'fût', 'boudin'];
 
 export default function CatalogPage() {
-  const { products, addProduct, setActive, setQrCode, submitting } = useCatalog();
+  const { products, addProduct, setActive, setTrackCentral, setQrCode, submitting } = useCatalog();
   const reserve = useReserveLocation();
   const { data: reserveBalances } = useStockBalances(reserve?.id);
   const [showForm, setShowForm] = useState(false);
@@ -82,6 +82,12 @@ export default function CatalogPage() {
       setError('Le nom du produit est obligatoire.');
       return;
     }
+    // Prix HT obligatoire : sans lui, la valorisation et le coût F&B restent à 0.
+    const priceNum = Number(form.price);
+    if (form.price.trim() === '' || !Number.isFinite(priceNum) || priceNum < 0) {
+      setError('Le prix HT est obligatoire (valorisation & coût F&B).');
+      return;
+    }
     try {
       const min = form.minStr === '' ? 0 : Number(form.minStr);
       await addProduct({
@@ -89,7 +95,7 @@ export default function CatalogPage() {
         category: form.category,
         unit: form.unit,
         packaging: form.packaging,
-        unit_price_ht: form.price === '' ? null : Number(form.price),
+        unit_price_ht: priceNum,
         stock_min: min,
         min_stock: min,
         max_stock: form.maxStr === '' ? null : Number(form.maxStr),
@@ -158,7 +164,7 @@ export default function CatalogPage() {
             <Input
               type="number"
               step="0.01"
-              label="Prix HT (€) — laisser vide si inconnu"
+              label="Prix HT (€) *"
               value={form.price}
               onChange={(e) => setForm({ ...form, price: e.target.value })}
             />
@@ -260,6 +266,20 @@ export default function CatalogPage() {
                             {formatEuro(p.unit_price_ht)}
                           </span>
                         )}
+                        <button
+                          disabled={submitting}
+                          onClick={() => void setTrackCentral(p.product_id, p.track_central_stock === false)}
+                          title={p.track_central_stock === false
+                            ? 'Hors suivi central — cliquer pour réintégrer aux alertes'
+                            : 'Suivi central actif — cliquer pour exclure des alertes (produit livré par événement)'}
+                          className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold disabled:opacity-40 ${
+                            p.track_central_stock === false
+                              ? 'bg-slate-100 text-slate-400'
+                              : 'bg-emerald-100 text-emerald-700'
+                          }`}
+                        >
+                          {p.track_central_stock === false ? 'Hors suivi' : 'Suivi central'}
+                        </button>
                         {!p.qr_code && (
                           <Button
                             size="sm"

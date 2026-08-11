@@ -448,6 +448,11 @@ export function useSaveInventory() {
       void queryClient.invalidateQueries({ queryKey: ['inventorySessions'] });
       void queryClient.invalidateQueries({ queryKey: ['inventoryUnresolved'] });
       void queryClient.invalidateQueries({ queryKey: ['stockBalances'] });
+      // Le trigger trg_apply_inventory_count met à jour les soldes → recharger la
+      // vue d'alertes/valorisation et le badge d'alertes critiques (BLOC 1).
+      void queryClient.invalidateQueries({ queryKey: ['stockLiveBalance'] });
+      void queryClient.invalidateQueries({ queryKey: ['depotsSummary'] });
+      void queryClient.invalidateQueries({ queryKey: ['criticalStatus'] });
     },
   });
   return {

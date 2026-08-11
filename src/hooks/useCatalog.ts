@@ -90,12 +90,31 @@ export function useCatalog() {
     onSuccess: invalidate,
   });
 
+  // Suivi stock central : exclut/inclut le produit des alertes et de la
+  // valorisation de la réserve centrale (stock_live_balance filtre dessus).
+  const setTrackCentralMutation = useMutation({
+    mutationFn: async (vars: { id: string; track: boolean }) => {
+      const { error } = await supabase
+        .from('products')
+        .update({ track_central_stock: vars.track })
+        .eq('product_id', vars.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: ['stockLiveBalance'] });
+      void queryClient.invalidateQueries({ queryKey: ['criticalStatus'] });
+    },
+  });
+
   return {
     products,
     addProduct: (data: NewProduct) => addMutation.mutateAsync(data),
     setActive: (id: string, active: boolean) =>
       setActiveMutation.mutateAsync({ id, active }),
+    setTrackCentral: (id: string, track: boolean) =>
+      setTrackCentralMutation.mutateAsync({ id, track }),
     setQrCode: (id: string, code: string) => qrMutation.mutateAsync({ id, code }),
-    submitting: addMutation.isPending || setActiveMutation.isPending || qrMutation.isPending,
+    submitting: addMutation.isPending || setActiveMutation.isPending || setTrackCentralMutation.isPending || qrMutation.isPending,
   };
 }

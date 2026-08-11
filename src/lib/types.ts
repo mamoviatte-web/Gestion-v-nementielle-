@@ -154,6 +154,8 @@ export interface Product {
   packaging_qty?: number | null;
   packaging_unit?: string | null;
   photo_url?: string | null;
+  /** Suivi en réserve centrale (alertes/valorisation). false = exclu (livré par événement). */
+  track_central_stock?: boolean | null;
 }
 
 /** Variante de `products` sans le prix HT (RG-003, contexte Responsable). */

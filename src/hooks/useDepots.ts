@@ -330,6 +330,9 @@ export function useRecordDelivery() {
       void queryClient.invalidateQueries({ queryKey: ['stockBalances'] });
       void queryClient.invalidateQueries({ queryKey: ['stockMovementsJournal'] });
       void queryClient.invalidateQueries({ queryKey: ['criticalStatus'] });
+      // Le trigger trg_delivery_update_balance crédite le solde → recharger la
+      // vue d'alertes/valorisation (BLOC 1).
+      void queryClient.invalidateQueries({ queryKey: ['stockLiveBalance'] });
     },
   });
   return {
