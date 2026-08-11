@@ -118,6 +118,7 @@ function KegPleinsView() {
               <th className="px-4 py-2.5 text-right font-semibold">En espace</th>
               <th className="px-4 py-2.5 text-right font-semibold">Vides</th>
               <th className="px-4 py-2.5 text-right font-semibold">Volume</th>
+              <th className="px-4 py-2.5 text-right font-semibold">PU HT</th>
               <th className="px-4 py-2.5 text-right font-semibold">Valeur HT</th>
               <th className="px-4 py-2.5 text-right font-semibold">Action</th>
             </tr>
@@ -142,6 +143,9 @@ function KegPleinsView() {
                 </td>
                 <td className="px-4 py-3 text-right text-pr-black-soft/60">
                   {k.litres_disponibles > 0 ? `${k.litres_disponibles.toLocaleString('fr-FR')} L` : '—'}
+                </td>
+                <td className="px-4 py-3 text-right text-pr-black-soft/70">
+                  {k.unit_price_ht != null ? formatEuro(k.unit_price_ht) : '—'}
                 </td>
                 <td className="px-4 py-3 text-right font-medium text-pr-black">
                   {k.unit_price_ht != null ? formatEuro(k.pleins * k.unit_price_ht) : '—'}

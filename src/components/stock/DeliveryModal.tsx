@@ -10,6 +10,7 @@ import { Alert, Button, Input, Select, Textarea } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import { useCatalog } from '@/hooks/useCatalog';
 import { useRecordDelivery, type DeliveryLineInput } from '@/hooks/useDepots';
+import { useToast } from '@/context/ToastContext';
 import { InvoiceScanner, type ExtractedInvoice } from './InvoiceScanner';
 import type { Product } from '@/lib/types';
 
@@ -47,6 +48,7 @@ export function DeliveryModal({
 }) {
   const { products } = useCatalog();
   const { recordDelivery, recording } = useRecordDelivery();
+  const { showToast } = useToast();
 
   const [supplierName, setSupplierName] = useState('');
   const [deliveryDate, setDeliveryDate] = useState(todayISO());
@@ -154,7 +156,7 @@ export function DeliveryModal({
     if (new Set(ids).size !== ids.length) return setError('Un même produit apparaît sur plusieurs lignes.');
 
     try {
-      await recordDelivery({
+      const res = await recordDelivery({
         depotId,
         supplierName: supplierName.trim(),
         deliveryDate,
@@ -163,6 +165,7 @@ export function DeliveryModal({
         notes: notes.trim() || null,
         lines: payloadLines,
       });
+      showToast(`Livraison enregistrée — ${res.nb_lignes} produit(s), ${formatEuro(res.total_ht)}`, 'success');
       onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur lors de l'enregistrement de la livraison.");

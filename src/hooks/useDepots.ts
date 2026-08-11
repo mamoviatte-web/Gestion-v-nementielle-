@@ -272,7 +272,17 @@ export interface DeliveryLineInput {
   productId: string;
   qtyReceived: number;
   qtyOrdered?: number | null;
+  qtyRefused?: number | null;
   unitPriceHt?: number | null;
+  lotNumber?: string | null;
+  expiryDate?: string | null;
+  note?: string | null;
+}
+
+export interface RecordDeliveryResult {
+  delivery_id: string;
+  nb_lignes: number;
+  total_ht: number;
 }
 
 export interface RecordDeliveryInput {
@@ -286,41 +296,43 @@ export interface RecordDeliveryInput {
 }
 
 /**
- * Enregistre une livraison : INSERT header puis lignes. Le trigger base
+ * Enregistre une livraison multi-produits en une seule transaction via la RPC
+ * register_delivery (tout-ou-rien : pas d'en-tête orphelin). Le trigger base
  * crédite les soldes + journalise un mouvement `entrée_fournisseur` par ligne.
+ * Les lignes sans produit ou à quantité ≤ 0 sont ignorées côté serveur.
  */
 export function useRecordDelivery() {
   const queryClient = useQueryClient();
   const mutation = useMutation({
-    mutationFn: async (input: RecordDeliveryInput) => {
-      const lines = input.lines.filter((l) => l.productId && l.qtyReceived > 0);
+    mutationFn: async (input: RecordDeliveryInput): Promise<RecordDeliveryResult> => {
+      const lines = input.lines
+        .filter((l) => l.productId && l.qtyReceived > 0)
+        .map((l) => ({
+          product_id: l.productId,
+          qty_received: l.qtyReceived,
+          unit_price_ht: l.unitPriceHt ?? null,
+          qty_ordered: l.qtyOrdered ?? null,
+          qty_refused: l.qtyRefused ?? null,
+          lot_number: l.lotNumber ?? null,
+          expiry_date: l.expiryDate ?? null,
+          notes: l.note ?? null,
+        }));
       if (lines.length === 0) throw new Error('Ajoutez au moins une ligne (quantité reçue > 0).');
 
-      const { data: header, error: headErr } = await supabase
-        .from('supplier_deliveries')
-        .insert({
-          delivery_date: input.deliveryDate,
-          supplier_name: input.supplierName,
-          location_id: input.depotId,
-          invoice_ref: input.invoiceRef ?? null,
-          received_by: input.receivedBy,
-          status: 'reçu',
-          notes: input.notes ?? null,
-        })
-        .select('id')
-        .single();
-      if (headErr) throw headErr;
-
-      const rows = lines.map((l) => ({
-        delivery_id: header.id as string,
-        product_id: l.productId,
-        qty_ordered: l.qtyOrdered ?? l.qtyReceived,
-        qty_received: l.qtyReceived,
-        unit_price_ht: l.unitPriceHt ?? null,
-      }));
-      const { error: linesErr } = await supabase.from('supplier_delivery_lines').insert(rows);
-      if (linesErr) throw linesErr;
-      return header.id as string;
+      const { data, error } = await supabase.rpc('register_delivery', {
+        p_supplier: input.supplierName,
+        p_date: input.deliveryDate,
+        p_location: input.depotId,
+        p_received_by: input.receivedBy,
+        p_invoice: input.invoiceRef ?? null,
+        p_notes: input.notes ?? null,
+        p_lines: lines,
+      });
+      const res = data as (RecordDeliveryResult & { success?: boolean; error?: string }) | null;
+      if (error || !res?.success) {
+        throw new Error(res?.error ?? error?.message ?? "Erreur lors de l'enregistrement de la livraison.");
+      }
+      return { delivery_id: res.delivery_id, nb_lignes: res.nb_lignes, total_ht: res.total_ht };
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['depotBalances'] });
