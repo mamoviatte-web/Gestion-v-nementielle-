@@ -11,6 +11,7 @@ import {
   Boxes,
   ChevronDown,
   ChevronRight,
+  FileText,
   PackageCheck,
   Send,
   Truck,
@@ -20,6 +21,7 @@ import {
 import { Badge, Button, EmptyState, Spinner } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import { DeliveryModal } from '@/components/stock/DeliveryModal';
+import { MontanerReceptionModal } from '@/components/stock/MontanerReceptionModal';
 import KegStorageTab from './KegStorageTab';
 import {
   useDepots,
@@ -51,6 +53,7 @@ export default function DepotsTab() {
   const [depotId, setDepotId] = useState<string | null>(null);
   const [view, setView] = useState<DepotView>('stock');
   const [modalOpen, setModalOpen] = useState(false);
+  const [montanerOpen, setMontanerOpen] = useState(false);
 
   // Sélectionne AUC (1er) par défaut dès que la liste arrive.
   useEffect(() => {
@@ -101,11 +104,16 @@ export default function DepotsTab() {
           })}
         </div>
 
-        {!isKeg && (
-          <Button onClick={() => setModalOpen(true)} disabled={!currentDepot}>
-            <Truck className="h-4 w-4" /> Enregistrer une livraison
+        <div className="flex gap-2">
+          {!isKeg && (
+            <Button onClick={() => setModalOpen(true)} disabled={!currentDepot}>
+              <Truck className="h-4 w-4" /> Enregistrer une livraison
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => setMontanerOpen(true)}>
+            <FileText className="h-4 w-4" /> Facture Montaner
           </Button>
-        )}
+        </div>
       </div>
 
       {currentDepot?.description && (
@@ -151,6 +159,10 @@ export default function DepotsTab() {
           onClose={() => setModalOpen(false)}
           onSaved={() => setModalOpen(false)}
         />
+      )}
+
+      {montanerOpen && (
+        <MontanerReceptionModal onClose={() => setMontanerOpen(false)} onDone={() => setMontanerOpen(false)} />
       )}
     </div>
   );
