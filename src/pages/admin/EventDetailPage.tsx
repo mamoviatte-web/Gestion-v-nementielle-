@@ -29,6 +29,7 @@ import { MatchClosedView } from '@/components/events/MatchClosedView';
 import { DeleteEventButton } from '@/components/events/DeleteEventButton';
 import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
 import { RhOperationalBoard } from '@/components/rh/RhOperationalBoard';
+import { OccasionalHoursPanel } from '@/components/rh/OccasionalHoursPanel';
 import { RevenueMarginPanel } from '@/components/events/RevenueMarginPanel';
 import { EventResetButton } from '@/components/events/EventResetButton';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
@@ -387,6 +388,7 @@ export default function EventDetailPage() {
           ) : (
             <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
           )}
+          <OccasionalHoursPanel eventId={event.event_id} eventDate={event.event_date} />
           <StaffEventInsights event={event} />
         </div>
       )}

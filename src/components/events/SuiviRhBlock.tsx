@@ -22,6 +22,7 @@ interface Agent {
   heures: number;
   taux: number;
   cout: number;
+  date?: string | null;
 }
 interface RhData {
   kpis: {
@@ -31,6 +32,7 @@ interface RhData {
     cout_resto: number;
     cout_hors_resto: number;
     cout_par_pax: number | null;
+    cout_runner_prepa?: number | null;
   };
   par_espace: RhLine[];
   par_pole: RhLine[];
@@ -96,6 +98,7 @@ export function SuiviRhBlock({ eventId, fbCost }: { eventId: string; fbCost: num
           cout_resto: num(d?.kpis?.cout_resto),
           cout_hors_resto: num(d?.kpis?.cout_hors_resto),
           cout_par_pax: d?.kpis?.cout_par_pax == null ? null : num(d.kpis.cout_par_pax),
+          cout_runner_prepa: d?.kpis?.cout_runner_prepa == null ? null : num(d.kpis.cout_runner_prepa),
         },
         par_espace: (d?.par_espace ?? []).map((x) => ({
           label: String((x as unknown as { espace?: string }).espace ?? ''),
@@ -132,8 +135,12 @@ export function SuiviRhBlock({ eventId, fbCost }: { eventId: string; fbCost: num
           <p className="mt-0.5 text-xs text-stone-400">
             {rh.kpis.nb_agents} agents · {(rh.kpis.total_heures ?? 0).toFixed(0)} h · {eur(rhCost)} HT
             {rhCost > 0 && (
-              <> (dont resto {eur(rh.kpis.cout_resto)} / hors resto {eur(rh.kpis.cout_hors_resto)})</>
+              <> (dont resto {eur(rh.kpis.cout_resto)} / hors resto {eur(rh.kpis.cout_hors_resto)}</>
             )}
+            {num(rh.kpis.cout_runner_prepa) > 0 && (
+              <> · dont Runner/logistique prépa {eur(num(rh.kpis.cout_runner_prepa))}</>
+            )}
+            {rhCost > 0 && <>)</>}
           </p>
         </div>
         <div className="rounded-xl bg-stone-900 px-4 py-2 text-right text-white">
@@ -169,6 +176,7 @@ export function SuiviRhBlock({ eventId, fbCost }: { eventId: string; fbCost: num
                       <th className="px-4 py-2">Agent</th>
                       <th className="px-3 py-2">Rôle</th>
                       <th className="px-3 py-2">Rattachement</th>
+                      <th className="px-3 py-2">Jour</th>
                       <th className="px-3 py-2 text-right">Heures</th>
                       <th className="px-3 py-2 text-right">Taux</th>
                       <th className="px-4 py-2 text-right">Coût HT</th>
@@ -180,6 +188,7 @@ export function SuiviRhBlock({ eventId, fbCost }: { eventId: string; fbCost: num
                         <td className="px-4 py-2 font-medium">{`${a.prenom} ${a.nom}`.trim()}</td>
                         <td className="px-3 py-2 text-stone-500">{a.role}</td>
                         <td className="px-3 py-2 text-stone-500">{a.rattachement}</td>
+                        <td className="px-3 py-2 text-stone-400">{a.date ? new Date(a.date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) : '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{num(a.heures).toFixed(1)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{num(a.taux).toFixed(2)} €</td>
                         <td className="px-4 py-2 text-right font-semibold tabular-nums">{eur(num(a.cout))}</td>
