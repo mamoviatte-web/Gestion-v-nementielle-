@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { Button, Spinner } from '@/components/ui';
 
@@ -30,6 +31,7 @@ export function EventSpacesModal({
   onClose: () => void;
 }) {
   const { showToast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -57,26 +59,39 @@ export function EventSpacesModal({
 
   async function handleSave() {
     setSaving(true);
-    const { data: cur } = await supabase.from('event_spaces').select('space_id').eq('event_id', eventId);
-    const currentIds = ((cur ?? []) as { space_id: string }[]).map((c) => c.space_id);
-    const toAdd = linked.filter((id) => !currentIds.includes(id));
-    const toRemove = currentIds.filter((id) => !linked.includes(id));
-
-    if (toAdd.length) {
-      const { error } = await supabase.from('event_spaces').insert(toAdd.map((space_id) => ({ event_id: eventId, space_id })));
-      if (error) { setSaving(false); return showToast(`Échec ajout : ${error.message}`, 'warning'); }
+    // sync_event_spaces : diff + purge de la préparation des espaces retirés
+    // (runner, RH, planning, sessions…) en une transaction. On ne fait plus de
+    // delete/insert brut — c'est ce qui laissait des espaces fantômes (ex. B5).
+    const { data, error } = await supabase.rpc('sync_event_spaces', {
+      p_event: eventId,
+      p_space_ids: linked,
+      p_by: user?.name ?? user?.email ?? null,
+    });
+    const res = data as {
+      success?: boolean; error?: string;
+      retires?: number; ajoutes?: number; orphelins_nettoyes?: number; espaces_actifs?: number;
+    } | null;
+    if (error || !res?.success) {
+      setSaving(false);
+      return showToast(`Échec : ${res?.error ?? error?.message ?? 'erreur'}`, 'warning');
     }
-    if (toRemove.length) {
-      const { error } = await supabase.from('event_spaces').delete().eq('event_id', eventId).in('space_id', toRemove);
-      if (error) { setSaving(false); return showToast(`Échec retrait : ${error.message}`, 'warning'); }
-    }
-    // Initialiser les feuilles de route des nouveaux espaces (idempotent).
-    if (toAdd.length) await supabase.rpc('init_event_roadmaps', { p_event_id: eventId });
 
-    await queryClient.invalidateQueries({ queryKey: ['eventSpaces', eventId] });
-    await queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+    // Feuilles de route des nouveaux espaces (idempotent).
+    if ((res.ajoutes ?? 0) > 0) await supabase.rpc('init_event_roadmaps', { p_event_id: eventId });
+
+    // Rafraîchir tout le déroulé de l'événement (BLOC 2).
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['eventSpaces', eventId] }),
+      queryClient.invalidateQueries({ queryKey: ['event', eventId] }),
+      queryClient.invalidateQueries({ queryKey: ['stockLiveBalance'] }),
+      queryClient.invalidateQueries({ queryKey: ['stockAlerts'] }),
+      queryClient.invalidateQueries({ queryKey: ['criticalStatus'] }),
+    ]);
     setSaving(false);
-    showToast(`Espaces mis à jour (+${toAdd.length} / −${toRemove.length}).`, 'success');
+    showToast(
+      `Espaces mis à jour — ${res.retires ?? 0} retiré(s), ${res.ajoutes ?? 0} ajouté(s), ${res.espaces_actifs ?? 0} actifs`,
+      'success',
+    );
     onClose();
   }
 
