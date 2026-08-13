@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/context/ToastContext';
 import { Button, Spinner } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
+import { loadModule } from '@/lib/lazyModule';
 
 interface Card {
   space_id: string; space_name: string; family: string; service_type: string | null;
@@ -167,7 +168,7 @@ export function UnifiedRunnerPanel({
       holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:210mm';
       holder.innerHTML = html;
       document.body.appendChild(holder);
-      const html2pdf = (await import('html2pdf.js')).default;
+      const html2pdf = (await loadModule(() => import('html2pdf.js'), (m) => showToast(m, 'success'))).default;
       await html2pdf().set({
         margin: [10, 8, 10, 8], filename,
         image: { type: 'jpeg', quality: 0.98 },

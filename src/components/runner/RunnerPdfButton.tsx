@@ -15,6 +15,7 @@ import { Download } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/context/ToastContext';
 import { Button } from '@/components/ui';
+import { loadModule } from '@/lib/lazyModule';
 
 // Types renvoyés par get_runner_pdf_data.
 interface Ligne {
@@ -202,7 +203,7 @@ export function RunnerPdfButton({
       holder.innerHTML = html;
       document.body.appendChild(holder);
 
-      const html2pdf = (await import('html2pdf.js')).default;
+      const html2pdf = (await loadModule(() => import('html2pdf.js'), (m) => showToast(m, 'success'))).default;
       await html2pdf()
         .set({
           margin: [10, 8, 10, 8],

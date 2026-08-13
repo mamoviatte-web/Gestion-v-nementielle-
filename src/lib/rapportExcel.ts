@@ -7,6 +7,7 @@
 
 import type * as ExcelJS from 'exceljs';
 import { supabase } from '@/lib/supabase';
+import { loadModule } from '@/lib/lazyModule';
 
 type WS = ExcelJS.Worksheet;
 type WB = ExcelJS.Workbook;
@@ -296,7 +297,7 @@ export async function genererRapportMatch(eventId: string): Promise<void> {
   }
   const rep = data as MatchReport;
   const pl = (await supabase.rpc('get_event_pl', { p_event: eventId })).data as PLReport | null;
-  const XLSX = (await import('exceljs')).default;
+  const XLSX = (await loadModule(() => import('exceljs'))).default;
   const wb = new XLSX.Workbook();
   wb.creator = 'StockPilot MD';
   const totProd = sheetProduits(wb, rep.produits);
@@ -640,7 +641,7 @@ export async function genererRapportSeminaire(eventId: string): Promise<void> {
     return;
   }
   const rep = data as SeminaireReport;
-  const XLSX = (await import('exceljs')).default;
+  const XLSX = (await loadModule(() => import('exceljs'))).default;
   const wb = new XLSX.Workbook();
   wb.creator = 'StockPilot MD';
   const totProd = sheetProduits(wb, rep.produits);
