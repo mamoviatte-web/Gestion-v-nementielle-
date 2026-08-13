@@ -21,6 +21,7 @@ interface SpaceRow {
   space_id: string;
   space_name: string;
   service_type: string | null;
+  max_pax: number | null;
 }
 
 export function EventSpacesModal({
@@ -37,25 +38,40 @@ export function EventSpacesModal({
   const [saving, setSaving] = useState(false);
   const [allSpaces, setAllSpaces] = useState<SpaceRow[]>([]);
   const [linked, setLinked] = useState<string[]>([]);
+  // Pax saisi par espace VIP/Bar (ré)activé — { [space_id]: pax }.
+  const [pax, setPax] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let active = true;
     void (async () => {
       const [{ data: all }, { data: cur }] = await Promise.all([
-        supabase.from('spaces').select('space_id, space_name, service_type').eq('active', true).order('space_name'),
-        supabase.from('event_spaces').select('space_id').eq('event_id', eventId),
+        supabase.from('spaces').select('space_id, space_name, service_type, max_pax').eq('active', true).order('space_name'),
+        supabase.from('event_spaces').select('space_id, expected_pax').eq('event_id', eventId),
       ]);
       if (!active) return;
       // Exclure la « Terrasses » standalone (gérée via les zones T2→T5).
       setAllSpaces(((all ?? []) as SpaceRow[]).filter((s) => s.space_name !== 'Terrasses'));
-      setLinked(((cur ?? []) as { space_id: string }[]).map((c) => c.space_id));
+      const curRows = (cur ?? []) as { space_id: string; expected_pax: number | null }[];
+      setLinked(curRows.map((c) => c.space_id));
+      // Pré-remplir le pax existant des espaces déjà ouverts.
+      const p: Record<string, string> = {};
+      for (const c of curRows) if (c.expected_pax != null) p[c.space_id] = String(c.expected_pax);
+      setPax(p);
       setLoading(false);
     })();
     return () => { active = false; };
   }, [eventId]);
 
-  const toggle = (id: string) =>
-    setLinked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggle = (sp: SpaceRow) =>
+    setLinked((prev) => {
+      const on = prev.includes(sp.space_id);
+      if (on) return prev.filter((x) => x !== sp.space_id);
+      // (ré)activation d'un VIP/Bar → pré-remplir le pax avec la capacité.
+      if (sp.service_type !== 'buvette') {
+        setPax((pp) => (pp[sp.space_id] ? pp : { ...pp, [sp.space_id]: sp.max_pax != null ? String(sp.max_pax) : '' }));
+      }
+      return [...prev, sp.space_id];
+    });
 
   async function handleSave() {
     setSaving(true);
@@ -74,6 +90,16 @@ export function EventSpacesModal({
     if (error || !res?.success) {
       setSaving(false);
       return showToast(`Échec : ${res?.error ?? error?.message ?? 'erreur'}`, 'warning');
+    }
+
+    // Pax des espaces VIP/Bar ouverts (après sync, l'espace est ouvert donc
+    // set_space_pax l'accepte). Une passe par espace VIP/Bar sélectionné.
+    const vipBarIds = new Set(allSpaces.filter((s) => s.service_type !== 'buvette').map((s) => s.space_id));
+    for (const id of linked) {
+      if (!vipBarIds.has(id)) continue;
+      const v = Number(pax[id]);
+      if (!Number.isFinite(v) || v <= 0) continue;
+      await supabase.rpc('set_space_pax', { p_event: eventId, p_space: id, p_pax: v, p_by: user?.name ?? user?.email ?? null });
     }
 
     // Feuilles de route des nouveaux espaces (idempotent).
@@ -130,31 +156,46 @@ export function EventSpacesModal({
               </button>
             </p>
 
-            {sections.map((section) =>
-              section.spaces.length === 0 ? null : (
+            {sections.map((section) => {
+              if (section.spaces.length === 0) return null;
+              const isVip = section.spaces.some((s) => s.service_type !== 'buvette');
+              return (
                 <div key={section.label}>
                   <p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-400">{section.label}</p>
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className={isVip ? 'space-y-1.5' : 'grid grid-cols-2 gap-1.5'}>
                     {section.spaces.map((sp) => {
                       const on = linked.includes(sp.space_id);
                       return (
-                        <button
-                          key={sp.space_id}
-                          type="button"
-                          onClick={() => toggle(sp.space_id)}
-                          className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${on ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-700 hover:border-stone-400'}`}
-                        >
-                          <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 ${on ? 'border-white/60 bg-white/20' : 'border-stone-300'}`}>
-                            {on && <span className="h-2 w-2 rounded-sm bg-white" />}
-                          </span>
-                          <span className="truncate text-sm font-semibold">{sp.space_name}</span>
-                        </button>
+                        <div key={sp.space_id} className={isVip ? 'flex items-center gap-2' : ''}>
+                          <button
+                            type="button"
+                            onClick={() => toggle(sp)}
+                            className={`flex flex-1 items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${on ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-700 hover:border-stone-400'}`}
+                          >
+                            <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 ${on ? 'border-white/60 bg-white/20' : 'border-stone-300'}`}>
+                              {on && <span className="h-2 w-2 rounded-sm bg-white" />}
+                            </span>
+                            <span className="truncate text-sm font-semibold">{sp.space_name}</span>
+                          </button>
+                          {isVip && on && (
+                            <label className="flex shrink-0 items-center gap-1 text-xs text-stone-500">
+                              <input
+                                type="number" min="1"
+                                value={pax[sp.space_id] ?? ''}
+                                onChange={(e) => setPax((pp) => ({ ...pp, [sp.space_id]: e.target.value }))}
+                                placeholder={sp.max_pax != null ? String(sp.max_pax) : 'pax'}
+                                className="w-16 rounded-lg border border-stone-200 px-2 py-1.5 text-right"
+                              />
+                              pax
+                            </label>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
                 </div>
-              ),
-            )}
+              );
+            })}
 
             <div className="flex gap-3 border-t border-stone-100 pt-3">
               <Button variant="secondary" className="flex-1" onClick={onClose}>Annuler</Button>

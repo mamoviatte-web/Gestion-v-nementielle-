@@ -30,6 +30,7 @@ import { DeleteEventButton } from '@/components/events/DeleteEventButton';
 import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
 import { RhOperationalBoard } from '@/components/rh/RhOperationalBoard';
 import { OccasionalHoursPanel } from '@/components/rh/OccasionalHoursPanel';
+import { VipPaxPanel } from '@/components/events/VipPaxPanel';
 import { RevenueMarginPanel } from '@/components/events/RevenueMarginPanel';
 import { EventResetButton } from '@/components/events/EventResetButton';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
@@ -372,12 +373,16 @@ export default function EventDetailPage() {
       {activeTab === 'bilan' && <SeminaireBilanTab event={event} spaces={spaces} />}
       {activeTab === 'rapport' && <SeminarReportEditor event={event} />}
 
-      {activeTab === 'stocks' &&
-        (selectedSpace ? (
-          <StockDotationsTable eventId={event.event_id} spaceId={selectedSpace} />
-        ) : (
-          <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
-        ))}
+      {activeTab === 'stocks' && (
+        <div className="space-y-6">
+          {isMatch && <VipPaxPanel eventId={event.event_id} />}
+          {selectedSpace ? (
+            <StockDotationsTable eventId={event.event_id} spaceId={selectedSpace} />
+          ) : (
+            <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
+          )}
+        </div>
+      )}
 
       {activeTab === 'buvettes' && <BuvetteGroupsTab />}
 

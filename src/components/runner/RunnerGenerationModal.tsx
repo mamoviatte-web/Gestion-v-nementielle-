@@ -73,9 +73,11 @@ export function RunnerGenerationModal({
       };
     },
   });
+  // Pax effectif VIP/Bar = expected_pax saisi (event_spaces) sinon capacité
+  // (spaces.max_pax). Reflète la population réelle paramétrée par espace.
   const vipPax = spaces
     .filter((s) => s.spaces?.service_type === 'vip' || s.spaces?.service_type === 'bar')
-    .reduce((sum, s) => sum + (s.spaces?.max_pax ?? 0), 0);
+    .reduce((sum, s) => sum + (s.expected_pax ?? s.spaces?.max_pax ?? 0), 0);
   const expectedPax = splitInfo.data?.expected ?? null;
   const gpPax = expectedPax != null ? Math.max(expectedPax - vipPax, 0) : null;
   const gpRef = splitInfo.data?.gpRef ?? null;
