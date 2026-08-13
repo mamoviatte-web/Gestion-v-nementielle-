@@ -143,6 +143,34 @@ export async function submitInitialStock(
   if (!r.success) throw new Error(r.error ?? 'Erreur lors de la saisie du stock initial.');
 }
 
+/**
+ * Correction du stock INITIAL déjà validé, sans réinitialiser la suite du
+ * process : edit_zone_initial_stock upsert les quantités/états initiaux et
+ * préserve reassort_qty / final_qty. Renvoie les lignes à jour pour un
+ * rafraîchissement ciblé de la seule section stock. Refuse si l'événement est
+ * clôturé/archivé (event_closed).
+ */
+export async function editInitialStock(
+  token: string,
+  name: string,
+  lines: InitialLineInput[],
+): Promise<{ stock_lines: ZoneStockLine[]; lignes_maj: number }> {
+  const r = await rpc<{ success: boolean; error?: string; stock_lines?: ZoneStockLine[]; lignes_maj?: number }>(
+    'edit_zone_initial_stock',
+    { p_token: token, p_responsible_name: name, p_stock_lines: lines },
+  );
+  if (!r.success) {
+    throw new Error(
+      r.error === 'event_closed'
+        ? 'Événement clôturé — modification impossible.'
+        : r.error === 'token_invalid'
+          ? 'Session invalide — reconnectez-vous.'
+          : (r.error ?? 'Modification refusée.'),
+    );
+  }
+  return { stock_lines: r.stock_lines ?? [], lignes_maj: r.lignes_maj ?? 0 };
+}
+
 export interface FinalLineInput {
   product_id: string;
   final_qty: number;

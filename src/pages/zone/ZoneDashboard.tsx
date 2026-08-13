@@ -18,6 +18,7 @@ import {
 } from '@/components/ui';
 import { useToast } from '@/context/ToastContext';
 import {
+  editInitialStock,
   getZoneState,
   submitDebrief,
   submitFinalStock,
@@ -96,6 +97,13 @@ export default function ZoneDashboard() {
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ['zoneState', token] });
 
+  // Rafraîchissement CIBLÉ de la seule section stock (correction du stock
+  // initial) : on patche le cache sans refetch → aucune autre section ne bouge.
+  const patchStockLines = (stock_lines: ZoneState['stock_lines']) =>
+    queryClient.setQueryData<ZoneState>(['zoneState', token], (old) =>
+      old ? { ...old, stock_lines, status: { ...old.status, initial: true } } : old,
+    );
+
   return (
     <div className="min-h-screen bg-pr-cream pb-16">
       <header className="sticky top-0 z-20 border-b border-pr-stone bg-white/95 px-4 py-3 backdrop-blur">
@@ -128,6 +136,7 @@ export default function ZoneDashboard() {
           name={name}
           state={state}
           onDone={invalidate}
+          onStockPatched={patchStockLines}
           showToast={showToast}
         />
         <ScheduleSection
@@ -225,15 +234,18 @@ interface StockSectionProps {
   name: string;
   state: ZoneState;
   onDone: () => void;
+  onStockPatched: (lines: ZoneState['stock_lines']) => void;
   showToast: ShowToast;
 }
 
-function StockSection({ token, name, state, onDone, showToast }: StockSectionProps) {
+function StockSection({ token, name, state, onDone, onStockPatched, showToast }: StockSectionProps) {
   const [open, setOpen] = useState(true);
   const [initial, setInitial] = useState<Record<string, InitialForm>>({});
   const [final, setFinal] = useState<Record<string, FinalForm>>({});
   const [savingInitial, setSavingInitial] = useState(false);
   const [savingFinal, setSavingFinal] = useState(false);
+  // Correction du stock initial déjà validé (rouvre la saisie).
+  const [editingInitial, setEditingInitial] = useState(false);
 
   const linesById = useMemo(() => {
     const map: Record<string, ZoneState['stock_lines'][number]> = {};
@@ -272,6 +284,19 @@ function StockSection({ token, name, state, onDone, showToast }: StockSectionPro
     setFinal(nextFinal);
   }, [state.products, linesById]);
 
+  // Ré-aligne le brouillon initial sur les valeurs en base (annulation de correction).
+  function resetInitialDraft() {
+    const next: Record<string, InitialForm> = {};
+    for (const p of state.products) {
+      const l = linesById[p.product_id];
+      next[p.product_id] = {
+        qty: l && l.initial_qty != null ? String(l.initial_qty) : '',
+        state: l?.product_state ?? 'fermé',
+      };
+    }
+    setInitial(next);
+  }
+
   async function saveInitial() {
     setSavingInitial(true);
     try {
@@ -287,6 +312,29 @@ function StockSection({ token, name, state, onDone, showToast }: StockSectionPro
       onDone();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Erreur à l’enregistrement.', 'warning');
+    } finally {
+      setSavingInitial(false);
+    }
+  }
+
+  async function saveInitialCorrection() {
+    setSavingInitial(true);
+    try {
+      const lines = state.products
+        .map((p) => {
+          const f = initial[p.product_id];
+          const qty = f?.qty.trim() === '' ? NaN : Number(f?.qty);
+          return { product_id: p.product_id, qty, state: f?.state ?? null };
+        })
+        .filter((l) => !Number.isNaN(l.qty));
+      const { stock_lines, lignes_maj } = await editInitialStock(token, name, lines);
+      // Refresh CIBLÉ : on ne met à jour QUE les lignes de stock (cache patché),
+      // sans refetch → horaires / stock final / débrief restent intacts.
+      onStockPatched(stock_lines);
+      setEditingInitial(false);
+      showToast(`Stock initial mis à jour (${lignes_maj} ligne${lignes_maj > 1 ? 's' : ''}).`, 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Modification refusée.', 'warning');
     } finally {
       setSavingInitial(false);
     }
@@ -321,47 +369,106 @@ function StockSection({ token, name, state, onDone, showToast }: StockSectionPro
     <Section title="📦 Stocks" open={open} onToggle={() => setOpen((v) => !v)}>
       {/* Stock initial */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-pr-black">Stock initial</h3>
-        <div className="space-y-3">
-          {state.products.map((p) => (
-            <div
-              key={p.product_id}
-              className="grid grid-cols-1 gap-2 rounded-lg bg-pr-cream/60 p-3 sm:grid-cols-[1fr_auto]"
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-pr-black">Stock initial</h3>
+          {state.status.initial && !editingInitial && (
+            <button
+              type="button"
+              onClick={() => setEditingInitial(true)}
+              className="inline-flex min-h-[36px] items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-pr-black ring-1 ring-inset ring-pr-stone"
             >
-              <div className="text-sm font-medium text-pr-black">
-                {p.product_name}
-                <span className="ml-1 text-xs text-pr-black-soft">({p.unit})</span>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  min={0}
-                  value={initial[p.product_id]?.qty ?? ''}
-                  onChange={(e) =>
-                    setInitial((prev) => ({
-                      ...prev,
-                      [p.product_id]: {
-                        ...(prev[p.product_id] ?? { qty: '', state: 'fermé' }),
-                        qty: e.target.value,
-                      },
-                    }))
-                  }
-                  placeholder="Qté"
-                  className="min-h-[44px] w-24"
-                />
-              </div>
-            </div>
-          ))}
+              ✎ Modifier
+            </button>
+          )}
         </div>
-        <Button
-          variant="primary"
-          fullWidth
-          loading={savingInitial}
-          onClick={saveInitial}
-          className="min-h-[44px]"
-        >
-          Valider l’ouverture ✓
-        </Button>
+
+        {state.status.initial && !editingInitial ? (
+          /* Synthèse en lecture seule (déjà validé) */
+          <div className="space-y-1.5 rounded-lg bg-pr-cream/60 p-3">
+            {state.products.map((p) => {
+              const q = linesById[p.product_id]?.initial_qty ?? 0;
+              if (!q) return null;
+              return (
+                <div key={p.product_id} className="flex items-center justify-between text-sm text-pr-black">
+                  <span>{p.product_name}</span>
+                  <span className="font-semibold tabular-nums">
+                    {q} <span className="text-xs font-normal text-pr-black-soft">{p.unit}</span>
+                  </span>
+                </div>
+              );
+            })}
+            {state.products.every((p) => !(linesById[p.product_id]?.initial_qty)) && (
+              <p className="text-sm text-pr-black-soft">Aucune quantité déclarée.</p>
+            )}
+            <p className="pt-1 text-xs text-pr-black-soft">
+              Corrigez avec « ✎ Modifier » tant que l’événement n’est pas clôturé — les horaires, le stock final et le débrief déjà saisis sont conservés.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-3">
+              {state.products.map((p) => (
+                <div
+                  key={p.product_id}
+                  className="grid grid-cols-1 gap-2 rounded-lg bg-pr-cream/60 p-3 sm:grid-cols-[1fr_auto]"
+                >
+                  <div className="text-sm font-medium text-pr-black">
+                    {p.product_name}
+                    <span className="ml-1 text-xs text-pr-black-soft">({p.unit})</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={initial[p.product_id]?.qty ?? ''}
+                      onChange={(e) =>
+                        setInitial((prev) => ({
+                          ...prev,
+                          [p.product_id]: {
+                            ...(prev[p.product_id] ?? { qty: '', state: 'fermé' }),
+                            qty: e.target.value,
+                          },
+                        }))
+                      }
+                      placeholder="Qté"
+                      className="min-h-[44px] w-24"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            {editingInitial ? (
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => { resetInitialDraft(); setEditingInitial(false); }}
+                  className="min-h-[44px]"
+                >
+                  Annuler
+                </Button>
+                <Button
+                  variant="primary"
+                  fullWidth
+                  loading={savingInitial}
+                  onClick={saveInitialCorrection}
+                  className="min-h-[44px]"
+                >
+                  Enregistrer les corrections
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="primary"
+                fullWidth
+                loading={savingInitial}
+                onClick={saveInitial}
+                className="min-h-[44px]"
+              >
+                Valider l’ouverture ✓
+              </Button>
+            )}
+          </>
+        )}
       </div>
 
       {/* Stock final */}
