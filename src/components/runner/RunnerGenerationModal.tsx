@@ -121,8 +121,8 @@ export function RunnerGenerationModal({
           ? ` · Grand Public ${gp} (×${ratio.toFixed(2)}) / VIP ${result?.vip_pax ?? 0}`
           : '';
       const src =
-        result?.lignes_historique != null
-          ? ` (socle ${result?.lignes_socle ?? 0} + historique ${result.lignes_historique})`
+        result?.lignes_historique_vip != null
+          ? ` (socle ${result?.lignes_socle ?? 0} + historique VIP ${result.lignes_historique_vip})`
           : '';
       showToast(`${result?.lignes_generees ?? 0} dotations générées${src}${split}`, 'success');
       onGenerated();

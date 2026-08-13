@@ -86,7 +86,7 @@ export function useRunnerPlanning(eventId: string | undefined) {
         event_id: string;
         lignes_generees: number;
         lignes_socle?: number;
-        lignes_historique?: number;
+        lignes_historique_vip?: number;
         pax_total?: number;
         vip_pax?: number;
         grand_public_pax?: number;

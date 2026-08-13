@@ -35,6 +35,7 @@ const EventDetailPage = lazy(() => import('@/pages/admin/EventDetailPage'));
 const EventPlanningPage = lazy(() => import('@/pages/admin/EventPlanningPage'));
 const CatalogPage = lazy(() => import('@/pages/admin/CatalogPage'));
 const SpacesPage = lazy(() => import('@/pages/admin/SpacesPage'));
+const BuvetteAssortmentPage = lazy(() => import('@/pages/admin/BuvetteAssortmentPage'));
 const RhPopulationsPage = lazy(() => import('@/pages/admin/RhPopulationsPage'));
 const AccessManagementPage = lazy(() => import('@/pages/admin/AccessManagementPage'));
 const StockPage = lazy(() => import('@/pages/admin/stock/StockPage'));
@@ -128,6 +129,7 @@ export default function App() {
           <Route path="rh/populations" element={<RhPopulationsPage />} />
           <Route path="catalog" element={<CatalogPage />} />
           <Route path="spaces" element={<SpacesPage />} />
+          <Route path="assortiment" element={<BuvetteAssortmentPage />} />
           <Route path="access" element={<AccessManagementPage />} />
           <Route path="export" element={<ExportPage />} />
         </Route>
