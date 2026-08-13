@@ -1,21 +1,28 @@
 /**
- * BuvetteDetailPage — saisie stock d'une buvette membre (flux token superviseur).
- * Stepper Ouverture / Réassort / Clôture, FamilyStockForm, écriture sur le space
- * de la buvette via save_zone_buvette_stock. Route : …/buvette/:spaceId
+ * BuvetteDetailPage — process complet d'UNE buvette membre (flux token
+ * superviseur) : STOCK (Ouverture / Réassort / Clôture) + DÉBRIEF.
+ *   • Stock : FamilyStockForm → save_zone_buvette_stock(p_target_space).
+ *   • Débrief : BuvetteDebriefForm → save_zone_buvette_debrief(p_target_space).
+ * Route : …/buvette/:spaceId   (code de la buvette passé via router state).
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useMatchSession } from '@/hooks/useMatchSession';
 import { MatchZoneHeader } from '@/components/zone/MatchZoneHeader';
 import { FamilyStockForm, type StockLine, type StockMode } from '@/components/stock/FamilyStockForm';
+import { BuvetteDebriefForm } from '@/components/zone/BuvetteDebriefForm';
 
-type Step = 'ouverture' | 'reassort' | 'cloture';
-const STEPS: { key: Step; label: string; icon: string; mode: StockMode }[] = [
+type Step = 'ouverture' | 'reassort' | 'cloture' | 'debrief';
+const STOCK_STEPS: { key: Exclude<Step, 'debrief'>; label: string; icon: string; mode: StockMode }[] = [
   { key: 'ouverture', label: 'Ouverture', icon: '📥', mode: 'initial' },
   { key: 'reassort', label: 'Réassort', icon: '🔄', mode: 'reassort' },
   { key: 'cloture', label: 'Clôture', icon: '📤', mode: 'final' },
+];
+const TABS: { key: Step; label: string; icon: string }[] = [
+  ...STOCK_STEPS.map((s) => ({ key: s.key as Step, label: s.label, icon: s.icon })),
+  { key: 'debrief', label: 'Débrief', icon: '📝' },
 ];
 
 interface Line extends StockLine {
@@ -25,6 +32,8 @@ interface Line extends StockLine {
 export default function BuvetteDetailPage() {
   const { token, session, loading } = useMatchSession();
   const { spaceId } = useParams<{ spaceId: string }>();
+  const { state } = useLocation() as { state?: { code?: string } };
+  const code = state?.code;
   const [nom, setNom] = useState('');
   const [step, setStep] = useState<Step>('ouverture');
   const [lines, setLines] = useState<Line[]>([]);
@@ -46,7 +55,8 @@ export default function BuvetteDetailPage() {
   const patch = (id: string, upd: Partial<Line>) => setLines((prev) => prev.map((l) => (l.product_id === id ? { ...l, ...upd } : l)));
   const onFieldChange = (id: string, field: keyof StockLine, value: number | string | null) => patch(id, { [field]: value } as Partial<Line>);
 
-  const mode: StockMode = STEPS.find((s) => s.key === step)!.mode;
+  const isDebrief = step === 'debrief';
+  const mode: StockMode = STOCK_STEPS.find((s) => s.key === step)?.mode ?? 'initial';
   const visibleLines = useMemo(
     () => (mode === 'final' ? lines.filter((l) => l.initial_qty > 0 || l.reassort_qty > 0) : lines),
     [lines, mode],
@@ -76,15 +86,22 @@ export default function BuvetteDetailPage() {
     setSaving(false);
     const r = data as { success?: boolean; error?: string } | null;
     if (err || !r?.success) return setError(r?.error ?? 'Enregistrement indisponible.');
-    setSavedMsg(`${STEPS.find((s) => s.key === step)?.label} enregistré ✅`);
+    setSavedMsg(`${STOCK_STEPS.find((s) => s.key === step)?.label} enregistré ✅`);
   }
 
   return (
     <div className="min-h-screen bg-slate-50 pb-28">
       <MatchZoneHeader session={session} back />
       <div className="mx-auto max-w-lg space-y-3 p-4">
-        <div className="grid grid-cols-3 gap-2">
-          {STEPS.map((s) => (
+        {code && (
+          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-sm font-black text-white">{code}</span>
+            <p className="font-bold text-slate-900">Buvette {code}</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-4 gap-2">
+          {TABS.map((s) => (
             <button
               key={s.key}
               type="button"
@@ -93,7 +110,7 @@ export default function BuvetteDetailPage() {
                 setSavedMsg('');
                 setError('');
               }}
-              className={`rounded-xl border-2 py-3 text-center text-sm font-semibold transition-colors ${step === s.key ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-500'}`}
+              className={`rounded-xl border-2 py-3 text-center text-xs font-semibold transition-colors ${step === s.key ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-500'}`}
             >
               <span className="block text-lg">{s.icon}</span>
               {s.label}
@@ -111,20 +128,26 @@ export default function BuvetteDetailPage() {
           />
         </div>
 
-        {ready === false && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            Fonctionnalité en cours d'activation — applique <code>supabase/buvette_supervisor.sql</code>.
-          </div>
+        {isDebrief ? (
+          <BuvetteDebriefForm token={token!} spaceId={spaceId!} responsable={nom} code={code} />
+        ) : (
+          <>
+            {ready === false && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                Fonctionnalité en cours d'activation — applique <code>supabase/buvette_supervisor.sql</code>.
+              </div>
+            )}
+            {mode === 'final' && visibleLines.length === 0 && ready && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-800">
+                Aucun produit à saisir — complétez d'abord l'ouverture (stock initial).
+              </div>
+            )}
+            {visibleLines.length > 0 && <FamilyStockForm lines={visibleLines} mode={mode} onChange={onFieldChange} spaceType="buvette" />}
+          </>
         )}
-        {mode === 'final' && visibleLines.length === 0 && ready && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-800">
-            Aucun produit à saisir — complétez d'abord l'ouverture (stock initial).
-          </div>
-        )}
-        {visibleLines.length > 0 && <FamilyStockForm lines={visibleLines} mode={mode} onChange={onFieldChange} spaceType="buvette" />}
       </div>
 
-      {visibleLines.length > 0 && (
+      {!isDebrief && visibleLines.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 p-4 backdrop-blur">
           <div className="mx-auto max-w-lg space-y-2">
             {error && <p className="rounded-lg bg-red-50 p-2.5 text-sm text-red-600">{error}</p>}
@@ -134,7 +157,7 @@ export default function BuvetteDetailPage() {
               disabled={saving || nom.trim().length < 2}
               className="min-h-[56px] w-full rounded-xl bg-slate-900 py-4 text-base font-bold text-white disabled:opacity-40"
             >
-              {saving ? 'Enregistrement…' : `Enregistrer — ${STEPS.find((s) => s.key === step)?.label}`}
+              {saving ? 'Enregistrement…' : `Enregistrer — ${STOCK_STEPS.find((s) => s.key === step)?.label}`}
             </button>
           </div>
         </div>

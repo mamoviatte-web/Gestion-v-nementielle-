@@ -18,6 +18,7 @@ interface BuvetteInfo {
   selected: boolean;
   has_initial: boolean;
   has_final: boolean;
+  has_debrief: boolean;
 }
 interface ZoneBuvettesResp {
   success?: boolean;
@@ -83,9 +84,11 @@ export default function BuvetteSupervisorPage() {
   }
 
   const mine = all.filter((b) => selected.has(b.code));
-  const done = mine.filter((b) => b.has_final).length;
-  const started = mine.filter((b) => b.has_initial && !b.has_final).length;
-  const statusOf = (b: BuvetteInfo): St => (b.has_final ? 'done' : b.has_initial ? 'started' : 'todo');
+  // « Terminée » = stock clôturé ET débrief soumis (process complet).
+  const isComplete = (b: BuvetteInfo) => b.has_final && b.has_debrief;
+  const done = mine.filter(isComplete).length;
+  const started = mine.filter((b) => (b.has_initial || b.has_final || b.has_debrief) && !isComplete(b)).length;
+  const statusOf = (b: BuvetteInfo): St => (isComplete(b) ? 'done' : b.has_initial || b.has_final || b.has_debrief ? 'started' : 'todo');
 
   return (
     <div className="min-h-screen bg-slate-50 pb-10">
@@ -159,7 +162,7 @@ export default function BuvetteSupervisorPage() {
               <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: mine.length ? `${(done / mine.length) * 100}%` : '0%' }} />
             </div>
             <div className="mt-2 flex gap-3 text-xs">
-              <span className="text-slate-400">{done}/{mine.length} clôturées</span>
+              <span className="text-slate-400">{done}/{mine.length} terminées (stock + débrief)</span>
               {started > 0 && <span className="text-amber-600">🔄 {started} en cours</span>}
             </div>
           </div>
@@ -169,13 +172,21 @@ export default function BuvetteSupervisorPage() {
             return (
               <button
                 key={b.code}
-                onClick={() => navigate(`/zone/match/${token}/buvette/${b.space_id}`)}
+                onClick={() => navigate(`/zone/match/${token}/buvette/${b.space_id}`, { state: { code: b.code } })}
                 className={`flex w-full items-center gap-4 rounded-2xl border-2 bg-white p-4 text-left transition-transform active:scale-95 ${cfg.border}`}
               >
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-lg font-black text-white">{b.code}</span>
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-slate-900">{b.label}</p>
                   <span className={`text-xs font-semibold ${cfg.text}`}>{cfg.badge}</span>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${b.has_final ? 'bg-green-100 text-green-700' : b.has_initial ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'}`}>
+                      {b.has_final ? '📦 Stock clôturé' : b.has_initial ? '📦 Stock en cours' : '📦 Stock à faire'}
+                    </span>
+                    <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${b.has_debrief ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+                      {b.has_debrief ? '📝 Débrief ✓' : '📝 Débrief à faire'}
+                    </span>
+                  </div>
                 </div>
                 <span className="text-lg text-slate-300">›</span>
               </button>
