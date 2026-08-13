@@ -8,7 +8,7 @@
  * RG-003 : vues réservées ROLE_STADE (garde base). Écran admin.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Download, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, RefreshCw, ShoppingCart, Crown, CupSoda } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -26,9 +26,17 @@ interface Line {
   product_id: string; product_name: string; category: string;
   needed_qty: number; qty_to_move: number; area_stock: number; reserve_qty: number;
   cost_ht: number; stock_sufficient_live: boolean; shortfall_qty: number;
+  consumption_reference: number;
 }
 
 const num = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
+// Ordre d'affichage des catégories sur la fiche runner (le vin en premier, bien visible).
+const CATEGORY_ORDER = ['Vins', 'Champagne', 'Bières', 'Soft', 'Softs', 'Spiritueux', 'Sirops', 'Gaz', 'Matériel'];
+const catRank = (c: string): number => {
+  const i = CATEGORY_ORDER.indexOf(c);
+  return i === -1 ? CATEGORY_ORDER.length : i;
+};
 const FAM = {
   VIP: { label: 'VIP & Salons', accent: '#B8860B', soft: '#FBF3DD', Icon: Crown },
   Buvettes: { label: 'Buvettes & Bars', accent: '#2F6FED', soft: '#E4ECFD', Icon: CupSoda },
@@ -69,8 +77,15 @@ export function UnifiedRunnerPanel({
       arr.push(l);
       m.set(l.space_id, arr);
     }
-    // lignes en manque en haut
-    for (const [, arr] of m) arr.sort((a, b) => Number(a.stock_sufficient_live) - Number(b.stock_sufficient_live) || a.product_name.localeCompare(b.product_name));
+    // Groupé par catégorie (Vins en tête), puis manque en haut, puis nom.
+    for (const [, arr] of m)
+      arr.sort(
+        (a, b) =>
+          catRank(a.category) - catRank(b.category) ||
+          a.category.localeCompare(b.category) ||
+          Number(a.stock_sufficient_live) - Number(b.stock_sufficient_live) ||
+          a.product_name.localeCompare(b.product_name),
+      );
     return m;
   }, [board]);
 
@@ -272,24 +287,41 @@ function SpaceLines({ lines, onShortageClick }: { lines: Line[]; onShortageClick
           </tr>
         </thead>
         <tbody className="divide-y divide-stone-50">
-          {lines.map((l) => (
-            <tr key={l.product_id} className={l.stock_sufficient_live ? '' : 'bg-rose-50/60'}>
-              <td className="px-2 py-1.5 font-medium text-stone-800">{l.product_name}<span className="ml-1 text-[10px] text-stone-400">{l.category}</span></td>
-              <td className="px-2 py-1.5 text-right tabular-nums">{num(l.needed_qty)}</td>
-              <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{num(l.qty_to_move)}</td>
-              <td className="px-2 py-1.5 text-right tabular-nums text-stone-500">{num(l.area_stock)}</td>
-              <td className="px-2 py-1.5 text-right tabular-nums text-stone-500">{num(l.reserve_qty)}</td>
-              <td className="px-2 py-1.5 text-center">
-                {l.stock_sufficient_live ? (
-                  <CheckCircle2 size={15} className="mx-auto text-emerald-500" />
-                ) : (
-                  <button onClick={onShortageClick} title="Ouvrir le stock réserve pour réapprovisionner" className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-1.5 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-200">
-                    <AlertTriangle size={11} /> Manque {num(l.shortfall_qty)}
-                  </button>
+          {lines.map((l, i) => {
+            const showHeader = i === 0 || lines[i - 1].category !== l.category;
+            return (
+              <Fragment key={l.product_id}>
+                {showHeader && (
+                  <tr className="bg-stone-50/80">
+                    <td colSpan={6} className="px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-stone-500">
+                      {l.category}
+                    </td>
+                  </tr>
                 )}
-              </td>
-            </tr>
-          ))}
+                <tr className={l.stock_sufficient_live ? '' : 'bg-rose-50/60'}>
+                  <td className="px-2 py-1.5 font-medium text-stone-800">
+                    {l.product_name}
+                    {num(l.consumption_reference) > 0 && (
+                      <span className="ml-1.5 rounded bg-sky-100 px-1 py-0.5 text-[9px] font-semibold text-sky-700" title="Issu de l'historique de consommation de l'espace">hist.</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{num(l.needed_qty)}</td>
+                  <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{num(l.qty_to_move)}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums text-stone-500">{num(l.area_stock)}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums text-stone-500">{num(l.reserve_qty)}</td>
+                  <td className="px-2 py-1.5 text-center">
+                    {l.stock_sufficient_live ? (
+                      <CheckCircle2 size={15} className="mx-auto text-emerald-500" />
+                    ) : (
+                      <button onClick={onShortageClick} title="Ouvrir le stock réserve pour réapprovisionner" className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-1.5 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-200">
+                        <AlertTriangle size={11} /> Manque {num(l.shortfall_qty)}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              </Fragment>
+            );
+          })}
         </tbody>
         <tfoot>
           <tr className="border-t border-stone-200 font-bold text-stone-800">

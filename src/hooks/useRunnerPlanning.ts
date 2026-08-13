@@ -57,10 +57,26 @@ export function useRunnerPlanning(eventId: string | undefined) {
         })
         .eq('event_id', params.event_id);
 
+      // Écraser : dévalider d'abord toutes les lignes de l'événement, pour que la
+      // régénération (qui ne remplace que les lignes « brouillon ») réinjecte les
+      // produits manquants (vin…) sur des fiches déjà validées.
+      if (params.overwrite) {
+        const { error: resetErr } = await supabase
+          .from('runner_auto_planning')
+          .update({
+            validation_status: 'brouillon',
+            validated_quantity: null,
+            validated_by: null,
+            validated_at: null,
+          })
+          .eq('event_id', params.event_id);
+        if (resetErr) throw resetErr;
+      }
+
       // Génération SERVEUR (source unique de vérité) : remplit runner_auto_planning
-      // depuis le référentiel socle + space_product_coefficients (dotations réelles).
-      // Purge les lignes « brouillon », préserve les lignes déjà validées. On ne
-      // calcule plus rien côté client (l'ancienne source event_consumptions est vide).
+      // depuis l'union socle CDC + complément historique (space_product_coefficients :
+      // tout produit réellement consommé dans l'espace, vin inclus). Purge les lignes
+      // « brouillon », préserve les lignes déjà validées. Aucun calcul côté client.
       const { data, error } = await supabase.rpc('generate_runner_dotations', {
         p_event_id: params.event_id,
       });
@@ -69,6 +85,8 @@ export function useRunnerPlanning(eventId: string | undefined) {
         success: boolean;
         event_id: string;
         lignes_generees: number;
+        lignes_socle?: number;
+        lignes_historique?: number;
         pax_total?: number;
         vip_pax?: number;
         grand_public_pax?: number;

@@ -488,6 +488,10 @@ export interface RunnerGenerationParams {
   temperature: number;
   consumption_trend: ConsumptionTrend;
   reference_event_id?: string;
+  /** Écraser : dévalide d'abord toutes les lignes de l'événement pour que la
+   *  régénération réinjecte les produits manquants (vin…) sur les fiches déjà
+   *  validées. Sans ce flag, seules les lignes « brouillon » sont régénérées. */
+  overwrite?: boolean;
 }
 
 /** Coefficients appliqués à la consommation de référence. */

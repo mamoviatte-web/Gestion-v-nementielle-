@@ -85,6 +85,7 @@ export function RunnerGenerationModal({
   const [weather, setWeather] = useState<WeatherType>('normal');
   const [temperature, setTemperature] = useState('18');
   const [trend, setTrend] = useState<ConsumptionTrend>('stable');
+  const [overwrite, setOverwrite] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(spaces.map((s) => s.space_id)),
   );
@@ -111,6 +112,7 @@ export function RunnerGenerationModal({
         weather_type: weather,
         temperature: Number(temperature) || 0,
         consumption_trend: trend,
+        overwrite,
       });
       const gp = result?.grand_public_pax;
       const ratio = result?.ratio_grand_public;
@@ -118,7 +120,11 @@ export function RunnerGenerationModal({
         gp != null && ratio != null
           ? ` · Grand Public ${gp} (×${ratio.toFixed(2)}) / VIP ${result?.vip_pax ?? 0}`
           : '';
-      showToast(`${result?.lignes_generees ?? 0} dotations générées${split}`, 'success');
+      const src =
+        result?.lignes_historique != null
+          ? ` (socle ${result?.lignes_socle ?? 0} + historique ${result.lignes_historique})`
+          : '';
+      showToast(`${result?.lignes_generees ?? 0} dotations générées${src}${split}`, 'success');
       onGenerated();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de la génération.');
@@ -221,12 +227,28 @@ export function RunnerGenerationModal({
               ))}
             </div>
           </div>
+
+          {/* Écraser les fiches déjà validées (réinjecte vin & produits manquants) */}
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm ring-1 ring-amber-200">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+              checked={overwrite}
+              onChange={(e) => setOverwrite(e.target.checked)}
+            />
+            <span className="text-slate-700">
+              <span className="font-semibold text-amber-800">Écraser les fiches déjà validées</span>
+              <br />
+              Dévalide toutes les fiches de l'événement puis régénère, pour réinjecter les produits
+              manquants (vin, îlot central…). Sinon seules les fiches non validées sont mises à jour.
+            </span>
+          </label>
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>Annuler</Button>
           <Button loading={submitting} onClick={handleGenerate}>
-            <Zap className="h-4 w-4" /> Générer les fiches runner
+            <Zap className="h-4 w-4" /> {overwrite ? 'Régénérer (écraser)' : 'Générer les fiches runner'}
           </Button>
         </div>
       </div>
