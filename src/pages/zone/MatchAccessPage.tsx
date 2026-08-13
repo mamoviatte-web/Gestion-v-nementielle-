@@ -13,8 +13,11 @@ interface SpaceOption {
   space_id: string;
   space_name: string;
   service_type: 'vip' | 'bar' | 'buvette' | 'bodega' | null;
+  /** Famille prête pour les onglets, fournie par le serveur : « VIP & Bars » ou « Buvettes ». */
+  family?: string | null;
+  is_buvette?: boolean;
   max_pax: number | null;
-  group_name: string | null;
+  group_name?: string | null;
   nb_buvettes?: number;
   buvette_codes?: string[];
 }
@@ -30,7 +33,18 @@ interface MatchEventData {
 }
 
 type Step = 'code' | 'space' | 'name' | 'ready';
-type Filter = 'all' | 'vip' | 'buvette';
+/** Onglets = valeurs `family` renvoyées par le serveur (+ « all » = tous). */
+type Filter = 'all' | 'VIP & Bars' | 'Buvettes';
+
+/**
+ * Famille d'un espace : on privilégie `family`/`is_buvette` du serveur ; à défaut
+ * (cache ancien), repli sur `service_type` — jamais sur le nom (BLOC 3).
+ */
+function spaceFamily(s: SpaceOption): Filter {
+  if (s.family === 'Buvettes' || s.family === 'VIP & Bars') return s.family;
+  if (s.is_buvette || s.service_type === 'buvette') return 'Buvettes';
+  return 'VIP & Bars';
+}
 
 export default function MatchAccessPage() {
   const { code: urlCode } = useParams<{ code: string }>();
@@ -90,7 +104,7 @@ export default function MatchAccessPage() {
   }
 
   const filteredSpaces = (eventData?.spaces ?? []).filter(
-    (s) => serviceFilter === 'all' || s.service_type === serviceFilter,
+    (s) => serviceFilter === 'all' || spaceFamily(s) === serviceFilter,
   );
 
   return (
@@ -137,8 +151,8 @@ export default function MatchAccessPage() {
               {(
                 [
                   { key: 'all', label: 'Tous' },
-                  { key: 'vip', label: '⭐ VIP & Bars' },
-                  { key: 'buvette', label: '🍺 Buvettes' },
+                  { key: 'VIP & Bars', label: '⭐ VIP & Bars' },
+                  { key: 'Buvettes', label: '🍺 Buvettes' },
                 ] as { key: Filter; label: string }[]
               ).map((f) => (
                 <button
@@ -168,11 +182,12 @@ export default function MatchAccessPage() {
                       <p className="font-medium text-pr-black">{space.space_name}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {space.service_type === 'vip' && (
-                        <span className="rounded-full bg-amber-100 px-2 text-xs text-amber-700">VIP</span>
-                      )}
-                      {space.service_type === 'buvette' && (
+                      {spaceFamily(space) === 'Buvettes' ? (
                         <span className="rounded-full bg-sky-100 px-2 text-xs text-sky-700">Buvette</span>
+                      ) : (
+                        <span className="rounded-full bg-amber-100 px-2 text-xs text-amber-700">
+                          {space.service_type === 'bar' ? 'Bar' : 'VIP'}
+                        </span>
                       )}
                       {selectedSpace?.space_id === space.space_id && <span className="text-pr-black">✓</span>}
                     </div>
