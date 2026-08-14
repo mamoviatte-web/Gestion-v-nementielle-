@@ -31,6 +31,9 @@ import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
 import { RhOperationalBoard } from '@/components/rh/RhOperationalBoard';
 import { OccasionalHoursPanel } from '@/components/rh/OccasionalHoursPanel';
 import { VipPaxPanel } from '@/components/events/VipPaxPanel';
+import { KegReconciliationPanel } from '@/components/events/KegReconciliationPanel';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 import { RevenueMarginPanel } from '@/components/events/RevenueMarginPanel';
 import { EventResetButton } from '@/components/events/EventResetButton';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
@@ -86,6 +89,7 @@ export default function EventDetailPage() {
   const allEvents = useEventsList();
   const { setStatus, updating } = useEventActions(id);
   const { showToast } = useToast();
+  const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('stocks');
   const [spaceId, setSpaceId] = useState<string>('');
   const [showRunnerModal, setShowRunnerModal] = useState(false);
@@ -96,10 +100,20 @@ export default function EventDetailPage() {
     if (!window.confirm(`Confirmer la clôture de « ${eventName} » ?\n\nLes coûts finaux seront calculés et l'événement sera clôturé.`)) return;
     try {
       await setStatus('clôturé');
+      // Match : réconciliation fûts (idempotente) — vides à rentrer + retours
+      // stockage. Non bloquant : un échec n'empêche pas la clôture.
+      if (eventQuery.data?.event_type === 'match' && id) {
+        const by = user?.name ?? user?.email ?? 'Stade';
+        try {
+          await supabase.rpc('apply_keg_reconciliation', { p_event: id, p_by: by });
+        } catch (kegErr) {
+          console.error('Réconciliation fûts:', kegErr);
+        }
+      }
       showToast(`Événement « ${eventName} » clôturé.`, 'success');
-      // Le bilan post-match remplace le suivi live (invalidation react-query) —
-      // on remonte en haut pour l'afficher immédiatement.
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Recharge INTÉGRALE : tous les calculs (F&B, conso, marge, fûts) repartent
+      // des données figées — évite les états partiels en cache.
+      window.location.reload();
     } catch (err) {
       console.error('Erreur clôture:', err);
       showToast(`Impossible de clôturer : ${err instanceof Error ? err.message : 'erreur inconnue'}`, 'warning');
@@ -376,6 +390,12 @@ export default function EventDetailPage() {
       {activeTab === 'stocks' && (
         <div className="space-y-6">
           {isMatch && <VipPaxPanel eventId={event.event_id} />}
+          {isMatch && (
+            <KegReconciliationPanel
+              eventId={event.event_id}
+              closed={event.status === 'clôturé' || event.status === 'archivé'}
+            />
+          )}
           {selectedSpace ? (
             <StockDotationsTable eventId={event.event_id} spaceId={selectedSpace} />
           ) : (
