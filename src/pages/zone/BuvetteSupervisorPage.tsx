@@ -117,10 +117,10 @@ export default function BuvetteSupervisorPage() {
                 <button
                   key={b.code}
                   onClick={() => toggle(b.code)}
-                  className={`flex aspect-square flex-col items-center justify-center rounded-2xl border-2 transition-all active:scale-95 ${on ? 'scale-105 border-slate-900 bg-slate-900 text-white shadow-lg' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'}`}
+                  className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border-2 px-1.5 text-center transition-all active:scale-95 ${on ? 'scale-105 border-slate-900 bg-slate-900 text-white shadow-lg' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'}`}
                 >
-                  <span className={`text-2xl font-black ${on ? 'text-white' : 'text-slate-900'}`}>{b.code}</span>
-                  {on && <span className="mt-0.5 text-xs text-green-400">✓</span>}
+                  <span className={`text-sm font-black leading-tight ${on ? 'text-white' : 'text-slate-900'}`}>{b.label}</span>
+                  {on && <span className="text-xs text-green-400">✓</span>}
                 </button>
               );
             })}
@@ -133,7 +133,7 @@ export default function BuvetteSupervisorPage() {
                 <p className="text-sm font-semibold text-slate-800">
                   {selected.size} buvette{selected.size > 1 ? 's' : ''} sélectionnée{selected.size > 1 ? 's' : ''}
                 </p>
-                <p className="text-xs text-slate-400">{Array.from(selected).sort().join(' · ')}</p>
+                <p className="text-xs text-slate-400">{all.filter((b) => selected.has(b.code)).map((b) => b.label).join(' · ')}</p>
               </div>
             </div>
           )}
@@ -172,10 +172,10 @@ export default function BuvetteSupervisorPage() {
             return (
               <button
                 key={b.code}
-                onClick={() => navigate(`/zone/match/${token}/buvette/${b.space_id}`, { state: { code: b.code } })}
+                onClick={() => navigate(`/zone/match/${token}/buvette/${b.space_id}`, { state: { code: b.label } })}
                 className={`flex w-full items-center gap-4 rounded-2xl border-2 bg-white p-4 text-left transition-transform active:scale-95 ${cfg.border}`}
               >
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-lg font-black text-white">{b.code}</span>
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-xl text-white">🍺</span>
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-slate-900">{b.label}</p>
                   <span className={`text-xs font-semibold ${cfg.text}`}>{cfg.badge}</span>

@@ -3,7 +3,7 @@
  * Source (vues figées) : event_keg_reconciliation (détail espace × fût) +
  * event_keg_reconciliation_summary (récap). Règle : les pleins restants
  * reviennent au dépôt « Stockage Fûts » SAUF pour les VIP/bars et les buvettes
- * container B2/B3/B4, qui les gardent sur place. « Valider la réconciliation »
+ * containers Nord EST/EST NORD/EST SUD (ex-B2/B3/B4), qui les gardent sur place. « Valider la réconciliation »
  * écrit le registre fûts via apply_keg_reconciliation (idempotent, tag RECON:).
  * RG-003 : écran admin (ROLE_STADE). Vues sans coût.
  */
@@ -76,7 +76,7 @@ export function KegReconciliationPanel({ eventId, closed }: { eventId: string; c
         <div>
           <p className="flex items-center gap-2 text-sm font-bold text-stone-800"><Beer size={16} className="text-amber-600" /> Réconciliation des fûts</p>
           <p className="mt-0.5 text-xs text-stone-400">
-            Vides consommés à rentrer · pleins restants renvoyés au stockage (sauf VIP et buvettes B2/B3/B4, gardés sur place).
+            Vides consommés à rentrer · pleins restants renvoyés au stockage (sauf VIP et buvettes container Nord EST / EST NORD / EST SUD, gardés sur place).
           </p>
         </div>
         <Button size="sm" loading={saving} onClick={() => void validate()}>
@@ -88,7 +88,7 @@ export function KegReconciliationPanel({ eventId, closed }: { eventId: string; c
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard icon={PackageCheck} accent="#B45309" label="Vides à rentrer" value={num(summary?.total_vides_a_rentrer)} hint="retour brasseur / consigne" />
         <StatCard icon={ArrowRightLeft} accent="#047857" label="Pleins → stockage" value={num(summary?.pleins_retour_stockage)} hint="reviennent au dépôt Fûts" />
-        <StatCard icon={Home} accent="#1D4ED8" label="Pleins gardés sur place" value={num(summary?.pleins_gardes_sur_place)} hint="VIP + B2/B3/B4" />
+        <StatCard icon={Home} accent="#1D4ED8" label="Pleins gardés sur place" value={num(summary?.pleins_gardes_sur_place)} hint="VIP + Nord EST/EST NORD/EST SUD" />
       </div>
 
       {!closed && (
@@ -98,7 +98,7 @@ export function KegReconciliationPanel({ eventId, closed }: { eventId: string; c
       )}
 
       <ReconGroup title="Retour stockage" tone="emerald" rows={retour} />
-      <ReconGroup title="Gardé sur place (VIP + B2/B3/B4)" tone="sky" rows={garde} />
+      <ReconGroup title="Gardé sur place (VIP + containers)" tone="sky" rows={garde} />
     </section>
   );
 }

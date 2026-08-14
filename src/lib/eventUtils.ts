@@ -39,7 +39,16 @@ export function spaceProfile(name: string): SpaceProfile {
   if (/^(Le Pub|Bistrot|Comptoir)/i.test(n)) return 'bar_pub';
   if (/^PMR/i.test(n)) return 'pmr';
   if (/^(Terrasse|Garden|Grandes Tabl|Tente)/i.test(n)) return 'terrasse';
-  if (/^B\d+$/.test(n) || /^Buvette/i.test(n)) return 'buvette';
+  // Buvettes : anciens codes B1–B9, préfixe « Buvette », ou noms physiques
+  // (points cardinaux, éventuellement préfixés « Virage ») — ex. « Nord OUEST »,
+  // « EST NORD », « Virage SUD OUEST ». Les Salon/Loge/Wine bar/Club « … Nord »
+  // sont déjà captés plus haut, donc pas de faux positif ici.
+  if (
+    /^B\d+$/.test(n) ||
+    /^Buvette/i.test(n) ||
+    /^(Virage\s+)?(Nord|Sud|Est|Ouest)(\s+(Nord|Sud|Est|Ouest))?$/i.test(n)
+  )
+    return 'buvette';
   return 'bar_pub';
 }
 

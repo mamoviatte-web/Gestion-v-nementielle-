@@ -36,20 +36,21 @@ export default function BuvetteAssortmentPage() {
   const [buvettes, setBuvettes] = useState<BuvetteSpace[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [socle, setSocle] = useState<SocleRow[]>([]);
-  const [selected, setSelected] = useState<string>(''); // space_name (ex. 'B8')
+  const [selected, setSelected] = useState<string>(''); // space_name (ex. 'Virage SUD OUEST')
   const [toAdd, setToAdd] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     const [sp, pr, apr] = await Promise.all([
-      supabase.from('spaces').select('space_id, space_name').eq('active', true).eq('space_type', 'Buvette'),
+      supabase.from('spaces').select('space_id, space_name, service_type').eq('active', true).eq('service_type', 'buvette'),
       supabase.from('products').select('product_id, product_name, category').eq('active', true).neq('category', 'Matériel').order('product_name'),
       supabase.from('area_product_reference').select('id, area_name, product_id, product_name').eq('association_level', 'S').not('product_id', 'is', null),
     ]);
+    // Buvettes physiques = service_type 'buvette', hors superviseurs Buvette 1/2.
     const bv = ((sp.data as BuvetteSpace[] | null) ?? [])
-      .filter((s) => /^B[0-9]+$/.test(s.space_name))
-      .sort((a, b) => a.space_name.localeCompare(b.space_name, undefined, { numeric: true }));
+      .filter((s) => !['Buvette 1', 'Buvette 2'].includes(s.space_name))
+      .sort((a, b) => a.space_name.localeCompare(b.space_name, 'fr', { numeric: true }));
     const prod = (pr.data as Product[] | null) ?? [];
     const catById = new Map(prod.map((p) => [p.product_id, p.category]));
     const bvNames = new Set(bv.map((b) => b.space_name.toUpperCase()));

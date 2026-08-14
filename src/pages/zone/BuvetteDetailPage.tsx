@@ -95,8 +95,8 @@ export default function BuvetteDetailPage() {
       <div className="mx-auto max-w-lg space-y-3 p-4">
         {code && (
           <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-sm font-black text-white">{code}</span>
-            <p className="font-bold text-slate-900">Buvette {code}</p>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-lg text-white">🍺</span>
+            <p className="font-bold text-slate-900">{code}</p>
           </div>
         )}
 
