@@ -39,7 +39,7 @@ import { EventResetButton } from '@/components/events/EventResetButton';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
-import { Zap, CheckCircle2, CalendarClock, Pencil } from 'lucide-react';
+import { Zap, CheckCircle2, CalendarClock, Pencil, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 
 type Tab =
@@ -81,6 +81,15 @@ const SEMINAIRE_TABS: { key: Tab; label: string }[] = [
   { key: 'rapport', label: '📄 Rapport' },
 ];
 
+/** Résultat de event_closure_check — fiabilité des chiffres avant clôture. */
+interface ClosureCheck {
+  finals_manquants: number;
+  unites_en_attente: number;
+  anomalies_conso_negative: number;
+  produits_sans_prix: number;
+  pret_a_cloturer: boolean;
+}
+
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const eventQuery = useEvent(id);
@@ -95,15 +104,11 @@ export default function EventDetailPage() {
   const [showRunnerModal, setShowRunnerModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [showSpacesModal, setShowSpacesModal] = useState(false);
+  // R1 : blocage de clôture tant que les données ne sont pas fiables.
+  const [closureIssues, setClosureIssues] = useState<ClosureCheck | null>(null);
 
-  async function handleCloseEvent(eventName: string) {
-    if (!window.confirm(`Confirmer la clôture de « ${eventName} » ?\n\nLes coûts finaux seront calculés et l'événement sera clôturé.`)) return;
-    // Fiabilité : avertir si des stocks finaux manquent (chiffres faux sinon).
-    if (eventQuery.data?.event_type === 'match' && id) {
-      const { data: comp } = await supabase.from('event_consumption_completeness').select('finals_manquants').eq('event_id', id);
-      const missing = ((comp as { finals_manquants: number }[] | null) ?? []).reduce((s, r) => s + (Number(r.finals_manquants) || 0), 0);
-      if (missing > 0 && !window.confirm(`⚠️ ${missing} stock(s) final(s) manquant(s) — les chiffres seront INCOMPLETS (provisoires).\n\nFinalisez les espaces dans « Analyse conso » d'abord, ou clôturez quand même ?`)) return;
-    }
+  // Clôture effective (une fois les données jugées fiables ou forcées).
+  async function doClose(eventName: string) {
     try {
       await setStatus('clôturé');
       // Match : réconciliation fûts (idempotente) — vides à rentrer + retours
@@ -124,6 +129,23 @@ export default function EventDetailPage() {
       console.error('Erreur clôture:', err);
       showToast(`Impossible de clôturer : ${err instanceof Error ? err.message : 'erreur inconnue'}`, 'warning');
     }
+  }
+
+  async function handleCloseEvent(eventName: string) {
+    if (!window.confirm(`Confirmer la clôture de « ${eventName} » ?\n\nLes coûts finaux seront calculés et l'événement sera clôturé.`)) return;
+    setClosureIssues(null);
+    // R1 : ne pas figer des chiffres faux. Contrôle complet avant clôture (match).
+    if (eventQuery.data?.event_type === 'match' && id) {
+      const { data: chk } = await supabase.rpc('event_closure_check', { p_event: id });
+      const c = chk as ClosureCheck | null;
+      if (c && !c.pret_a_cloturer) {
+        setClosureIssues(c);
+        showToast('Clôture bloquée : données incomplètes (voir le bandeau).', 'warning');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+    }
+    await doClose(eventName);
   }
 
   if (eventQuery.isLoading) return <Spinner fullPage label="Chargement…" />;
@@ -162,6 +184,35 @@ export default function EventDetailPage() {
         description={`${new Date(event.event_date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}${event.start_time ? ` · ${event.start_time.slice(0, 5)}` : ''}${event.expected_attendees ? ` · ${event.expected_attendees} spectateurs` : ''}`}
         action={<Badge tone={status.tone}>{status.label}</Badge>}
       />
+
+      {/* R1 — Bandeau bloquant de clôture : données incomplètes → chiffres faux */}
+      {closureIssues && !closureIssues.pret_a_cloturer && (
+        <div className="mb-4 rounded-2xl border border-rose-300 bg-rose-50 p-4">
+          <p className="flex items-center gap-2 text-sm font-bold text-rose-800">
+            <AlertTriangle className="h-4 w-4" /> Clôture bloquée — données incomplètes (les chiffres seraient faux)
+          </p>
+          <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-rose-700 sm:grid-cols-4">
+            <li>Finals manquants : <b>{closureIssues.finals_manquants}</b></li>
+            <li>Unités en attente : <b>{closureIssues.unites_en_attente}</b></li>
+            <li>Anomalies (conso &lt; 0) : <b>{closureIssues.anomalies_conso_negative}</b></li>
+            <li>Produits sans prix : <b>{closureIssues.produits_sans_prix}</b></li>
+          </ul>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => { setTab('analyse'); setClosureIssues(null); window.scrollTo({ top: 400, behavior: 'smooth' }); }}>
+              Corriger dans « Analyse conso »
+            </Button>
+            {closureIssues.produits_sans_prix > 0 && (
+              <Link to="/admin/catalog" className="inline-flex items-center rounded-xl border border-rose-300 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100">
+                Compléter les prix (Catalogue)
+              </Link>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => { setClosureIssues(null); void doClose(event.event_name); }}>
+              Clôturer quand même (données incomplètes)
+            </Button>
+            <button onClick={() => setClosureIssues(null)} className="text-sm text-rose-500 underline">Ignorer</button>
+          </div>
+        </div>
+      )}
 
       {/* Fil d'Ariane de continuité (matchs) */}
       {event.event_type === 'match' &&
