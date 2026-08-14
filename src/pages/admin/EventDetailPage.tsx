@@ -98,6 +98,12 @@ export default function EventDetailPage() {
 
   async function handleCloseEvent(eventName: string) {
     if (!window.confirm(`Confirmer la clôture de « ${eventName} » ?\n\nLes coûts finaux seront calculés et l'événement sera clôturé.`)) return;
+    // Fiabilité : avertir si des stocks finaux manquent (chiffres faux sinon).
+    if (eventQuery.data?.event_type === 'match' && id) {
+      const { data: comp } = await supabase.from('event_consumption_completeness').select('finals_manquants').eq('event_id', id);
+      const missing = ((comp as { finals_manquants: number }[] | null) ?? []).reduce((s, r) => s + (Number(r.finals_manquants) || 0), 0);
+      if (missing > 0 && !window.confirm(`⚠️ ${missing} stock(s) final(s) manquant(s) — les chiffres seront INCOMPLETS (provisoires).\n\nFinalisez les espaces dans « Analyse conso » d'abord, ou clôturez quand même ?`)) return;
+    }
     try {
       await setStatus('clôturé');
       // Match : réconciliation fûts (idempotente) — vides à rentrer + retours
@@ -455,7 +461,7 @@ export default function EventDetailPage() {
           spaces={spaces.map((s) => ({ space_id: s.space_id, space_name: s.spaces?.space_name ?? s.space_id }))}
         />
       )}
-      {activeTab === 'analyse' && <ConsumptionAnalysisTab event={event} spaces={spaces} />}
+      {activeTab === 'analyse' && <ConsumptionAnalysisTab event={event} />}
       {activeTab === 'gpvip' && <MatchConsumptionReport eventId={event.event_id} />}
     </div>
   );
