@@ -12,10 +12,13 @@ import { supabase } from '@/lib/supabase';
 interface SpaceOption {
   space_id: string;
   space_name: string;
+  display_name?: string | null;
   service_type: 'vip' | 'bar' | 'buvette' | 'bodega' | null;
   /** Famille prête pour les onglets, fournie par le serveur : « VIP & Bars » ou « Buvettes ». */
   family?: string | null;
   is_buvette?: boolean;
+  /** Slot superviseur buvettes (Buvette 1/2) → mène au flux superviseur. */
+  is_supervisor?: boolean;
   max_pax: number | null;
   group_name?: string | null;
   nb_buvettes?: number;
@@ -52,6 +55,7 @@ export default function MatchAccessPage() {
   const [step, setStep] = useState<Step>('code');
   const [inputCode, setInputCode] = useState((urlCode ?? '').toUpperCase());
   const [eventData, setEventData] = useState<MatchEventData | null>(null);
+  const [supervisors, setSupervisors] = useState<SpaceOption[]>([]);
   const [selectedSpace, setSpace] = useState<SpaceOption | null>(null);
   const [serviceFilter, setFilter] = useState<Filter>('all');
   const [staffName, setStaffName] = useState('');
@@ -71,6 +75,15 @@ export default function MatchAccessPage() {
     const res = data as MatchEventData | null;
     if (!err && res?.success) {
       setEventData(res);
+      // Étape 1 buvettes : les 2 slots superviseurs (Superviseur Buvette 1/2) —
+      // la connexion se fait sur ce slot, PUIS le superviseur choisit ses buvettes.
+      // La table `spaces` est en RLS (invisible à anon) → RPC SECURITY DEFINER.
+      const { data: sup } = await supabase.rpc('get_buvette_supervisors');
+      setSupervisors(
+        ((sup as { space_id: string; space_name: string; display_name: string | null; service_type: SpaceOption['service_type'] }[] | null) ?? []).map((s) => ({
+          ...s, family: 'Buvettes', is_buvette: true, is_supervisor: true, max_pax: null,
+        })),
+      );
       setStep('space');
     } else {
       setError(res?.error ?? 'Code invalide ou match non actif');
@@ -94,18 +107,22 @@ export default function MatchAccessPage() {
     if (!err && res?.success && res.session_token) {
       setStep('ready');
       const token = res.session_token;
-      // Superviseur buvettes (nb_buvettes > 0) → tableau de bord des buvettes ;
-      // sinon accueil de zone standard (VIP / bar).
-      const dest = (selectedSpace?.nb_buvettes ?? 0) > 0 ? `/zone/match/${token}/buvettes` : `/zone/match/${token}`;
+      // Slot superviseur buvettes → tableau de bord des buvettes (étape 2 : choix
+      // des buvettes gérées) ; sinon accueil de zone standard (VIP / bar).
+      const isSup = selectedSpace?.is_supervisor || (selectedSpace?.nb_buvettes ?? 0) > 0;
+      const dest = isSup ? `/zone/match/${token}/buvettes` : `/zone/match/${token}`;
       setTimeout(() => navigate(dest), 1200);
     } else {
       setError(res?.error ?? "Erreur lors de l'enregistrement");
     }
   }
 
-  const filteredSpaces = (eventData?.spaces ?? []).filter(
-    (s) => serviceFilter === 'all' || spaceFamily(s) === serviceFilter,
-  );
+  // Onglet « Buvettes » = les 2 superviseurs (étape 1) ; on ne liste plus les
+  // buvettes physiques avant d'avoir choisi le superviseur (elles sont cochées
+  // en étape 2 via get_zone_buvettes).
+  const vipBars = (eventData?.spaces ?? []).filter((s) => spaceFamily(s) === 'VIP & Bars');
+  const filteredSpaces =
+    serviceFilter === 'Buvettes' ? supervisors : serviceFilter === 'VIP & Bars' ? vipBars : [...vipBars, ...supervisors];
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-pr-cream p-4">
@@ -179,10 +196,12 @@ export default function MatchAccessPage() {
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-pr-black">{space.space_name}</p>
+                      <p className="font-medium text-pr-black">{space.display_name ?? space.space_name}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {spaceFamily(space) === 'Buvettes' ? (
+                      {space.is_supervisor ? (
+                        <span className="rounded-full bg-indigo-100 px-2 text-xs text-indigo-700">Superviseur</span>
+                      ) : spaceFamily(space) === 'Buvettes' ? (
                         <span className="rounded-full bg-sky-100 px-2 text-xs text-sky-700">Buvette</span>
                       ) : (
                         <span className="rounded-full bg-amber-100 px-2 text-xs text-amber-700">
@@ -209,7 +228,7 @@ export default function MatchAccessPage() {
           <div className="rounded-2xl border border-pr-stone bg-white p-6 shadow-sm">
             <div className="mb-5 text-center">
               <p className="text-xs text-pr-black-soft/40">{eventData?.event_name}</p>
-              <p className="mt-1 font-medium">{selectedSpace?.space_name}</p>
+              <p className="mt-1 font-medium">{selectedSpace?.display_name ?? selectedSpace?.space_name}</p>
               <h2 className="mt-3 text-lg font-medium">Votre identité</h2>
               <p className="mt-1 text-sm text-pr-black-soft/50">Votre nom sera enregistré pour le suivi RH</p>
             </div>
@@ -243,7 +262,7 @@ export default function MatchAccessPage() {
             </div>
             <h2 className="mb-1 text-xl font-medium">Bienvenue !</h2>
             <p className="text-sm text-pr-black-soft/60">
-              {staffName.toUpperCase()} · {selectedSpace?.space_name}
+              {staffName.toUpperCase()} · {selectedSpace?.display_name ?? selectedSpace?.space_name}
             </p>
             <p className="mt-4 text-xs text-pr-black-soft/40">Redirection en cours…</p>
           </div>

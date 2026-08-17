@@ -22,6 +22,7 @@ interface BuvetteInfo {
 }
 interface ZoneBuvettesResp {
   success?: boolean;
+  supervisor?: string;
   all_buvettes?: BuvetteInfo[];
   selected_buvettes?: string[];
   selection_done?: boolean;
@@ -41,6 +42,7 @@ export default function BuvetteSupervisorPage() {
   const navigate = useNavigate();
   const [view, setView] = useState<View>('selection');
   const [all, setAll] = useState<BuvetteInfo[]>([]);
+  const [supervisor, setSupervisor] = useState<string>('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [ready, setReady] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
@@ -50,6 +52,7 @@ export default function BuvetteSupervisorPage() {
     const { data, error } = await supabase.rpc('get_zone_buvettes', { p_token: token });
     const r = data as ZoneBuvettesResp | null;
     if (error || !r?.success) return setReady(false);
+    setSupervisor(r.supervisor ?? '');
     setAll(r.all_buvettes ?? []);
     setSelected(new Set(r.selected_buvettes ?? []));
     if (r.selection_done && (r.selected_buvettes?.length ?? 0) > 0) setView('dashboard');
@@ -106,6 +109,7 @@ export default function BuvetteSupervisorPage() {
       {view === 'selection' && (
         <div className="mx-auto max-w-sm space-y-4 p-4">
           <div className="pt-2 text-center">
+            {supervisor && <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">{supervisor}</p>}
             <p className="text-lg font-bold text-slate-900">Quelles buvettes gérez-vous ce soir ?</p>
             <p className="mt-1 text-sm text-slate-400">Sélectionnez une ou plusieurs buvettes</p>
           </div>
