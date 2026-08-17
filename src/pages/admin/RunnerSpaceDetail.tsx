@@ -5,8 +5,10 @@
 
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, Send } from 'lucide-react';
+import { ArrowLeft, Check, Send, ArrowLeftRight } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 import { useRunnerPlanning } from '@/hooks/useRunnerPlanning';
 import { useLiveBalanceMap } from '@/hooks/useDepots';
 import {
@@ -36,6 +38,21 @@ export default function RunnerSpaceDetail() {
     useRunnerPlanning(id);
   const { map: liveBalance } = useLiveBalanceMap();
   const [edits, setEdits] = useState<Record<string, { qty: string; comment: string }>>({});
+
+  // CDC V5 #4 — état du TRANSFERT (dépôt → espace) déjà enregistré pour cet espace.
+  const transfersQuery = useQuery({
+    queryKey: ['runnerTransfers', id, spaceId],
+    enabled: !!id && !!spaceId,
+    queryFn: async (): Promise<{ product_id: string; qty: number }[]> => {
+      const { data } = await supabase
+        .from('stock_movements')
+        .select('product_id, qty')
+        .eq('event_id', id)
+        .eq('space_id', spaceId)
+        .eq('movement_type', 'transfert_espace');
+      return (data as { product_id: string; qty: number }[] | null) ?? [];
+    },
+  });
 
   if (plans.isLoading) return <Spinner fullPage label="Chargement…" />;
 
@@ -87,6 +104,25 @@ export default function RunnerSpaceDetail() {
         description={`${rows.length} produit(s)`}
         action={<Badge tone="info">{RUNNER_STATUS_LABELS[status]}</Badge>}
       />
+
+      {/* CDC V5 #4 — modèle TRANSFERT (L5/L6) : la fiche n'est pas une conso */}
+      {(() => {
+        const transfers = transfersQuery.data ?? [];
+        const qty = transfers.reduce((s, t) => s + (Number(t.qty) || 0), 0);
+        return (
+          <Alert variant="info" className="mb-4">
+            <span className="inline-flex items-center gap-1.5 font-medium">
+              <ArrowLeftRight className="h-4 w-4" /> Fiche = transfert
+            </span>{' '}
+            — « Transmettre » déduit le stock du <b>dépôt central</b> et l'affecte à l'espace (mouvement
+            <em> transfert</em>), <b>sans consommation</b>. La consommation réelle se calcule à la clôture :
+            initial + réassort − final.
+            {transfers.length > 0 && (
+              <> {' '}· <b>{transfers.length} produit(s) déjà transféré(s)</b> ({qty} u.).</>
+            )}
+          </Alert>
+        );
+      })()}
 
       {/* Barre de synthèse opérationnelle */}
       {rows.length > 0 &&
