@@ -81,16 +81,25 @@ export function useRunnerPlanning(eventId: string | undefined) {
         p_event_id: params.event_id,
       });
       if (error) throw error;
-      return data as {
-        success: boolean;
-        event_id: string;
-        lignes_generees: number;
-        lignes_socle?: number;
-        lignes_historique_vip?: number;
-        pax_total?: number;
-        vip_pax?: number;
-        grand_public_pax?: number;
-        ratio_grand_public?: number;
+
+      // CDC V5 #3 — arrondir « à acheminer » au conditionnement (carton/pack…).
+      let lignes_arrondies = 0;
+      const { data: rnd } = await supabase.rpc('round_runner_to_packaging', { p_event: params.event_id });
+      lignes_arrondies = Number((rnd as { lignes_arrondies?: number } | null)?.lignes_arrondies ?? 0);
+
+      return {
+        ...(data as {
+          success: boolean;
+          event_id: string;
+          lignes_generees: number;
+          lignes_socle?: number;
+          lignes_historique_vip?: number;
+          pax_total?: number;
+          vip_pax?: number;
+          grand_public_pax?: number;
+          ratio_grand_public?: number;
+        }),
+        lignes_arrondies,
       };
     },
     onSuccess: invalidate,
