@@ -1,5 +1,7 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftRight, Plus, X } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import {
   Alert,
   Badge,
@@ -20,7 +22,6 @@ import {
 import { useToast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
 import {
-  useRecordMovement,
   useStockLocations,
   useStockMovementsJournal,
 } from '@/hooks/useStockV2';
@@ -257,21 +258,26 @@ function MovementModal({
   defaultResponsable: string;
 }) {
   const { showToast } = useToast();
-  const { record, recording } = useRecordMovement();
+  const queryClient = useQueryClient();
 
   const { products } = useCatalog();
   const locationsQuery = useStockLocations();
   const eventsQuery = useEventsList();
 
-  const [type, setType] = useState<StockMovementTypeV2>('entrée_fournisseur');
+  const [type, setType] = useState<StockMovementTypeV2>('consommation');
   const [productId, setProductId] = useState('');
   const [qty, setQty] = useState('');
-  const [fromLocationId, setFromLocationId] = useState('');
+  const [locationId, setLocationId] = useState('');
   const [toLocationId, setToLocationId] = useState('');
   const [responsable, setResponsable] = useState(defaultResponsable);
   const [eventId, setEventId] = useState('');
   const [comment, setComment] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const isTransfer = type === 'transfert_espace';
+  const isCorrection = type === 'correction';
+  const sign = MOVEMENT_TYPE_V2_SIGN[type] ?? '';
 
   const typeOptions = useMemo<SelectOption[]>(
     () => V2_TYPES.map((t) => ({ value: t, label: MOVEMENT_TYPE_V2_LABELS[t] ?? t })),
@@ -287,14 +293,14 @@ function MovementModal({
   );
   const locationOptions = useMemo<SelectOption[]>(
     () => [
-      { value: '', label: 'Aucun' },
+      { value: '', label: 'Sélectionner…' },
       ...(locationsQuery.data ?? []).map((l) => ({ value: l.id, label: l.name })),
     ],
     [locationsQuery.data],
   );
   const eventOptions = useMemo<SelectOption[]>(
     () => [
-      { value: '', label: 'Aucun' },
+      { value: '', label: 'Aucun (hors événement)' },
       ...(eventsQuery.data ?? []).map((e) => ({
         value: e.event_id,
         label: e.event_name,
@@ -308,42 +314,47 @@ function MovementModal({
     setError(null);
 
     const qtyNum = Number(qty);
-    if (!productId) {
-      setError('Sélectionnez un produit.');
-      return;
-    }
-    if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
-      setError('La quantité doit être un nombre supérieur à 0.');
-      return;
-    }
-    if (responsable.trim().length < 2) {
-      setError('Le nom du responsable est obligatoire (min. 2 caractères).');
-      return;
-    }
-    if (type === 'correction' && comment.trim().length < 2) {
-      setError('Un commentaire est obligatoire pour une correction (RG-004).');
-      return;
-    }
+    if (!productId) return setError('Sélectionnez un produit.');
+    if (!Number.isFinite(qtyNum) || qtyNum === 0) return setError('La quantité doit être un nombre non nul.');
+    if (!isCorrection && qtyNum < 0) return setError('La quantité doit être positive (négatif réservé aux corrections).');
+    if (!locationId) return setError('Sélectionnez un espace / une réserve.');
+    if (isTransfer && !toLocationId) return setError('Sélectionnez la destination du transfert.');
+    if (isTransfer && toLocationId === locationId) return setError('La source et la destination doivent être différentes.');
+    if (responsable.trim().length < 2) return setError('Le nom du responsable est obligatoire (RG-001).');
+    if (isCorrection && comment.trim().length < 2) return setError('Un commentaire est obligatoire pour une correction (RG-004).');
 
-    try {
-      await record({
-        movementType: type,
-        productId,
-        qty: qtyNum,
-        fromLocationId: fromLocationId || null,
-        toLocationId: toLocationId || null,
-        responsableNom: responsable.trim(),
-        eventId: eventId || null,
-        unitPriceHt: undefined,
-        isAnomaly: type === 'correction' || type === 'perte_casse',
-      });
-      showToast('Mouvement enregistré.', 'success');
-      onClose();
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Échec de l'enregistrement.";
-      showToast(message, 'warning');
+    setSubmitting(true);
+    const { data, error: rpcErr } = await supabase.rpc('record_stock_movement', {
+      p_movement_type: type,
+      p_product_id: productId,
+      p_qty: qtyNum,
+      p_location_id: locationId,
+      p_by: responsable.trim(),
+      p_event_id: eventId || null,
+      p_to_location_id: isTransfer ? toLocationId : null,
+      p_note: comment.trim() || null,
+    });
+    setSubmitting(false);
+    const res = data as { success?: boolean; error?: string; nouveau_solde?: number } | null;
+    if (rpcErr || !res?.success) {
+      setError(res?.error ?? rpcErr?.message ?? "Échec de l'enregistrement.");
+      return;
     }
+    const solde = Number(res.nouveau_solde);
+    showToast(`Mouvement enregistré — nouveau solde : ${Number.isFinite(solde) ? solde : '—'}`, 'success');
+    if (Number.isFinite(solde) && solde < 0) {
+      showToast(`⚠️ Solde négatif (${solde}) — manque à régulariser.`, 'warning');
+    }
+    // Soldes, valorisation, alertes et analyse lisent stock_balances → rafraîchir.
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['stockMovementsJournal'] }),
+      queryClient.invalidateQueries({ queryKey: ['stockBalances'] }),
+      queryClient.invalidateQueries({ queryKey: ['stockLiveBalance'] }),
+      queryClient.invalidateQueries({ queryKey: ['stockAlerts'] }),
+      queryClient.invalidateQueries({ queryKey: ['depotsSummary'] }),
+      queryClient.invalidateQueries({ queryKey: ['criticalStatus'] }),
+    ]);
+    onClose();
   }
 
   return (
@@ -365,26 +376,31 @@ function MovementModal({
           onChange={(e) => setProductId(e.target.value)}
         />
         <Input
-          label="Quantité"
+          label={isCorrection ? 'Quantité (delta, + ou −)' : 'Quantité'}
           type="number"
-          min={1}
+          min={isCorrection ? undefined : 1}
           value={qty}
           onChange={(e) => setQty(e.target.value)}
         />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
           <Select
-            label="De (source)"
+            label={isTransfer ? 'Espace / Réserve source' : 'Espace / Réserve'}
             options={locationOptions}
-            value={fromLocationId}
-            onChange={(e) => setFromLocationId(e.target.value)}
+            value={locationId}
+            onChange={(e) => setLocationId(e.target.value)}
           />
+          <p className="mt-1 text-xs text-pr-black-soft/60">
+            Le solde de cet emplacement sera ajusté ({sign || '±'}) immédiatement.
+          </p>
+        </div>
+        {isTransfer && (
           <Select
-            label="Vers (destination)"
+            label="Espace / Réserve destination"
             options={locationOptions}
             value={toLocationId}
             onChange={(e) => setToLocationId(e.target.value)}
           />
-        </div>
+        )}
         <Input
           label="Responsable"
           value={responsable}
@@ -392,15 +408,13 @@ function MovementModal({
           hint="Traçabilité nominative obligatoire (RG-001)."
         />
         <Select
-          label="Événement (optionnel)"
+          label="Événement (optionnel, dont « autres »)"
           options={eventOptions}
           value={eventId}
           onChange={(e) => setEventId(e.target.value)}
         />
         <Textarea
-          label={
-            type === 'correction' ? 'Commentaire (obligatoire)' : 'Commentaire (optionnel)'
-          }
+          label={isCorrection ? 'Commentaire (obligatoire)' : 'Commentaire (optionnel)'}
           rows={2}
           value={comment}
           onChange={(e) => setComment(e.target.value)}
@@ -410,7 +424,7 @@ function MovementModal({
           <Button type="button" variant="secondary" onClick={onClose}>
             Annuler
           </Button>
-          <Button type="submit" loading={recording}>
+          <Button type="submit" loading={submitting}>
             Enregistrer
           </Button>
         </div>
