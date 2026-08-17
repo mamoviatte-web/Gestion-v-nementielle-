@@ -12,7 +12,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Activity, AlertTriangle, Beer, CheckCircle2, ClipboardCheck, ShieldCheck } from 'lucide-react';
+import { Activity, AlertTriangle, Beer, Boxes, CheckCircle2, ClipboardCheck, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Spinner } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
@@ -22,6 +22,7 @@ const num = (v: unknown): number => { const n = Number(v); return Number.isFinit
 interface TrueBalance { product_id: string; product_name: string; recus: number; consommes: number; purges: number; pleins_theoriques: number; vides_theoriques: number; valeur_pleins_ht: number | null }
 interface KegSummary { product_id: string; product_name: string; pleins: number; en_espace: number; vides: number }
 interface CompletenessRow { event_id: string; event_name: string; status: string; space_id: string; space_name: string; finals_manquants: number; unites_en_attente: number }
+interface StockRow { product_id: string; product_name: string; category: string; qty_auc: number; qty_est: number; qty_futs: number; qty_total_depot: number; qty_in_event: number; valeur_depot_ht: number | null; alert_status: string | null; min_stock: number | null }
 
 export default function DataHealthPage() {
   const kegQ = useQuery({
@@ -42,6 +43,28 @@ export default function DataHealthPage() {
       return (data as CompletenessRow[] | null) ?? [];
     },
   });
+
+  // CDC V5 #1/#5 — cohérence du stock général : stade = Σ localisations (dérivé).
+  const stockQ = useQuery({
+    queryKey: ['dataHealthStock'],
+    queryFn: async (): Promise<StockRow[]> => {
+      const { data } = await supabase.from('stock_live_balance').select('*');
+      return (data as StockRow[] | null) ?? [];
+    },
+  });
+  const stock = stockQ.data ?? [];
+  const stockIncoherences = useMemo(
+    () => stock.filter((r) => Math.round(num(r.qty_total_depot)) !== Math.round(num(r.qty_auc) + num(r.qty_est) + num(r.qty_futs))),
+    [stock],
+  );
+  const stockAlerts = useMemo(
+    () => stock.filter((r) => {
+      const a = String(r.alert_status ?? '').toLowerCase();
+      return a.includes('rupture') || a.includes('critique') || a.includes('alerte');
+    }),
+    [stock],
+  );
+  const stockValue = stock.reduce((s, r) => s + num(r.valeur_depot_ht), 0);
 
   const kegRows = useMemo(() => {
     const summaryById = new Map((kegQ.data?.summary ?? []).map((s) => [s.product_id, s]));
@@ -78,6 +101,51 @@ export default function DataHealthPage() {
         <ShieldCheck size={16} className="mt-0.5 shrink-0 text-pr-olive" />
         <span>Registres append-only : <b>event_stock_lines</b> (conso), réceptions <b>keg_inventory</b>, <b>event_revenue</b>, <b>occasional_hours</b>. Les vues (keg_summary, consommation, marge…) en dérivent. Chaque process est idempotent : relancé, il converge sans dupliquer.</span>
       </div>
+
+      {/* 0. Cohérence du stock général */}
+      <section className="mb-8">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-stone-800"><Boxes size={16} className="text-pr-olive" /> Cohérence du stock général (Σ localisations)</h2>
+        {stockQ.isLoading ? <Spinner /> : (
+          <>
+            <div className={`mb-3 flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${stockIncoherences.length === 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+              {stockIncoherences.length === 0
+                ? <><CheckCircle2 size={16} /> Cohérent — stock stade = Σ localisations (AUC + Stock EST + Fûts) sur {stock.length} produit(s). Aucune valeur libre.</>
+                : <><AlertTriangle size={16} /> {stockIncoherences.length} produit(s) avec du stock dépôt hors AUC / Stock EST / Fûts — à rattacher à une localisation.</>}
+            </div>
+            <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-stone-100 bg-white p-3"><p className="text-[11px] uppercase tracking-wide text-stone-400">Produits suivis</p><p className="mt-1 text-lg font-black text-stone-800">{stock.length}</p></div>
+              <div className="rounded-xl border border-stone-100 bg-white p-3"><p className="text-[11px] uppercase tracking-wide text-stone-400">Valeur dépôt HT</p><p className="mt-1 text-lg font-black text-stone-800">{formatEuro(stockValue)}</p></div>
+              <div className="rounded-xl border border-stone-100 bg-white p-3"><p className="text-[11px] uppercase tracking-wide text-stone-400">En alerte</p><p className={`mt-1 text-lg font-black ${stockAlerts.length ? 'text-rose-600' : 'text-stone-300'}`}>{stockAlerts.length}</p></div>
+              <div className="rounded-xl border border-stone-100 bg-white p-3"><p className="text-[11px] uppercase tracking-wide text-stone-400">Hors dépôts nommés</p><p className={`mt-1 text-lg font-black ${stockIncoherences.length ? 'text-amber-600' : 'text-emerald-600'}`}>{stockIncoherences.length}</p></div>
+            </div>
+            {stockAlerts.length > 0 && (
+              <div className="overflow-x-auto rounded-xl border border-stone-100">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-stone-100 bg-stone-50 text-left text-[11px] uppercase tracking-wide text-stone-400">
+                      <th className="px-3 py-2">Produit</th><th className="px-2 py-2 text-right">AUC</th><th className="px-2 py-2 text-right">EST</th>
+                      <th className="px-2 py-2 text-right">Fûts</th><th className="px-2 py-2 text-right">Total dépôt</th><th className="px-2 py-2 text-right">Mini</th><th className="px-3 py-2">Alerte</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-50">
+                    {stockAlerts.map((r) => (
+                      <tr key={r.product_id} className="text-stone-800">
+                        <td className="px-3 py-2 font-medium">{r.product_name}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-stone-500">{num(r.qty_auc)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-stone-500">{num(r.qty_est)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-stone-500">{num(r.qty_futs)}</td>
+                        <td className="px-2 py-2 text-right font-semibold tabular-nums">{num(r.qty_total_depot)}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-stone-400">{num(r.min_stock) || '—'}</td>
+                        <td className="px-3 py-2"><span className="rounded-md bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">{r.alert_status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </section>
 
       {/* 1. Audit fûts */}
       <section className="mb-8">
