@@ -33,7 +33,9 @@ export function SelectionGroupsPanel({ eventId, spaceId }: { eventId: string; sp
   const load = useCallback(async () => {
     if (!spaceId) { setRows([]); setLoading(false); return; }
     const { data } = await supabase.rpc('get_event_area_selections', { p_event: eventId, p_space: spaceId });
-    setRows((data as GroupSel[] | null) ?? []);
+    // Anti-mélange = gammes à variante unique (vins/champagne) ; bière/cola/eaux
+    // acceptent plusieurs produits → pas de choix unique à imposer.
+    setRows(((data as GroupSel[] | null) ?? []).filter((g) => !g.allow_multiple));
     setLoading(false);
   }, [eventId, spaceId]);
   useEffect(() => { setLoading(true); void load(); }, [load]);

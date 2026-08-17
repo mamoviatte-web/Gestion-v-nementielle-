@@ -82,6 +82,11 @@ export function useRunnerPlanning(eventId: string | undefined) {
       });
       if (error) throw error;
 
+      // CDC V5 #1 — appliquer les gammes : ne garder que la variante principale
+      // choisie par espace (vins/champagne), retirer les autres.
+      const { data: sel } = await supabase.rpc('apply_selection_groups', { p_event: params.event_id });
+      const lignes_variantes_retirees = Number((sel as { lignes_supprimees?: number } | null)?.lignes_supprimees ?? 0);
+
       // CDC V5 #3 — arrondir « à acheminer » au conditionnement (carton/pack…).
       let lignes_arrondies = 0;
       const { data: rnd } = await supabase.rpc('round_runner_to_packaging', { p_event: params.event_id });
@@ -100,6 +105,7 @@ export function useRunnerPlanning(eventId: string | undefined) {
           ratio_grand_public?: number;
         }),
         lignes_arrondies,
+        lignes_variantes_retirees,
       };
     },
     onSuccess: invalidate,

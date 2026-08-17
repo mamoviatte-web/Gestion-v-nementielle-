@@ -125,8 +125,10 @@ export function RunnerGenerationModal({
           ? ` (socle ${result?.lignes_socle ?? 0} + historique VIP ${result.lignes_historique_vip})`
           : '';
       const rounded = (result as { lignes_arrondies?: number } | undefined)?.lignes_arrondies ?? 0;
+      const removed = (result as { lignes_variantes_retirees?: number } | undefined)?.lignes_variantes_retirees ?? 0;
       const roundNote = rounded > 0 ? ` · ${rounded} arrondie(s) au conditionnement` : '';
-      showToast(`${result?.lignes_generees ?? 0} dotations générées${src}${split}${roundNote}`, 'success');
+      const gammeNote = removed > 0 ? ` · ${removed} variante(s) hors gamme retirée(s)` : '';
+      showToast(`${result?.lignes_generees ?? 0} dotations générées${src}${split}${gammeNote}${roundNote}`, 'success');
       // CDC V5 #2 — alerte si la Bodega ressort sans gamme vin (à compléter avant validation).
       const { data: bodega } = await supabase.rpc('get_bodega_wine_status', { p_event: eventId });
       const bw = bodega as { bodega_present?: boolean; has_wine?: boolean } | null;
