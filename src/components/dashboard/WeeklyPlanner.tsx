@@ -206,8 +206,11 @@ export function WeeklyPlanner() {
     void supabase.from('weekly_planning').select('event_id, event_day').then(({ data }) => {
       if (alive) setHeatmapEvents((data as PlanningEvent[] | null) ?? []);
     });
-    void supabase.from('events').select('event_id, event_name, event_date, event_type')
-      .neq('status', 'archivé').order('event_date').then(({ data }) => {
+    // Menu « Événement de rattachement » : uniquement les événements à venir et
+    // non clôturés (vue dérivée — se met à jour automatiquement). Le filtrage est
+    // porté par la vue, pas par le front.
+    void supabase.from('events_selectable_for_tasks').select('event_id, event_name, event_date, event_type')
+      .order('event_date').then(({ data }) => {
         if (alive) setEvents((data as EventOpt[] | null) ?? []);
       });
     void supabase.from('spaces').select('space_id, space_name').eq('active', true).order('space_name').then(({ data }) => {

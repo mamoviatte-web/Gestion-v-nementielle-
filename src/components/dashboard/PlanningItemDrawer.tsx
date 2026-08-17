@@ -6,7 +6,7 @@
  * RG-003 : écritures réservées ROLE_STADE (garde base sur les RPC phase_*).
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, Trash2, ExternalLink, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
@@ -64,6 +64,14 @@ export function PlanningItemDrawer({
   const { showToast } = useToast();
   const navigate = useNavigate();
   const isEvent = item?.kind === 'event';
+
+  // BLOC 2 — le menu ne liste que les événements à venir (events), mais une tâche
+  // déjà rattachée à un événement passé/clôturé doit conserver son rattachement :
+  // on réinjecte l'événement de l'item édité s'il n'est plus dans la liste.
+  const eventOptions = useMemo(() => {
+    if (!item?.event_id || events.some((e) => e.event_id === item.event_id)) return events;
+    return [{ event_id: item.event_id, event_name: item.event_name ?? 'Événement', event_date: item.date ?? '', event_type: item.event_type }, ...events];
+  }, [events, item]);
 
   const [eventId, setEventId] = useState(item?.event_id ?? defaultEventId ?? events[0]?.event_id ?? '');
   const [phaseType, setPhaseType] = useState(item?.phase_type && item.phase_type !== 'evenement' ? item.phase_type : 'mise_en_place');
@@ -184,9 +192,9 @@ export function PlanningItemDrawer({
               <Field label="Événement de rattachement">
                 <select value={eventId} onChange={(e) => setEventId(e.target.value)}
                   className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
-                  {events.map((e) => (
+                  {eventOptions.map((e) => (
                     <option key={e.event_id} value={e.event_id}>
-                      {e.event_name} — {new Date(e.event_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                      {e.event_name}{e.event_date ? ` — ${new Date(e.event_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}` : ''}
                     </option>
                   ))}
                 </select>
