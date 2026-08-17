@@ -32,6 +32,7 @@ import { RhOperationalBoard } from '@/components/rh/RhOperationalBoard';
 import { OccasionalHoursPanel } from '@/components/rh/OccasionalHoursPanel';
 import { VipPaxPanel } from '@/components/events/VipPaxPanel';
 import { KegReconciliationPanel } from '@/components/events/KegReconciliationPanel';
+import { SelectionGroupsPanel } from '@/components/events/SelectionGroupsPanel';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { RevenueMarginPanel } from '@/components/events/RevenueMarginPanel';
@@ -453,6 +454,7 @@ export default function EventDetailPage() {
               closed={event.status === 'clôturé' || event.status === 'archivé'}
             />
           )}
+          {isMatch && selectedSpace && <SelectionGroupsPanel eventId={event.event_id} spaceId={selectedSpace} />}
           {selectedSpace ? (
             <StockDotationsTable eventId={event.event_id} spaceId={selectedSpace} />
           ) : (
