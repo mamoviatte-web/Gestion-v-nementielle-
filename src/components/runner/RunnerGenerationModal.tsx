@@ -125,6 +125,12 @@ export function RunnerGenerationModal({
           ? ` (socle ${result?.lignes_socle ?? 0} + historique VIP ${result.lignes_historique_vip})`
           : '';
       showToast(`${result?.lignes_generees ?? 0} dotations générées${src}${split}`, 'success');
+      // CDC V5 #2 — alerte si la Bodega ressort sans gamme vin (à compléter avant validation).
+      const { data: bodega } = await supabase.rpc('get_bodega_wine_status', { p_event: eventId });
+      const bw = bodega as { bodega_present?: boolean; has_wine?: boolean } | null;
+      if (bw?.bodega_present && !bw.has_wine) {
+        showToast('🍷 Bodega sans gamme vin — complétez (Rouge NAIS / Blanc Montaurone / Rosé NAIS) avant validation.', 'warning');
+      }
       onGenerated();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de la génération.');

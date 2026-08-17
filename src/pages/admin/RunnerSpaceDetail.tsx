@@ -50,6 +50,16 @@ export default function RunnerSpaceDetail() {
     quantity_to_move: number | null;
   }): number => p.validated_quantity ?? p.quantity_to_move ?? p.recommended_quantity ?? 0;
 
+  // CDC V5 #2 — BODEGA_WINE_REQUIRED : la Bodega doit contenir une gamme vin
+  // (rouge/blanc/rosé ; le champagne Mumm ne compte pas). Bloque la validation.
+  const space0 = rows[0]?.space;
+  const isBodega =
+    space0?.space_name === 'Bodega' || (space0?.service_type as string | undefined) === 'bodega';
+  const isStillWine = (p: (typeof rows)[number]): boolean =>
+    p.product?.category === 'Vins' && !/^Mumm/i.test(p.product?.product_name ?? '');
+  const bodegaWineMissing =
+    isBodega && rows.length > 0 && !rows.some((p) => isStillWine(p) && dispatchQty(p) > 0);
+
   // Pré-dispatch : produits dont la quantité dépasse le stock dépôt disponible.
   const warnings = rows.filter((p) => {
     const depot = liveBalance.get(p.product_id)?.qty_total_depot ?? 0;
@@ -160,15 +170,29 @@ export default function RunnerSpaceDetail() {
         </div>
       )}
 
+      {/* BODEGA_WINE_REQUIRED — blocage validation si gamme vin absente */}
+      {bodegaWineMissing && (
+        <Alert variant="error" title="🍷 Bodega incomplète : gamme vin absente" className="mb-4">
+          Ajoutez au moins un vin (Rouge NAIS / Blanc Montaurone / Rosé NAIS) à la fiche runner de la Bodega
+          avant de valider ou transmettre. Régénérez les dotations ou saisissez une quantité sur un vin.
+        </Alert>
+      )}
+
       <div className="mb-4 flex flex-wrap gap-2">
-        <Button size="sm" loading={submitting} onClick={() => spaceId && void validateSpace(spaceId)}>
+        <Button
+          size="sm"
+          loading={submitting}
+          disabled={bodegaWineMissing}
+          onClick={() => spaceId && !bodegaWineMissing && void validateSpace(spaceId)}
+        >
           <Check className="h-4 w-4" /> Tout valider cet espace
         </Button>
         <Button
           size="sm"
           variant="secondary"
           loading={submitting}
-          onClick={() => spaceId && void transmitToRunners(spaceId)}
+          disabled={bodegaWineMissing}
+          onClick={() => spaceId && !bodegaWineMissing && void transmitToRunners(spaceId)}
         >
           <Send className="h-4 w-4" /> Transmettre aux runners
         </Button>
