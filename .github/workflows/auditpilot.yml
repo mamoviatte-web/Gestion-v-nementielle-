@@ -1,0 +1,48 @@
+name: AuditPilot
+
+# Audit technique & sécurité (les contrôles NON-SQL). Les contrôles métier/stock
+# tournent en base (RPC run_business_audit + pg_cron quotidien). Ici : lint,
+# type-check, build, dépendances vulnérables, secrets. Chaque échec devient un
+# finding (finding_type code|sécurité) inséré dans audit_findings via la
+# service_role — jamais exposée au front. Aucune écriture dans les données de prod.
+
+on:
+  schedule:
+    - cron: '0 5 * * *'   # quotidien ~07:00 Paris
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint || echo "LINT_FAIL=1" >> "$GITHUB_ENV"
+
+      - name: Type-check
+        run: npm run type-check || echo "TYPE_FAIL=1" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: npm run build || echo "BUILD_FAIL=1" >> "$GITHUB_ENV"
+
+      - name: Dépendances vulnérables
+        run: npm audit --omit=dev --audit-level=high || echo "DEPS_FAIL=1" >> "$GITHUB_ENV"
+
+      - name: Secrets dans le code (gitleaks)
+        run: npx --yes gitleaks@latest detect --no-banner --redact || echo "SECRET_FAIL=1" >> "$GITHUB_ENV"
+
+      # Rapport → audit_findings (uniquement si la service_role est configurée).
+      - name: Rapport AuditPilot (findings code/sécurité)
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/auditpilot-report.mjs

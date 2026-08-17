@@ -21,6 +21,7 @@ import {
   Building2,
   Beer,
   Activity,
+  ShieldCheck,
   KeyRound,
   ChevronLeft,
   ChevronRight,
@@ -57,6 +58,7 @@ const NAV: NavItem[] = [
   { to: '/admin/assortiment', label: 'Assortiment buvettes', short: 'Assortiment', icon: Beer },
   { to: '/admin/access', label: 'Gestion des accès', short: 'Accès', icon: KeyRound },
   { to: '/admin/sante', label: 'Santé des données', short: 'Santé', icon: Activity },
+  { to: '/admin/audit', label: 'AuditPilot', short: 'Audit', icon: ShieldCheck },
   { to: '/admin/export', label: 'Export', icon: Download },
 ];
 const MAIN = NAV.slice(0, 4); // Accueil · Événements · Stocks · Analyses
