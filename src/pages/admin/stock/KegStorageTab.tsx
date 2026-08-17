@@ -10,6 +10,7 @@ import {
   Building2,
   CheckCircle2,
   CircleDollarSign,
+  ClipboardList,
   Droplets,
   FlaskConical,
   PackageCheck,
@@ -19,7 +20,10 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { Alert, Badge, Button, EmptyState, Input, Select, Spinner } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import {
@@ -84,6 +88,7 @@ function KegPleinsView() {
   const [dispatchKeg, setDispatchKeg] = useState<KegSummaryRow | null>(null);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [consume, setConsume] = useState<{ keg: KegSummaryRow | null } | null>(null);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
 
   if (summary.isLoading) return <Spinner label="Chargement des fûts…" />;
   const data = summary.data;
@@ -101,6 +106,9 @@ function KegPleinsView() {
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={() => setInventoryOpen(true)}>
+          <ClipboardList className="h-4 w-4" /> Inventaire
+        </Button>
         <Button variant="secondary" onClick={() => setReceiveOpen(true)}>
           <Truck className="h-4 w-4" /> Réceptionner des fûts
         </Button>
@@ -174,6 +182,7 @@ function KegPleinsView() {
         </table>
       </div>
 
+      {inventoryOpen && <KegInventoryModal kegs={data.kegs} onClose={() => setInventoryOpen(false)} />}
       {dispatchKeg && <DispatchKegModal keg={dispatchKeg} onClose={() => setDispatchKeg(null)} />}
       {receiveOpen && <KegReceiveModal onClose={() => setReceiveOpen(false)} />}
       {consume && (
@@ -712,6 +721,119 @@ function KegReceiveModal({ onClose }: { onClose: () => void }) {
           <Button loading={receiving} onClick={handleReceive}>
             <PackageCheck className="h-4 w-4" /> Enregistrer la réception
           </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Modale inventaire fûts ─────────────────────────── */
+
+interface KegCount { counted_full: number; counted_at: string }
+
+function KegInventoryModal({ kegs, onClose }: { kegs: KegSummaryRow[]; onClose: () => void }) {
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
+  const by = user?.name ?? user?.email ?? 'Stade';
+  const [counts, setCounts] = useState<Record<string, KegCount>>({});
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [savingId, setSavingId] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const loadCounts = useCallback(async () => {
+    const { data } = await supabase
+      .from('keg_inventory_counts')
+      .select('product_id, counted_full, counted_at')
+      .order('counted_at', { ascending: false });
+    const map: Record<string, KegCount> = {};
+    for (const r of (data as { product_id: string; counted_full: number; counted_at: string }[] | null) ?? []) {
+      if (!map[r.product_id]) map[r.product_id] = { counted_full: Number(r.counted_full), counted_at: r.counted_at };
+    }
+    setCounts(map);
+    setLoading(false);
+  }, []);
+  useEffect(() => { void loadCounts(); }, [loadCounts]);
+
+  const rows = useMemo(() => [...kegs].sort((a, b) => a.product_name.localeCompare(b.product_name)), [kegs]);
+
+  async function save(k: KegSummaryRow) {
+    const raw = draft[k.product_id];
+    if (raw == null || raw.trim() === '') { showToast('Saisissez le comptage réel.', 'warning'); return; }
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0) { showToast('Comptage invalide (entier ≥ 0).', 'warning'); return; }
+    setSavingId(k.product_id);
+    const { data, error } = await supabase.rpc('record_keg_count', { p_product: k.product_id, p_full: n, p_by: by, p_note: null });
+    setSavingId('');
+    const res = data as { success?: boolean; error?: string } | null;
+    if (error || res?.success === false) { showToast(`Échec : ${error?.message ?? res?.error ?? 'erreur'}`, 'warning'); return; }
+    showToast(`${k.product_name} : comptage ${n} enregistré — le stock s'aligne.`, 'success');
+    setDraft((d) => ({ ...d, [k.product_id]: '' }));
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['kegSummary'] }),
+      queryClient.invalidateQueries({ queryKey: ['depotsSummary'] }),
+      loadCounts(),
+    ]);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-pr-black/40 p-4">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white p-5 shadow-xl">
+        <div className="mb-1 flex items-start justify-between">
+          <h2 className="flex items-center gap-2 font-display text-lg font-black text-pr-black">
+            <ClipboardList className="h-5 w-5 text-pr-olive-dark" /> Inventaire des fûts
+          </h2>
+          <button onClick={onClose} aria-label="Fermer" className="text-pr-black-soft/40 hover:text-pr-black"><X className="h-5 w-5" /></button>
+        </div>
+        <p className="mb-3 text-sm text-pr-black-soft/70">
+          Saisissez le comptage physique par fût : il devient la vérité, le stock s'aligne dessus puis suit
+          automatiquement réceptions / consommations / purges. Recomptez régulièrement pour absorber les écarts.
+        </p>
+
+        <div className="overflow-y-auto rounded-xl border border-pr-stone">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-pr-cream">
+              <tr className="border-b border-pr-stone text-left text-xs uppercase tracking-wide text-pr-black-soft/60">
+                <th className="px-3 py-2 font-semibold">Fût</th>
+                <th className="px-3 py-2 text-right font-semibold">Stock affiché</th>
+                <th className="px-3 py-2 font-semibold">Dernier comptage</th>
+                <th className="px-3 py-2 text-right font-semibold">Compté (réel)</th>
+                <th className="px-3 py-2" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-pr-stone">
+              {rows.map((k) => {
+                const c = counts[k.product_id];
+                return (
+                  <tr key={k.product_id} className="hover:bg-pr-cream/40">
+                    <td className="px-3 py-2 font-medium text-pr-black">{k.product_name}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{k.pleins}</td>
+                    <td className="px-3 py-2 text-xs text-pr-black-soft/60">
+                      {loading ? '…' : c ? `${c.counted_full} · ${new Date(c.counted_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })}` : 'jamais'}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <Input
+                        type="number" min={0}
+                        value={draft[k.product_id] ?? ''}
+                        onChange={(e) => setDraft((d) => ({ ...d, [k.product_id]: e.target.value }))}
+                        placeholder={String(k.pleins)}
+                        className="w-24 text-right"
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <Button size="sm" variant="secondary" loading={savingId === k.product_id} onClick={() => void save(k)}>
+                        <CheckCircle2 className="h-4 w-4" /> Enregistrer
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <Button onClick={onClose}>Fermer</Button>
         </div>
       </div>
     </div>
