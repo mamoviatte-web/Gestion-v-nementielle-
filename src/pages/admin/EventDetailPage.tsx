@@ -60,37 +60,69 @@ type Tab =
   | 'bilan'
   | 'rapport';
 
-/** Onglets complets pour un match (dotations runner, horaires staff…). */
-const MATCH_TABS: { key: Tab; label: string }[] = [
-  { key: 'stocks', label: 'Stocks & Dotations' },
-  { key: 'buvettes', label: '🍺 Buvettes' },
-  { key: 'horaires', label: 'Horaires Staff' },
-  { key: 'debriefs', label: 'Débriefs' },
-  { key: 'route', label: '📄 Feuille de route' },
-  { key: 'runner', label: '🚀 Fiches Runner' },
-  { key: 'rh', label: '👥 RH opérationnel' },
-  { key: 'recettes', label: '💶 Recettes & Marge' },
-  { key: 'analyse', label: '📈 Analyse conso' },
-  { key: 'gpvip', label: '⭐ GP / VIP' },
-];
-
 /**
- * Refonte navigation : 4 phases (Préparation → Jour J → Clôture → Résultats)
- * au lieu de 10 onglets. On NE réécrit PAS les écrans : chaque phase REGROUPE
- * les onglets match existants comme sous-onglets. Une donnée = une source
- * (les composants gardent leurs mêmes RPC) → aucune divergence entre phases.
+ * Refonte navigation (V2) : 4 phases (Préparation → Jour J → Clôture → Résultats)
+ * au lieu de 10 onglets. On NE réécrit PAS les écrans : chaque sous-onglet REMONTE
+ * les composants existants (mêmes RPC/vues → une seule source par donnée, aucune
+ * divergence entre phases). Les sous-onglets re-répartissent finement le contenu
+ * de l'ex-onglet « Stocks & Dotations » : pax/config → Préparation, saisie →
+ * Jour J, stock final + fûts → Clôture.
  */
 type Phase = 'prep' | 'jourj' | 'cloture' | 'resultats';
-const MATCH_PHASES: { key: Phase; label: string; tabs: Tab[] }[] = [
-  // Préparation : pax & dotations, fiches runner, feuilles de route, assortiment buvettes.
-  { key: 'prep', label: '① Préparation', tabs: ['stocks', 'runner', 'route', 'buvettes'] },
-  // Jour J : horaires terrain + RH opérationnel (fusion).
-  { key: 'jourj', label: '② Jour J', tabs: ['horaires', 'rh'] },
-  // Clôture : débriefs (+ réconciliation fûts affichée en tête de phase).
-  { key: 'cloture', label: '③ Clôture', tabs: ['debriefs'] },
-  // Résultats : recettes & marge + analyse conso (fusion).
-  { key: 'resultats', label: '④ Résultats', tabs: ['recettes', 'analyse', 'gpvip'] },
+type MatchSub =
+  | 'pax' // Préparation
+  | 'dotations'
+  | 'route'
+  | 'buvettes'
+  | 'saisie' // Jour J
+  | 'rh'
+  | 'final' // Clôture
+  | 'debriefs'
+  | 'recettes' // Résultats
+  | 'analyse'
+  | 'gpvip';
+
+/** Sous-onglets par phase : la même donnée montée au même endroit qu'avant. */
+const MATCH_PHASES: { key: Phase; label: string; subs: { key: MatchSub; label: string }[] }[] = [
+  {
+    key: 'prep',
+    label: '① Préparation',
+    subs: [
+      { key: 'pax', label: 'Espaces & pax' },
+      { key: 'dotations', label: 'Dotations & fiches runner' },
+      { key: 'route', label: '📄 Feuille de route' },
+      { key: 'buvettes', label: '🍺 Buvettes' },
+    ],
+  },
+  {
+    key: 'jourj',
+    label: '② Jour J',
+    subs: [
+      { key: 'saisie', label: '📦 Saisie stock' },
+      { key: 'rh', label: '⏱ Horaires / RH staff' },
+    ],
+  },
+  {
+    key: 'cloture',
+    label: '③ Clôture',
+    subs: [
+      { key: 'final', label: '🍺 Stock final & fûts' },
+      { key: 'debriefs', label: 'Débriefs' },
+    ],
+  },
+  {
+    key: 'resultats',
+    label: '④ Résultats',
+    subs: [
+      { key: 'recettes', label: '💶 Recettes & marge' },
+      { key: 'analyse', label: '📈 Analyse conso' },
+      { key: 'gpvip', label: '⭐ GP / VIP' },
+    ],
+  },
 ];
+
+/** Sous-onglets nécessitant le sélecteur d'espace (composant par espace). */
+const SPACE_SUBS: MatchSub[] = ['pax', 'dotations', 'saisie', 'rh', 'final'];
 
 /** Onglets simplifiés pour un séminaire / événement hors match (sans Prestataires ni Runner). */
 const SEMINAIRE_TABS: { key: Tab; label: string }[] = [
@@ -118,15 +150,16 @@ export default function EventDetailPage() {
   const { setStatus, updating } = useEventActions(id);
   const { showToast } = useToast();
   const { user } = useAuth();
-  const [tab, setTab] = useState<Tab>('stocks');
-  const [phase, setPhase] = useState<Phase>('prep');
+  const [tab, setTab] = useState<Tab>('espaces'); // onglets séminaire uniquement
+  const [phase, setPhase] = useState<Phase>('prep'); // phase active (matchs)
+  const [sub, setSub] = useState<MatchSub>('pax'); // sous-onglet actif (matchs)
   const [spaceId, setSpaceId] = useState<string>('');
 
-  /** Change de phase et positionne l'onglet sur le 1er sous-onglet de la phase. */
+  /** Change de phase et positionne sur le 1er sous-onglet de la phase. */
   function selectPhase(p: Phase) {
     setPhase(p);
-    const first = MATCH_PHASES.find((x) => x.key === p)?.tabs[0];
-    if (first) setTab(first);
+    const first = MATCH_PHASES.find((x) => x.key === p)?.subs[0]?.key;
+    if (first) setSub(first);
   }
   const [showRunnerModal, setShowRunnerModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -194,11 +227,12 @@ export default function EventDetailPage() {
   // Adapter l'interface au type d'événement : un séminaire n'a pas besoin des
   // dotations runner ni des horaires staff — vue simplifiée (codes espaces + bilan).
   const isMatch = event.event_type === 'match';
-  // Matchs : les sous-onglets = ceux de la phase active. Séminaires : inchangé.
+  // Matchs : sous-onglet actif = celui de la phase courante.
   const activePhaseDef = MATCH_PHASES.find((p) => p.key === phase) ?? MATCH_PHASES[0];
-  const phaseTabs = MATCH_TABS.filter((t) => activePhaseDef.tabs.includes(t.key));
-  const TABS = isMatch ? phaseTabs : SEMINAIRE_TABS;
-  const activeTab: Tab = TABS.some((t) => t.key === tab) ? tab : TABS[0].key;
+  const phaseSubs = activePhaseDef.subs;
+  const activeSub: MatchSub = phaseSubs.some((s) => s.key === sub) ? sub : phaseSubs[0].key;
+  // Séminaires : onglets simples inchangés.
+  const activeTab: Tab = SEMINAIRE_TABS.some((t) => t.key === tab) ? tab : SEMINAIRE_TABS[0].key;
 
   return (
     <div>
@@ -228,7 +262,7 @@ export default function EventDetailPage() {
             <li>Produits sans prix : <b>{closureIssues.produits_sans_prix}</b></li>
           </ul>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => { setPhase('resultats'); setTab('analyse'); setClosureIssues(null); window.scrollTo({ top: 400, behavior: 'smooth' }); }}>
+            <Button size="sm" onClick={() => { setPhase('resultats'); setSub('analyse'); setClosureIssues(null); window.scrollTo({ top: 400, behavior: 'smooth' }); }}>
               Corriger dans « Analyse conso »
             </Button>
             {closureIssues.produits_sans_prix > 0 && (
@@ -383,7 +417,7 @@ export default function EventDetailPage() {
           onGenerated={() => {
             setShowRunnerModal(false);
             setPhase('prep');
-            setTab('runner');
+            setSub('dotations');
           }}
         />
       )}
@@ -457,15 +491,18 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* Sous-onglets de la phase active (matchs) ou onglets séminaire */}
+      {/* Sous-onglets : phase active (matchs) ou onglets séminaire */}
       <div className="mb-5 flex flex-wrap gap-1 border-b border-slate-200">
-        {TABS.map((t) => (
+        {(isMatch
+          ? phaseSubs.map((s) => ({ key: s.key as string, label: s.label, active: activeSub === s.key, on: () => setSub(s.key) }))
+          : SEMINAIRE_TABS.map((t) => ({ key: t.key as string, label: t.label, active: activeTab === t.key, on: () => setTab(t.key) }))
+        ).map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={t.on}
             className={clsx(
               '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-              activeTab === t.key
+              t.active
                 ? 'border-provence text-provence'
                 : 'border-transparent text-slate-500 hover:text-slate-700',
             )}
@@ -475,18 +512,8 @@ export default function EventDetailPage() {
         ))}
       </div>
 
-      {/* Clôture : réconciliation fûts en tête de phase (même composant/RPC que la prépa) */}
-      {isMatch && phase === 'cloture' && (
-        <div className="mb-6">
-          <KegReconciliationPanel
-            eventId={event.event_id}
-            closed={event.status === 'clôturé' || event.status === 'archivé'}
-          />
-        </div>
-      )}
-
-      {/* Sélecteur d'espace (onglets par espace uniquement) */}
-      {spaces.length > 0 && (activeTab === 'stocks' || activeTab === 'horaires') && (
+      {/* Sélecteur d'espace (sous-onglets par espace) */}
+      {isMatch && spaces.length > 0 && SPACE_SUBS.includes(activeSub) && (
         <div className="mb-4 max-w-xs">
           <Select
             label="Espace"
@@ -500,55 +527,43 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* Contenu */}
-      {activeTab === 'espaces' && <SeminaireSpacesTab event={event} spaces={spaces} />}
-      {activeTab === 'bilan' && <SeminaireBilanTab event={event} spaces={spaces} />}
-      {activeTab === 'rapport' && <SeminarReportEditor event={event} />}
-
-      {activeTab === 'stocks' && (
+      {/* ───────── Contenu séminaire ───────── */}
+      {!isMatch && activeTab === 'espaces' && <SeminaireSpacesTab event={event} spaces={spaces} />}
+      {!isMatch && activeTab === 'bilan' && <SeminaireBilanTab event={event} spaces={spaces} />}
+      {!isMatch && activeTab === 'rapport' && <SeminarReportEditor event={event} />}
+      {!isMatch && activeTab === 'debriefs' && (
         <div className="space-y-6">
-          {isMatch && <VipPaxPanel eventId={event.event_id} />}
-          {isMatch && (
-            <KegReconciliationPanel
-              eventId={event.event_id}
-              closed={event.status === 'clôturé' || event.status === 'archivé'}
-            />
-          )}
-          {isMatch && selectedSpace && <SelectionGroupsPanel eventId={event.event_id} spaceId={selectedSpace} />}
+          <section>
+            <h2 className="mb-4 font-display text-lg font-bold text-pr-black">📸 Rapport photo &amp; terrain (retour régisseur)</h2>
+            <StadeDebriefView eventId={event.event_id} />
+          </section>
+          <DebriefScoresGrid eventId={event.event_id} spaces={spaces} />
+          <DebriefAdminPanel eventId={event.event_id} spaces={spaces} />
+        </div>
+      )}
+
+      {/* ───────── Match · ① Préparation ───────── */}
+      {isMatch && activeSub === 'pax' && (
+        <div className="space-y-6">
+          <VipPaxPanel eventId={event.event_id} />
+          {selectedSpace && <SelectionGroupsPanel eventId={event.event_id} spaceId={selectedSpace} />}
+        </div>
+      )}
+      {isMatch && activeSub === 'dotations' && (
+        <div className="space-y-6">
           {selectedSpace ? (
             <StockDotationsTable eventId={event.event_id} spaceId={selectedSpace} />
           ) : (
             <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
           )}
+          <UnifiedRunnerPanel
+            eventId={event.event_id}
+            matchNom={event.event_name}
+            matchDate={new Date(event.event_date).toLocaleDateString('fr-FR')}
+          />
         </div>
       )}
-
-      {activeTab === 'buvettes' && <BuvetteGroupsTab />}
-
-      {activeTab === 'horaires' && (
-        <div className="space-y-6">
-          {selectedSpace ? (
-            <ScheduleAdminPanel eventId={event.event_id} spaceId={selectedSpace} />
-          ) : (
-            <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
-          )}
-          <OccasionalHoursPanel eventId={event.event_id} eventDate={event.event_date} />
-          <StaffEventInsights event={event} />
-        </div>
-      )}
-      {activeTab === 'debriefs' && (
-        <div className="space-y-6">
-          {!isMatch && (
-            <section>
-              <h2 className="mb-4 font-display text-lg font-bold text-pr-black">📸 Rapport photo &amp; terrain (retour régisseur)</h2>
-              <StadeDebriefView eventId={event.event_id} />
-            </section>
-          )}
-          <DebriefScoresGrid eventId={event.event_id} spaces={spaces} />
-          <DebriefAdminPanel eventId={event.event_id} spaces={spaces} />
-        </div>
-      )}
-      {activeTab === 'route' && (
+      {isMatch && activeSub === 'route' && (
         <div className="space-y-8">
           <section>
             <h2 className="mb-4 font-display text-lg font-bold text-pr-black">📋 Brief digital par espace</h2>
@@ -560,22 +575,61 @@ export default function EventDetailPage() {
           </section>
         </div>
       )}
-      {activeTab === 'runner' && (
-        <UnifiedRunnerPanel
-          eventId={event.event_id}
-          matchNom={event.event_name}
-          matchDate={new Date(event.event_date).toLocaleDateString('fr-FR')}
-        />
+      {isMatch && activeSub === 'buvettes' && <BuvetteGroupsTab />}
+
+      {/* ───────── Match · ② Jour J ───────── */}
+      {isMatch && activeSub === 'saisie' && (
+        <div className="space-y-6">
+          {selectedSpace ? (
+            <StockDotationsTable eventId={event.event_id} spaceId={selectedSpace} />
+          ) : (
+            <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
+          )}
+        </div>
       )}
-      {activeTab === 'rh' && <RhOperationalBoard eventId={event.event_id} />}
-      {activeTab === 'recettes' && (
+      {isMatch && activeSub === 'rh' && (
+        <div className="space-y-6">
+          {selectedSpace ? (
+            <ScheduleAdminPanel eventId={event.event_id} spaceId={selectedSpace} />
+          ) : (
+            <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
+          )}
+          <OccasionalHoursPanel eventId={event.event_id} eventDate={event.event_date} />
+          <RhOperationalBoard eventId={event.event_id} />
+          <StaffEventInsights event={event} />
+        </div>
+      )}
+
+      {/* ───────── Match · ③ Clôture ───────── */}
+      {isMatch && activeSub === 'final' && (
+        <div className="space-y-6">
+          <KegReconciliationPanel
+            eventId={event.event_id}
+            closed={event.status === 'clôturé' || event.status === 'archivé'}
+          />
+          {selectedSpace ? (
+            <StockDotationsTable eventId={event.event_id} spaceId={selectedSpace} />
+          ) : (
+            <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
+          )}
+        </div>
+      )}
+      {isMatch && activeSub === 'debriefs' && (
+        <div className="space-y-6">
+          <DebriefScoresGrid eventId={event.event_id} spaces={spaces} />
+          <DebriefAdminPanel eventId={event.event_id} spaces={spaces} />
+        </div>
+      )}
+
+      {/* ───────── Match · ④ Résultats ───────── */}
+      {isMatch && activeSub === 'recettes' && (
         <RevenueMarginPanel
           eventId={event.event_id}
           spaces={spaces.map((s) => ({ space_id: s.space_id, space_name: s.spaces?.space_name ?? s.space_id }))}
         />
       )}
-      {activeTab === 'analyse' && <ConsumptionAnalysisTab event={event} />}
-      {activeTab === 'gpvip' && <MatchConsumptionReport eventId={event.event_id} />}
+      {isMatch && activeSub === 'analyse' && <ConsumptionAnalysisTab event={event} />}
+      {isMatch && activeSub === 'gpvip' && <MatchConsumptionReport eventId={event.event_id} />}
     </div>
   );
 }
