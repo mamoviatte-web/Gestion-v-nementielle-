@@ -12,6 +12,12 @@ on:
   workflow_dispatch:
   pull_request:
 
+# Le digest publie une issue/commentaire ; l'auto-fix ouvre une PR dédiée.
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
 jobs:
   audit:
     runs-on: ubuntu-latest
@@ -46,3 +52,21 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/auditpilot-report.mjs
+
+      # Digest quotidien → issue GitHub roulante (métier/stock/données + CI).
+      - name: Digest quotidien (issue GitHub)
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/auditpilot-digest.mjs
+
+      # Auto-fix mécanique (lint/deps) → Pull Request dédiée. Jamais sur la
+      # branche par défaut, jamais de données prod. Ne se déclenche que sur
+      # échec CI mécanique ; sinon no-op.
+      - name: Correctif proposé (PR auto — lint/deps)
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/auditpilot-autofix.mjs
