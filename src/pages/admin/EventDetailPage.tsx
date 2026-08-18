@@ -74,6 +74,24 @@ const MATCH_TABS: { key: Tab; label: string }[] = [
   { key: 'gpvip', label: '⭐ GP / VIP' },
 ];
 
+/**
+ * Refonte navigation : 4 phases (Préparation → Jour J → Clôture → Résultats)
+ * au lieu de 10 onglets. On NE réécrit PAS les écrans : chaque phase REGROUPE
+ * les onglets match existants comme sous-onglets. Une donnée = une source
+ * (les composants gardent leurs mêmes RPC) → aucune divergence entre phases.
+ */
+type Phase = 'prep' | 'jourj' | 'cloture' | 'resultats';
+const MATCH_PHASES: { key: Phase; label: string; tabs: Tab[] }[] = [
+  // Préparation : pax & dotations, fiches runner, feuilles de route, assortiment buvettes.
+  { key: 'prep', label: '① Préparation', tabs: ['stocks', 'runner', 'route', 'buvettes'] },
+  // Jour J : horaires terrain + RH opérationnel (fusion).
+  { key: 'jourj', label: '② Jour J', tabs: ['horaires', 'rh'] },
+  // Clôture : débriefs (+ réconciliation fûts affichée en tête de phase).
+  { key: 'cloture', label: '③ Clôture', tabs: ['debriefs'] },
+  // Résultats : recettes & marge + analyse conso (fusion).
+  { key: 'resultats', label: '④ Résultats', tabs: ['recettes', 'analyse', 'gpvip'] },
+];
+
 /** Onglets simplifiés pour un séminaire / événement hors match (sans Prestataires ni Runner). */
 const SEMINAIRE_TABS: { key: Tab; label: string }[] = [
   { key: 'espaces', label: '📍 Espaces & codes' },
@@ -101,7 +119,15 @@ export default function EventDetailPage() {
   const { showToast } = useToast();
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('stocks');
+  const [phase, setPhase] = useState<Phase>('prep');
   const [spaceId, setSpaceId] = useState<string>('');
+
+  /** Change de phase et positionne l'onglet sur le 1er sous-onglet de la phase. */
+  function selectPhase(p: Phase) {
+    setPhase(p);
+    const first = MATCH_PHASES.find((x) => x.key === p)?.tabs[0];
+    if (first) setTab(first);
+  }
   const [showRunnerModal, setShowRunnerModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [showSpacesModal, setShowSpacesModal] = useState(false);
@@ -168,7 +194,10 @@ export default function EventDetailPage() {
   // Adapter l'interface au type d'événement : un séminaire n'a pas besoin des
   // dotations runner ni des horaires staff — vue simplifiée (codes espaces + bilan).
   const isMatch = event.event_type === 'match';
-  const TABS = isMatch ? MATCH_TABS : SEMINAIRE_TABS;
+  // Matchs : les sous-onglets = ceux de la phase active. Séminaires : inchangé.
+  const activePhaseDef = MATCH_PHASES.find((p) => p.key === phase) ?? MATCH_PHASES[0];
+  const phaseTabs = MATCH_TABS.filter((t) => activePhaseDef.tabs.includes(t.key));
+  const TABS = isMatch ? phaseTabs : SEMINAIRE_TABS;
   const activeTab: Tab = TABS.some((t) => t.key === tab) ? tab : TABS[0].key;
 
   return (
@@ -199,7 +228,7 @@ export default function EventDetailPage() {
             <li>Produits sans prix : <b>{closureIssues.produits_sans_prix}</b></li>
           </ul>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => { setTab('analyse'); setClosureIssues(null); window.scrollTo({ top: 400, behavior: 'smooth' }); }}>
+            <Button size="sm" onClick={() => { setPhase('resultats'); setTab('analyse'); setClosureIssues(null); window.scrollTo({ top: 400, behavior: 'smooth' }); }}>
               Corriger dans « Analyse conso »
             </Button>
             {closureIssues.produits_sans_prix > 0 && (
@@ -353,6 +382,7 @@ export default function EventDetailPage() {
           onClose={() => setShowRunnerModal(false)}
           onGenerated={() => {
             setShowRunnerModal(false);
+            setPhase('prep');
             setTab('runner');
           }}
         />
@@ -407,7 +437,27 @@ export default function EventDetailPage() {
         </>
       )}
 
-      {/* Onglets */}
+      {/* Navigation en 4 phases (matchs) : Préparation → Jour J → Clôture → Résultats */}
+      {isMatch && (
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {MATCH_PHASES.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => selectPhase(p.key)}
+              className={clsx(
+                'rounded-xl px-4 py-2 text-sm font-semibold transition-colors',
+                phase === p.key
+                  ? 'bg-provence text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Sous-onglets de la phase active (matchs) ou onglets séminaire */}
       <div className="mb-5 flex flex-wrap gap-1 border-b border-slate-200">
         {TABS.map((t) => (
           <button
@@ -424,6 +474,16 @@ export default function EventDetailPage() {
           </button>
         ))}
       </div>
+
+      {/* Clôture : réconciliation fûts en tête de phase (même composant/RPC que la prépa) */}
+      {isMatch && phase === 'cloture' && (
+        <div className="mb-6">
+          <KegReconciliationPanel
+            eventId={event.event_id}
+            closed={event.status === 'clôturé' || event.status === 'archivé'}
+          />
+        </div>
+      )}
 
       {/* Sélecteur d'espace (onglets par espace uniquement) */}
       {spaces.length > 0 && (activeTab === 'stocks' || activeTab === 'horaires') && (
