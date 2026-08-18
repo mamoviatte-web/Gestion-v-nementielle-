@@ -104,25 +104,37 @@ async function main() {
   );
 
   // 5) Ouvrir la PR (revue humaine + CI verte requises pour merger).
-  const pr = await gh(`/repos/${REPO}/pulls`, {
-    method: 'POST',
-    body: {
-      title: `fix(auditpilot): correctifs mécaniques (${labels})`,
-      head: branch,
-      base,
-      body: [
-        '### 🤖 Correctif proposé par AuditPilot',
-        '',
-        `Généré automatiquement suite aux contrôles CI en échec : **${labels}**.`,
-        '',
-        'Correctifs appliqués :',
-        ...active.map((f) => `- \`${f.cmd}\``),
-        '',
-        '> AuditPilot **propose**, il n\'**applique** pas. Cette PR ne peut être mergée qu\'après **revue humaine** et **CI verte**. Aucune donnée de production n\'est modifiée.',
-      ].join('\n'),
-    },
-  });
-  console.log(`AuditPilot autofix: PR ouverte #${pr.number} — ${pr.html_url}`);
+  //    Si l'ouverture échoue (souvent : réglage dépôt « Allow GitHub Actions to
+  //    create and approve pull requests » désactivé → 403), on supprime la
+  //    branche poussée pour ne pas laisser de branche orpheline.
+  try {
+    const pr = await gh(`/repos/${REPO}/pulls`, {
+      method: 'POST',
+      body: {
+        title: `fix(auditpilot): correctifs mécaniques (${labels})`,
+        head: branch,
+        base,
+        body: [
+          '### 🤖 Correctif proposé par AuditPilot',
+          '',
+          `Généré automatiquement suite aux contrôles CI en échec : **${labels}**.`,
+          '',
+          'Correctifs appliqués :',
+          ...active.map((f) => `- \`${f.cmd}\``),
+          '',
+          '> AuditPilot **propose**, il n\'**applique** pas. Cette PR ne peut être mergée qu\'après **revue humaine** et **CI verte**. Aucune donnée de production n\'est modifiée.',
+        ].join('\n'),
+      },
+    });
+    console.log(`AuditPilot autofix: PR ouverte #${pr.number} — ${pr.html_url}`);
+  } catch (e) {
+    console.error('AuditPilot autofix: ouverture de PR impossible —', e.message);
+    console.error(
+      "→ Activez « Settings › Actions › General › Allow GitHub Actions to create and approve pull requests » pour que l'ouverture automatique fonctionne.",
+    );
+    await gh(`/repos/${REPO}/git/refs/heads/${branch}`, { method: 'DELETE' }).catch(() => {});
+    console.log(`AuditPilot autofix: branche ${branch} supprimée (pas de PR ouverte).`);
+  }
 }
 
 main().catch((e) => {

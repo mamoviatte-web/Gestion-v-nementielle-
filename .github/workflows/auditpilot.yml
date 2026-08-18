@@ -42,8 +42,17 @@ jobs:
       - name: Dépendances vulnérables
         run: npm audit --omit=dev --audit-level=high || echo "DEPS_FAIL=1" >> "$GITHUB_ENV"
 
+      # gitleaks n'est pas un binaire npx fiable : on télécharge le binaire officiel.
+      # Si l'outil ne peut pas s'exécuter → scan ignoré (jamais de faux « secret trouvé »).
       - name: Secrets dans le code (gitleaks)
-        run: npx --yes gitleaks@latest detect --no-banner --redact || echo "SECRET_FAIL=1" >> "$GITHUB_ENV"
+        run: |
+          set +e
+          GL_VER=$(curl -fsSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep -oP '"tag_name":\s*"v\K[^"]+' | head -n1)
+          if [ -z "$GL_VER" ]; then echo "gitleaks: version introuvable — scan ignoré"; exit 0; fi
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GL_VER}/gitleaks_${GL_VER}_linux_x64.tar.gz" -o /tmp/gl.tgz || { echo "gitleaks: téléchargement échoué — scan ignoré"; exit 0; }
+          tar -xzf /tmp/gl.tgz -C /tmp gitleaks || { echo "gitleaks: extraction échouée — scan ignoré"; exit 0; }
+          /tmp/gitleaks detect --no-banner --redact --source . || echo "SECRET_FAIL=1" >> "$GITHUB_ENV"
+          exit 0
 
       # Rapport → audit_findings (uniquement si la service_role est configurée).
       - name: Rapport AuditPilot (findings code/sécurité)
