@@ -64,7 +64,6 @@ export default function MatchAccessPage() {
 
   useEffect(() => {
     if (urlCode && urlCode.length >= 4) void validateCode(urlCode.toUpperCase());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlCode]);
 
   async function validateCode(code: string) {

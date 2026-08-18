@@ -119,7 +119,7 @@ function formatDate(iso: string): string {
 
 /** Nom de feuille Excel valide (≤ 31 car., caractères interdits retirés). */
 function sanitizeSheetName(name: string, used: Set<string>): string {
-  let base = name.replace(/[\\/?*[\]:]/g, ' ').trim().slice(0, 28) || 'Agent';
+  const base = name.replace(/[\\/?*[\]:]/g, ' ').trim().slice(0, 28) || 'Agent';
   let candidate = base;
   let n = 2;
   while (used.has(candidate.toLowerCase())) {
