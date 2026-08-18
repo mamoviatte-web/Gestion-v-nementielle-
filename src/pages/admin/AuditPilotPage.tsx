@@ -16,6 +16,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { Button, Spinner, EmptyState } from '@/components/ui';
 import { loadModule } from '@/lib/lazyModule';
+import { FindingReviewModal } from '@/components/audit/FindingReviewModal';
 
 interface AuditRun {
   id: string; started_at: string; finished_at: string | null; status: string;
@@ -51,6 +52,7 @@ export default function AuditPilotPage() {
   const [fSev, setFSev] = useState<string>('');
   const [fStatus, setFStatus] = useState<string>('');
   const [open, setOpen] = useState<string | null>(null);
+  const [review, setReview] = useState<Finding | null>(null);
 
   const runQ = useQuery({
     queryKey: ['auditLatestRun'],
@@ -230,8 +232,15 @@ export default function AuditPilotPage() {
                     {f.description && <p className="text-stone-600">{f.description}</p>}
                     {f.affected_entity_type && <p className="text-xs text-stone-400">Entité : {f.affected_entity_type}{f.affected_entity_id ? ` · ${f.affected_entity_id}` : ''}</p>}
                     {f.suggested_fix && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800"><b>Correctif proposé :</b> {f.suggested_fix}</p>}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-stone-400">Statut :</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => setReview(f)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-pr-olive px-3 py-1.5 text-xs font-bold text-white hover:opacity-90"
+                      >
+                        <ShieldCheck size={13} /> Revoir &amp; valider
+                      </button>
+                      <span className="mx-1 h-4 w-px bg-stone-200" />
+                      <span className="text-xs text-stone-400">Statut rapide :</span>
                       <select value={f.status} onChange={(e) => void changeStatus(f, e.target.value)} className="rounded-lg border border-stone-200 px-2 py-1 text-xs">
                         {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -242,6 +251,15 @@ export default function AuditPilotPage() {
             );
           })}
         </div>
+      )}
+
+      {review && (
+        <FindingReviewModal
+          finding={review}
+          by={by}
+          onClose={() => setReview(null)}
+          onApplied={() => void queryClient.invalidateQueries({ queryKey: ['auditFindings', run?.id] })}
+        />
       )}
     </div>
   );
