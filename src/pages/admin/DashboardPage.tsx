@@ -14,6 +14,7 @@ import { AlertTriangle, ChevronRight, Activity } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { isMatch } from '@/lib/eventUtils';
 import { WeeklyPlanner } from '@/components/dashboard/WeeklyPlanner';
+import { InboxPanel } from '@/components/dashboard/InboxPanel';
 
 const OR_PR = '#C9A646';
 const BLEU_NUIT = '#1A1A2E';
@@ -166,6 +167,9 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto min-h-screen max-w-6xl space-y-5 p-6" style={{ background: '#FAFAF8' }}>
+      {/* ── À TRAITER (file d'actions unifiée) ── */}
+      <InboxPanel />
+
       {/* ── HERO ── */}
       {heroEvent ? (
         <button
