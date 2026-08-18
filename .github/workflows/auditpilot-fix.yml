@@ -1,0 +1,33 @@
+name: AuditPilot Fix
+
+# Traite les « demandes de PR de correctif » (audit_fix_requests au statut pending)
+# et ouvre une PR draft dédiée par anomalie. Le token GitHub et la service_role
+# Supabase sont des secrets CI, jamais exposés au front. Ne modifie aucune donnée
+# de production. No-op si les secrets ne sont pas configurés.
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *' # ~toutes les 15 min (latence max d'ouverture de PR)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Ouvrir les PR de correctif en attente
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/auditpilot-fix.mjs

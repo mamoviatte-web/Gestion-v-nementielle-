@@ -56,9 +56,24 @@ export function FindingReviewModal({
   const [busy, setBusy] = useState(false);
   const [ignoring, setIgnoring] = useState(false);
   const [note, setNote] = useState('');
-  const [done, setDone] = useState<{ status: string; ignored: boolean } | null>(null);
+  const [done, setDone] = useState<{ status: string; ignored: boolean; pr?: { already: boolean; url: string | null } } | null>(null);
 
   const sev = sevOf(finding.severity);
+
+  /** Enregistre une demande de PR de correctif — la CI ouvrira la PR dédiée. */
+  async function requestPR() {
+    setBusy(true);
+    const { data, error } = await supabase.rpc('request_audit_fix', { p_finding: finding.id, p_by: by });
+    setBusy(false);
+    const res = data as { success?: boolean; error?: string; already?: boolean; pr_url?: string | null; status?: string } | null;
+    if (error || !res?.success) {
+      showToast(`Échec : ${res?.error ?? error?.message ?? 'erreur'}`, 'warning');
+      return;
+    }
+    const status = res.status ?? 'correction proposée';
+    setDone({ status, ignored: false, pr: { already: !!res.already, url: res.pr_url ?? null } });
+    onApplied(status);
+  }
 
   async function apply(status: string, justification: string | null = null) {
     if (status === 'ignorée avec justification' && !justification) {
@@ -103,12 +118,34 @@ export function FindingReviewModal({
             <div className={`mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full text-2xl text-white ${done.ignored ? 'bg-stone-400' : 'bg-emerald-500'}`}>
               {done.ignored ? '⌀' : '✓'}
             </div>
-            <h3 className="text-lg font-bold text-stone-900">{done.ignored ? 'Anomalie ignorée (tracée)' : 'Statut mis à jour'}</h3>
-            <p className="mt-1 text-sm text-stone-500">
-              L'anomalie « {finding.title} » est désormais au statut <b>{done.status}</b>.
-            </p>
+            <h3 className="text-lg font-bold text-stone-900">
+              {done.ignored ? 'Anomalie ignorée (tracée)' : done.pr ? 'Demande de correctif enregistrée' : 'Statut mis à jour'}
+            </h3>
+            {done.pr ? (
+              <p className="mt-1 text-sm text-stone-500">
+                {done.pr.already
+                  ? 'Une demande était déjà en cours pour cette anomalie.'
+                  : 'Statut passé en '}<b>{!done.pr.already && done.status}</b>. AuditPilot va ouvrir une <b>PR draft</b> dédiée (branche <span className="font-mono text-xs">auditpilot/fix-…</span>) sous quelques minutes.
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-stone-500">
+                L'anomalie « {finding.title} » est désormais au statut <b>{done.status}</b>.
+              </p>
+            )}
             <p className="mt-1 text-xs text-stone-400">Action tracée dans l'audit log · par {by}.</p>
-            <button onClick={onClose} className="mt-5 rounded-xl bg-pr-black px-5 py-2.5 text-sm font-bold text-white">Fermer</button>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              {done.pr && (
+                <a
+                  href={done.pr.url ?? `https://github.com/${REPO}/pulls?q=is%3Apr+head%3Aauditpilot`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 px-4 py-2.5 text-sm font-semibold text-stone-600 hover:bg-stone-50"
+                >
+                  <GitPullRequest size={14} /> {done.pr.url ? 'Voir la PR' : 'Voir les PR AuditPilot'}
+                </a>
+              )}
+              <button onClick={onClose} className="rounded-xl bg-pr-black px-5 py-2.5 text-sm font-bold text-white">Fermer</button>
+            </div>
           </div>
         ) : (
           <>
@@ -214,11 +251,11 @@ export function FindingReviewModal({
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  <button disabled={busy} onClick={() => void apply('corrigée')} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-pr-olive px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 sm:flex-none">
-                    <CheckCircle2 size={15} /> Valider — marquer corrigée
+                  <button disabled={busy} onClick={() => void requestPR()} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 sm:flex-none" style={{ background: '#1c5cab' }}>
+                    <GitPullRequest size={15} /> Créer la PR de correctif
                   </button>
-                  <button disabled={busy} onClick={() => void apply('correction proposée')} className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 disabled:opacity-40">
-                    Correction proposée
+                  <button disabled={busy} onClick={() => void apply('corrigée')} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-pr-olive px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">
+                    <CheckCircle2 size={15} /> Marquer corrigée
                   </button>
                   <button disabled={busy} onClick={() => void apply('en analyse')} className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 disabled:opacity-40">
                     En analyse
