@@ -1,6 +1,12 @@
 /**
  * AdminLayout (ROLE_STADE) — sidebar noire animée + collapsible sur desktop,
  * bottom nav (4 items + « Plus ») sur mobile. Identité Provence Rugby.
+ *
+ * Navigation regroupée (règle NN/g : ~5 destinations de 1er niveau) :
+ *   5 primaires · groupe « Ressources humaines » · groupe « Configuration »
+ *   · bas utilitaire (Qualité des données / Santé / Accès / Export).
+ * Menu seulement : toutes les pages existantes restent accessibles (aucune
+ * page fusionnée) ; « Qualité des données » = ancien AuditPilot renommé.
  */
 
 import { useState } from 'react';
@@ -25,6 +31,7 @@ import {
   KeyRound,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   MoreHorizontal,
   X,
   type LucideIcon,
@@ -42,27 +49,59 @@ interface NavItem {
   short?: string;
   icon: LucideIcon;
 }
+interface NavGroup {
+  key: string;
+  label: string;
+  defaultOpen: boolean;
+  items: NavItem[];
+}
 
-const NAV: NavItem[] = [
+/* ─── Destinations primaires (≤5, le quotidien) ─── */
+const PRIMARY: NavItem[] = [
   { to: '/admin/dashboard', label: 'Tableau de bord', short: 'Accueil', icon: LayoutDashboard },
   { to: '/admin/events', label: 'Événements', icon: CalendarDays },
   { to: '/admin/stock', label: 'Stocks', icon: Boxes },
   { to: '/admin/analytics', label: 'Analyses', icon: TrendingUp },
-  { to: '/admin/analytics/costs', label: 'Contrôle de charges', short: 'Charges', icon: Wallet },
   { to: '/admin/analytics/staff', label: 'Staff & RH', icon: Users },
-  { to: '/admin/analytics/coefficients', label: 'Coefficients espace', short: 'Coeff.', icon: Ruler },
-  { to: '/admin/rh/preplan', label: 'Planning RH Match', short: 'Planning RH', icon: UserPlus },
-  { to: '/admin/rh/populations', label: 'Populations RH', short: 'Populations', icon: Users },
-  { to: '/admin/catalog', label: 'Catalogue', icon: Package },
-  { to: '/admin/spaces', label: 'Espaces', icon: Building2 },
-  { to: '/admin/assortiment', label: 'Assortiment buvettes', short: 'Assortiment', icon: Beer },
-  { to: '/admin/access', label: 'Gestion des accès', short: 'Accès', icon: KeyRound },
+];
+
+/* ─── Groupes repliables ─── */
+const GROUPS: NavGroup[] = [
+  {
+    key: 'rh',
+    label: 'Ressources humaines',
+    defaultOpen: true,
+    items: [
+      { to: '/admin/rh/preplan', label: 'Planning RH Match', short: 'Planning RH', icon: UserPlus },
+      { to: '/admin/rh/populations', label: 'Populations RH', short: 'Populations', icon: Users },
+      { to: '/admin/analytics/coefficients', label: 'Coefficients espace', short: 'Coeff.', icon: Ruler },
+      { to: '/admin/analytics/costs', label: 'Contrôle de charges', short: 'Charges', icon: Wallet },
+    ],
+  },
+  {
+    key: 'config',
+    label: 'Configuration',
+    defaultOpen: false,
+    items: [
+      { to: '/admin/catalog', label: 'Catalogue', icon: Package },
+      { to: '/admin/spaces', label: 'Espaces', icon: Building2 },
+      { to: '/admin/assortiment', label: 'Assortiment buvettes', short: 'Assortiment', icon: Beer },
+    ],
+  },
+];
+
+/* ─── Bas utilitaire (posé une fois, rarement touché) ─── */
+const UTILITY: NavItem[] = [
+  { to: '/admin/audit', label: 'Qualité des données', short: 'Qualité', icon: ShieldCheck },
   { to: '/admin/sante', label: 'Santé des données', short: 'Santé', icon: Activity },
-  { to: '/admin/audit', label: 'AuditPilot', short: 'Audit', icon: ShieldCheck },
+  { to: '/admin/access', label: 'Gestion des accès', short: 'Accès', icon: KeyRound },
   { to: '/admin/export', label: 'Export', icon: Download },
 ];
-const MAIN = NAV.slice(0, 4); // Accueil · Événements · Stocks · Analyses
-const MORE = NAV.slice(4); // reste → sheet « Plus »
+
+/** Ordre à plat (sidebar réduite + « Plus » mobile) : primaires → groupes → utilitaire. */
+const FLAT: NavItem[] = [...PRIMARY, ...GROUPS.flatMap((g) => g.items), ...UTILITY];
+const MOBILE_MAIN = PRIMARY.slice(0, 4); // Accueil · Événements · Stocks · Analyses
+const MOBILE_MORE: NavItem[] = FLAT.slice(4); // le reste → sheet « Plus »
 
 /** /admin/analytics est préfixe de costs/staff/coefficients → match exact. */
 const exactMatch = (to: string) => to === '/admin/analytics';
@@ -75,6 +114,9 @@ export function AdminLayout() {
   const criticalAlerts = critStatus?.criticalAlerts ?? 0;
   const [collapsed, setCollapsed] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(
+    Object.fromEntries(GROUPS.map((g) => [g.key, g.defaultOpen])),
+  );
 
   async function handleLogout() {
     await logout();
@@ -83,6 +125,42 @@ export function AdminLayout() {
 
   const initials = (user?.name ?? user?.email ?? 'MV')
     .split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || 'MV';
+
+  /** Un lien de navigation (desktop) — gère actif, badge « 9+ », tooltip réduit. */
+  function SideLink({ item, sub }: { item: NavItem; sub?: boolean }) {
+    const { to, label, icon: Icon } = item;
+    return (
+      <NavLink
+        to={to}
+        end={exactMatch(to)}
+        className={({ isActive }) =>
+          clsx(
+            'group relative flex items-center gap-3 rounded-xl transition-all duration-150',
+            collapsed ? 'justify-center px-2 py-3' : sub ? 'py-2 pl-9 pr-3' : 'px-3 py-2.5',
+            isActive ? 'bg-pr-olive text-white' : 'text-pr-stone/60 hover:bg-white/5 hover:text-white',
+          )
+        }
+      >
+        {({ isActive }) => (
+          <>
+            {isActive && <span className="absolute bottom-2 left-0 top-2 w-[3px] origin-top animate-slideDown rounded-full bg-pr-gold" />}
+            <Icon className={clsx('h-[18px] w-[18px] shrink-0 transition-transform group-hover:scale-110', sub && !collapsed && 'h-4 w-4', isActive && 'text-pr-gold')} />
+            {!collapsed && <span className={clsx('flex-1 truncate leading-tight', sub ? 'text-[13px] font-medium' : 'text-sm font-medium')}>{label}</span>}
+            {to === '/admin/dashboard' && criticalAlerts > 0 && (
+              <span className={clsx('inline-flex items-center justify-center rounded-full bg-pr-rust text-[10px] font-black text-white', collapsed ? 'absolute -right-0.5 -top-0.5 h-4 w-4' : 'ml-auto h-5 min-w-[20px] px-1')}>
+                {criticalAlerts > 9 ? '9+' : criticalAlerts}
+              </span>
+            )}
+            {collapsed && (
+              <span className="pointer-events-none absolute left-full z-50 ml-2 whitespace-nowrap rounded-lg border border-white/10 bg-pr-black px-2.5 py-1.5 text-xs opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                {label}
+              </span>
+            )}
+          </>
+        )}
+      </NavLink>
+    );
+  }
 
   return (
     <div className="flex min-h-full bg-pr-cream">
@@ -113,45 +191,34 @@ export function AdminLayout() {
 
         {/* Navigation */}
         <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden px-2 py-3">
-          {NAV.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={exactMatch(to)}
-              className={({ isActive }) =>
-                clsx(
-                  'group relative flex items-center gap-3 rounded-xl transition-all duration-150',
-                  collapsed ? 'justify-center px-2 py-3' : 'px-3 py-2.5',
-                  isActive ? 'bg-pr-olive text-white' : 'text-pr-stone/60 hover:bg-white/5 hover:text-white',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive && (
-                    <span className="absolute bottom-2 left-0 top-2 w-[3px] origin-top animate-slideDown rounded-full bg-pr-gold" />
-                  )}
-                  <Icon className={clsx('h-[18px] w-[18px] shrink-0 transition-transform group-hover:scale-110', isActive && 'text-pr-gold')} />
-                  {!collapsed && <span className="flex-1 truncate text-sm font-medium leading-tight">{label}</span>}
-                  {to === '/admin/dashboard' && criticalAlerts > 0 && (
-                    <span
-                      className={clsx(
-                        'inline-flex items-center justify-center rounded-full bg-pr-rust text-[10px] font-black text-white',
-                        collapsed ? 'absolute -right-0.5 -top-0.5 h-4 w-4' : 'ml-auto h-5 min-w-[20px] px-1',
-                      )}
+          {collapsed ? (
+            // Réduit : liste à plat (icônes + tooltips), pas de groupes.
+            FLAT.map((item) => <SideLink key={item.to} item={item} />)
+          ) : (
+            <>
+              {PRIMARY.map((item) => <SideLink key={item.to} item={item} />)}
+
+              {GROUPS.map((g) => {
+                const isOpen = openGroups[g.key];
+                return (
+                  <div key={g.key} className="pt-2">
+                    <button
+                      onClick={() => setOpenGroups((s) => ({ ...s, [g.key]: !s[g.key] }))}
+                      className="flex w-full items-center gap-1 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-pr-stone/40 transition-colors hover:text-pr-stone/70"
                     >
-                      {criticalAlerts > 9 ? '9+' : criticalAlerts}
-                    </span>
-                  )}
-                  {collapsed && (
-                    <span className="pointer-events-none absolute left-full z-50 ml-2 whitespace-nowrap rounded-lg border border-white/10 bg-pr-black px-2.5 py-1.5 text-xs opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                      {label}
-                    </span>
-                  )}
-                </>
-              )}
-            </NavLink>
-          ))}
+                      <ChevronDown className={clsx('h-3 w-3 shrink-0 transition-transform', !isOpen && '-rotate-90')} />
+                      {g.label}
+                    </button>
+                    {isOpen && <div className="mt-0.5 space-y-0.5">{g.items.map((item) => <SideLink key={item.to} item={item} sub />)}</div>}
+                  </div>
+                );
+              })}
+
+              <div className="mt-3 border-t border-white/10 pt-3">
+                {UTILITY.map((item) => <SideLink key={item.to} item={item} />)}
+              </div>
+            </>
+          )}
         </nav>
 
         {/* Bouton collapse (bord droit, ping au survol) */}
@@ -208,7 +275,7 @@ export function AdminLayout() {
 
         {/* ── Bottom nav mobile : 4 items + Plus ── */}
         <nav className="fixed inset-x-0 bottom-0 z-40 flex h-14 border-t border-white/10 bg-pr-black pb-[env(safe-area-inset-bottom)] md:hidden">
-          {MAIN.map(({ to, label, short, icon: Icon }) => (
+          {MOBILE_MAIN.map(({ to, label, short, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -247,7 +314,7 @@ export function AdminLayout() {
                 </button>
               </div>
               <div className="grid grid-cols-3 gap-1 px-3 pb-5">
-                {MORE.map(({ to, label, short, icon: Icon }) => (
+                {MOBILE_MORE.map(({ to, label, short, icon: Icon }) => (
                   <NavLink
                     key={to}
                     to={to}
