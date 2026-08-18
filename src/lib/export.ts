@@ -1,15 +1,14 @@
 /**
- * Export Excel (SheetJS) — Bilan d'un événement en 3 feuilles (Phase 7).
+ * Export Excel (exceljs) — Bilan d'un événement en 3 feuilles (Phase 7).
  *
  * ⚠ Réservé au ROLE_STADE : ce fichier contient les prix et coûts (RG-003).
  * Aucun export n'est proposé côté Responsable.
  *
- * Note : la mise en gras des en-têtes nécessite `xlsx-js-style` (l'édition
- * communautaire de SheetJS ignore les styles à l'écriture). Les largeurs de
- * colonnes (`!cols`) et une ligne de titre en majuscules sont appliquées.
+ * Les feuilles sont décrites en matrices (AOA) + largeurs de colonnes, puis
+ * assemblées et téléchargées via `downloadAoaWorkbook` (voir `lib/xlsxAoa`).
  */
 
-import * as XLSX from 'xlsx';
+import { downloadAoaWorkbook } from './xlsxAoa';
 import {
   computeConsumed,
   computeCost,
@@ -220,11 +219,6 @@ export function buildProviderAOA(data: EventExportData): Row[] {
 /* Construction et téléchargement du classeur                          */
 /* ------------------------------------------------------------------ */
 
-function withColWidths(ws: XLSX.WorkSheet, widths: number[]): XLSX.WorkSheet {
-  ws['!cols'] = widths.map((wch) => ({ wch }));
-  return ws;
-}
-
 /** Synthèse pour l'aperçu (compteurs de lignes + total). */
 export function getReportSummary(data: EventExportData) {
   const stock = buildStockAOA(data);
@@ -238,27 +232,26 @@ export function getReportSummary(data: EventExportData) {
 }
 
 /** Génère et télécharge le rapport Excel 3 feuilles. */
-export function exportEventReport(data: EventExportData): void {
-  const wb = XLSX.utils.book_new();
-
+export async function exportEventReport(data: EventExportData): Promise<void> {
   const stock = buildStockAOA(data);
-  const wsStock = withColWidths(
-    XLSX.utils.aoa_to_sheet(stock.aoa),
-    [16, 8, 26, 12, 8, 9, 14, 12, 9, 12, 12, 13, 13, 16, 11, 18],
+  await downloadAoaWorkbook(
+    [
+      {
+        name: 'Bilan Stocks',
+        aoa: stock.aoa,
+        widths: [16, 8, 26, 12, 8, 9, 14, 12, 9, 12, 12, 13, 13, 16, 11, 18],
+      },
+      {
+        name: 'Horaires Staff',
+        aoa: buildScheduleAOA(data),
+        widths: [16, 22, 16, 14, 13, 12, 16, 12, 14],
+      },
+      {
+        name: 'Prestataires présents',
+        aoa: buildProviderAOA(data),
+        widths: [22, 12, 16, 14, 14, 12, 16, 12, 12, 24, 28],
+      },
+    ],
+    reportFileName(data),
   );
-  XLSX.utils.book_append_sheet(wb, wsStock, 'Bilan Stocks');
-
-  const wsSchedule = withColWidths(
-    XLSX.utils.aoa_to_sheet(buildScheduleAOA(data)),
-    [16, 22, 16, 14, 13, 12, 16, 12, 14],
-  );
-  XLSX.utils.book_append_sheet(wb, wsSchedule, 'Horaires Staff');
-
-  const wsProvider = withColWidths(
-    XLSX.utils.aoa_to_sheet(buildProviderAOA(data)),
-    [22, 12, 16, 14, 14, 12, 16, 12, 12, 24, 28],
-  );
-  XLSX.utils.book_append_sheet(wb, wsProvider, 'Prestataires présents');
-
-  XLSX.writeFile(wb, reportFileName(data));
 }

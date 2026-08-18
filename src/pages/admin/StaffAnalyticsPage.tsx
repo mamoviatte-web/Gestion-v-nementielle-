@@ -17,7 +17,7 @@ import {
   Calendar,
   UserCheck,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { downloadAoaWorkbook } from '@/lib/xlsxAoa';
 import {
   Badge,
   Button,
@@ -731,11 +731,6 @@ function AlertesView({ summaries }: { summaries: StaffEventSummary[] }) {
 
 /* ---- 6. Export ---- */
 
-function withColWidths(ws: XLSX.WorkSheet, widths: number[]): XLSX.WorkSheet {
-  ws['!cols'] = widths.map((wch) => ({ wch }));
-  return ws;
-}
-
 function ExportView({
   summaries,
   schedules,
@@ -751,7 +746,7 @@ function ExportView({
 }) {
   const { showToast } = useToast();
 
-  const exportHours = () => {
+  const exportHours = async () => {
     const aoa: (string | number)[][] = [
       [`PROVENCE RUGBY — RAPPORT HORAIRES — ${eventTypeLabel} — ${today()}`],
       [],
@@ -768,14 +763,14 @@ function ExportView({
         Number(overtimeH(r).toFixed(2)),
       ]);
     }
-    const wb = XLSX.utils.book_new();
-    const ws = withColWidths(XLSX.utils.aoa_to_sheet(aoa), [24, 22, 16, 18, 14, 14, 10]);
-    XLSX.utils.book_append_sheet(wb, ws, 'Horaires');
-    XLSX.writeFile(wb, `Rapport_horaires_${eventTypeLabel}_${today()}.xlsx`);
+    await downloadAoaWorkbook(
+      [{ name: 'Horaires', aoa, widths: [24, 22, 16, 18, 14, 14, 10] }],
+      `Rapport_horaires_${eventTypeLabel}_${today()}.xlsx`,
+    );
     showToast('Rapport horaires exporté', 'success');
   };
 
-  const exportEfficiency = () => {
+  const exportEfficiency = async () => {
     const aoa: (string | number)[][] = [
       [`PROVENCE RUGBY — EFFICACITÉ RH — ${eventTypeLabel} — ${today()}`],
       [],
@@ -791,16 +786,15 @@ function ExportView({
         s.efficiency_score != null ? Math.round(s.efficiency_score * 100) : '',
       ]);
     }
-    const wb = XLSX.utils.book_new();
-    const ws = withColWidths(XLSX.utils.aoa_to_sheet(aoa), [24, 14, 12, 16, 12, 14]);
-    XLSX.utils.book_append_sheet(wb, ws, 'Efficacité RH');
-    XLSX.writeFile(wb, `Rapport_efficacite_RH_${eventTypeLabel}_${today()}.xlsx`);
+    await downloadAoaWorkbook(
+      [{ name: 'Efficacité RH', aoa, widths: [24, 14, 12, 16, 12, 14] }],
+      `Rapport_efficacite_RH_${eventTypeLabel}_${today()}.xlsx`,
+    );
     showToast('Rapport efficacité RH exporté', 'success');
   };
 
-  const exportComparison = () => {
-    const wb = XLSX.utils.book_new();
-    const build = (title: string, list: StaffEventSummary[]) => {
+  const exportComparison = async () => {
+    const build = (title: string, list: StaffEventSummary[]): (string | number)[][] => {
       const aoa: (string | number)[][] = [
         [`PROVENCE RUGBY — SYNTHÈSE ${title} — ${today()}`],
         [],
@@ -817,11 +811,15 @@ function ExportView({
           s.efficiency_score != null ? Math.round(s.efficiency_score * 100) : '',
         ]);
       }
-      return withColWidths(XLSX.utils.aoa_to_sheet(aoa), [24, 12, 12, 16, 14, 12, 14]);
+      return aoa;
     };
-    XLSX.utils.book_append_sheet(wb, build('MATCHS', matchSummaries), 'Matchs');
-    XLSX.utils.book_append_sheet(wb, build('SÉMINAIRES', seminarSummaries), 'Séminaires');
-    XLSX.writeFile(wb, `Comparaison_matchs_seminaires_${today()}.xlsx`);
+    await downloadAoaWorkbook(
+      [
+        { name: 'Matchs', aoa: build('MATCHS', matchSummaries), widths: [24, 12, 12, 16, 14, 12, 14] },
+        { name: 'Séminaires', aoa: build('SÉMINAIRES', seminarSummaries), widths: [24, 12, 12, 16, 14, 12, 14] },
+      ],
+      `Comparaison_matchs_seminaires_${today()}.xlsx`,
+    );
     showToast('Comparaison exportée', 'success');
   };
 

@@ -8,7 +8,7 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import * as XLSX from 'xlsx';
+import { downloadAoaWorkbook } from '@/lib/xlsxAoa';
 import { BarChart3, Download, Image } from 'lucide-react';
 import { Alert, Badge, Button, EmptyState, Spinner } from '@/components/ui';
 import { useToast } from '@/context/ToastContext';
@@ -177,9 +177,7 @@ export function SeminaireBilanTab({
 
   /* ------------------------------ Export ------------------------------ */
 
-  function handleExport(): void {
-    const wb = XLSX.utils.book_new();
-
+  async function handleExport(): Promise<void> {
     const stockAoa: (string | number)[][] = [
       [`BILAN STOCKS — ${event.event_name} — ${formatDate(event.event_date)}`],
       [],
@@ -199,9 +197,6 @@ export function SeminaireBilanTab({
     });
     stockAoa.push([]);
     stockAoa.push(['Coût total estimé', '', '', '', '', Number(totalCost.toFixed(2)), '']);
-    const wsStock = XLSX.utils.aoa_to_sheet(stockAoa);
-    wsStock['!cols'] = [{ wch: 26 }, { wch: 18 }, { wch: 9 }, { wch: 9 }, { wch: 11 }, { wch: 13 }, { wch: 18 }];
-    XLSX.utils.book_append_sheet(wb, wsStock, 'Stocks');
 
     const planned = hm(event.start_time);
     const scheduleAoa: (string | number)[][] = [
@@ -225,9 +220,6 @@ export function SeminaireBilanTab({
         gap === null ? '⏳' : `${gap >= 0 ? '+' : ''}${gap}min`,
       ]);
     });
-    const wsSchedule = XLSX.utils.aoa_to_sheet(scheduleAoa);
-    wsSchedule['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, wsSchedule, 'Horaires');
 
     const debriefAoa: (string | number)[][] = [
       [`DÉBRIEFS — ${event.event_name}`],
@@ -245,12 +237,13 @@ export function SeminaireBilanTab({
         d?.photo_urls?.length ?? 0,
       ]);
     });
-    const wsDebrief = XLSX.utils.aoa_to_sheet(debriefAoa);
-    wsDebrief['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 16 }, { wch: 40 }, { wch: 8 }];
-    XLSX.utils.book_append_sheet(wb, wsDebrief, 'Débriefs');
 
-    XLSX.writeFile(
-      wb,
+    await downloadAoaWorkbook(
+      [
+        { name: 'Stocks', aoa: stockAoa, widths: [26, 18, 9, 9, 11, 13, 18] },
+        { name: 'Horaires', aoa: scheduleAoa, widths: [18, 20, 10, 14, 14, 10] },
+        { name: 'Débriefs', aoa: debriefAoa, widths: [18, 20, 12, 16, 40, 8] },
+      ],
       `Bilan_${event.event_name}_${new Date().toISOString().slice(0, 10)}.xlsx`,
     );
     showToast('Bilan Excel exporté.', 'success');

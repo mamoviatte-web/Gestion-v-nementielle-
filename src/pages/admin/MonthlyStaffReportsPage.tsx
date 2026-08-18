@@ -10,7 +10,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import * as XLSX from 'xlsx';
+import { downloadAoaWorkbook, type AoaSheetOut } from '@/lib/xlsxAoa';
 import {
   Users,
   Download,
@@ -310,7 +310,7 @@ export default function MonthlyStaffReportsPage() {
   }
 
   /* -------- Export Excel -------- */
-  function handleExportExcel() {
+  async function handleExportExcel() {
     if (reports.length === 0) {
       showToast('Aucune donnée à exporter.', 'warning');
       return;
@@ -318,7 +318,7 @@ export default function MonthlyStaffReportsPage() {
     const label =
       monthOptions.find((o) => o.value === month)?.label ?? month;
 
-    const wb = XLSX.utils.book_new();
+    const sheets: AoaSheetOut[] = [];
 
     // ═══ Feuille Synthèse : heures + taux + coût RH + totaux ═══
     const synth: (string | number)[][] = [
@@ -351,12 +351,7 @@ export default function MonthlyStaffReportsPage() {
       '',
       `${reports.reduce((s, r) => s + (costFor(r) ?? 0), 0).toFixed(2)} €`,
     ]);
-    const wsSynth = XLSX.utils.aoa_to_sheet(synth);
-    wsSynth['!cols'] = [
-      { wch: 24 }, { wch: 18 }, { wch: 12 }, { wch: 12 },
-      { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
-    ];
-    XLSX.utils.book_append_sheet(wb, wsSynth, 'Synthèse');
+    sheets.push({ name: 'Synthèse', aoa: synth, widths: [24, 18, 12, 12, 12, 10, 14, 14] });
 
     // ═══ Feuille par agent : détail événement par événement ═══
     const usedNames = new Set<string>();
@@ -391,18 +386,17 @@ export default function MonthlyStaffReportsPage() {
         '',
         costFor(r) != null ? `${costFor(r)!.toFixed(2)} €` : '—',
       ]);
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!cols'] = [
-        { wch: 28 }, { wch: 12 }, { wch: 18 }, { wch: 10 },
-        { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 12 },
-      ];
-      XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(r.staff_name, usedNames));
+      sheets.push({
+        name: sanitizeSheetName(r.staff_name, usedNames),
+        aoa,
+        widths: [28, 12, 18, 10, 10, 8, 12, 12],
+      });
     });
 
     // Nom fichier : Paie_2026-07_Juillet.xlsx
     const monthName = new Date(month).toLocaleDateString('fr-FR', { month: 'long' });
     const monthCap = monthName.charAt(0).toUpperCase() + monthName.slice(1);
-    XLSX.writeFile(wb, `Paie_${month.slice(0, 7)}_${monthCap}.xlsx`);
+    await downloadAoaWorkbook(sheets, `Paie_${month.slice(0, 7)}_${monthCap}.xlsx`);
     showToast('Export paie généré.', 'success');
   }
 

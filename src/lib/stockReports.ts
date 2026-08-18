@@ -1,15 +1,15 @@
 /**
- * Générateurs de rapports Excel (SheetJS) — Module Stock (onglet « Rapports »).
+ * Générateurs de rapports Excel (exceljs) — Module Stock (onglet « Rapports »).
  *
  * ⚠ Réservé au ROLE_STADE : ces exports contiennent prix et coûts (RG-003).
  *
- * Chaque fonction récupère ses données via Supabase, construit un classeur
- * avec `XLSX.utils.aoa_to_sheet` (ligne d'en-tête + lignes de données) puis
- * déclenche le téléchargement via `XLSX.writeFile`. Les tableaux vides sont
- * tolérés : on écrit alors uniquement l'en-tête.
+ * Chaque fonction récupère ses données via Supabase, construit ses feuilles en
+ * matrices (en-tête + lignes) puis déclenche le téléchargement via
+ * `downloadAoaWorkbook` (voir `lib/xlsxAoa`). Les tableaux vides sont tolérés :
+ * on écrit alors uniquement l'en-tête.
  */
 
-import * as XLSX from 'xlsx';
+import { downloadAoaWorkbook, type AoaSheetOut } from './xlsxAoa';
 import { computeConsumed } from './calculations';
 import { supabase } from '@/lib/supabase';
 
@@ -31,20 +31,14 @@ function sanitize(name: string): string {
     .replace(/^_+|_+$/g, '');
 }
 
-/** Applique des largeurs de colonnes puis retourne la feuille. */
-function withColWidths(ws: XLSX.WorkSheet, widths: number[]): XLSX.WorkSheet {
-  ws['!cols'] = widths.map((wch) => ({ wch }));
-  return ws;
-}
-
-/** Construit une feuille à partir d'une matrice + largeurs, l'ajoute au classeur. */
+/** Ajoute une feuille (matrice + largeurs) à la liste des feuilles à écrire. */
 function appendSheet(
-  wb: XLSX.WorkBook,
+  sheets: AoaSheetOut[],
   name: string,
   aoa: Row[],
   widths: number[],
 ): void {
-  XLSX.utils.book_append_sheet(wb, withColWidths(XLSX.utils.aoa_to_sheet(aoa), widths), name);
+  sheets.push({ name, aoa, widths });
 }
 
 /* ------------------------------------------------------------------ */
@@ -168,9 +162,9 @@ export async function exportRapportEvenement(eventId: string): Promise<void> {
 
   const ev = events.get(eventId);
   const label = ev ? `${sanitize(ev.name)}_${ev.date}` : sanitize(eventId);
-  const wb = XLSX.utils.book_new();
-  appendSheet(wb, 'Événement', aoa, [16, 26, 9, 9, 8, 10, 12, 14, 28, 18]);
-  XLSX.writeFile(wb, `Rapport_Evenement_${label}_${today()}.xlsx`);
+  const sheets: AoaSheetOut[] = [];
+  appendSheet(sheets,'Événement', aoa, [16, 26, 9, 9, 8, 10, 12, 14, 28, 18]);
+  await downloadAoaWorkbook(sheets,`Rapport_Evenement_${label}_${today()}.xlsx`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -208,9 +202,9 @@ export async function exportRapportEspace(spaceId: string): Promise<void> {
   }
 
   const spaceName = spaces.get(spaceId) ?? spaceId;
-  const wb = XLSX.utils.book_new();
-  appendSheet(wb, 'Espace', aoa, [28, 16, 14]);
-  XLSX.writeFile(wb, `Rapport_Espace_${sanitize(spaceName)}_${today()}.xlsx`);
+  const sheets: AoaSheetOut[] = [];
+  appendSheet(sheets,'Espace', aoa, [28, 16, 14]);
+  await downloadAoaWorkbook(sheets,`Rapport_Espace_${sanitize(spaceName)}_${today()}.xlsx`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -267,9 +261,9 @@ export async function exportRapportProduit(productId: string): Promise<void> {
   }
 
   const productName = products.get(productId)?.product_name ?? productId;
-  const wb = XLSX.utils.book_new();
-  appendSheet(wb, 'Produit', aoa, [12, 26, 16, 10, 12, 18]);
-  XLSX.writeFile(wb, `Rapport_Produit_${sanitize(productName)}_${today()}.xlsx`);
+  const sheets: AoaSheetOut[] = [];
+  appendSheet(sheets,'Produit', aoa, [12, 26, 16, 10, 12, 18]);
+  await downloadAoaWorkbook(sheets,`Rapport_Produit_${sanitize(productName)}_${today()}.xlsx`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -378,11 +372,11 @@ export async function exportRapportStockGeneral(): Promise<void> {
     ]);
   }
 
-  const wb = XLSX.utils.book_new();
-  appendSheet(wb, 'Vue globale', globalAoa, [28, 16, 14, 10, 10, 12]);
-  appendSheet(wb, 'Par emplacement', locAoa, [22, 28, 12]);
-  appendSheet(wb, 'Alertes', alertAoa, [16, 28, 22, 26]);
-  XLSX.writeFile(wb, `Rapport_Stock_General_${today()}.xlsx`);
+  const sheets: AoaSheetOut[] = [];
+  appendSheet(sheets,'Vue globale', globalAoa, [28, 16, 14, 10, 10, 12]);
+  appendSheet(sheets,'Par emplacement', locAoa, [22, 28, 12]);
+  appendSheet(sheets,'Alertes', alertAoa, [16, 28, 22, 26]);
+  await downloadAoaWorkbook(sheets,`Rapport_Stock_General_${today()}.xlsx`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -427,9 +421,9 @@ export async function exportRapportPrestataires(eventId: string): Promise<void> 
 
   const ev = events.get(eventId);
   const label = ev ? `${sanitize(ev.name)}_${ev.date}` : sanitize(eventId);
-  const wb = XLSX.utils.book_new();
-  appendSheet(wb, 'Prestataires', aoa, [24, 14, 14, 14, 14, 18]);
-  XLSX.writeFile(wb, `Rapport_Prestataires_${label}_${today()}.xlsx`);
+  const sheets: AoaSheetOut[] = [];
+  appendSheet(sheets,'Prestataires', aoa, [24, 14, 14, 14, 14, 18]);
+  await downloadAoaWorkbook(sheets,`Rapport_Prestataires_${label}_${today()}.xlsx`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -481,7 +475,7 @@ export async function exportRapportInventaire(locationId: string): Promise<void>
   }
 
   const locName = locations.get(locationId) ?? locationId;
-  const wb = XLSX.utils.book_new();
-  appendSheet(wb, 'Inventaire', aoa, [28, 11, 9, 9, 18, 12, 30, 8]);
-  XLSX.writeFile(wb, `Rapport_Inventaire_${sanitize(locName)}_${today()}.xlsx`);
+  const sheets: AoaSheetOut[] = [];
+  appendSheet(sheets,'Inventaire', aoa, [28, 11, 9, 9, 18, 12, 30, 8]);
+  await downloadAoaWorkbook(sheets,`Rapport_Inventaire_${sanitize(locName)}_${today()}.xlsx`);
 }

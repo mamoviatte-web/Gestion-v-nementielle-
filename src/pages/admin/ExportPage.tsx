@@ -80,7 +80,7 @@ export default function ExportPage() {
                 </Alert>
               )}
 
-              <Button size="lg" onClick={() => exportEventReport(data)}>
+              <Button size="lg" onClick={() => void exportEventReport(data)}>
                 <Download className="h-5 w-5" /> Télécharger {reportFileName(data)}
               </Button>
             </div>

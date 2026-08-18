@@ -1,12 +1,13 @@
 /**
  * ExcelRHImporter — import du planning prestataire RH, 100 % côté client.
- * Excel (SheetJS) → détection des blocs par feuille → resolve_space (restauration)
- * ou pôle (hors resto) → revue/édition → insertion via rh_import_agents_by_token.
- * Plus AUCUN appel Edge Function (cause de « Failed to send a request… »).
+ * Excel (exceljs) / CSV → détection des blocs par feuille → resolve_space
+ * (restauration) ou pôle (hors resto) → revue/édition → insertion via
+ * rh_import_agents_by_token. Plus AUCUN appel Edge Function.
+ * Formats acceptés : .xlsx et .csv (le .xls binaire n'est plus supporté).
  */
 
 import { useCallback, useRef, useState } from 'react';
-import * as XLSX from 'xlsx';
+import { readSheetsFromFile, type AoaSheetIn } from '@/lib/xlsxAoa';
 import { Upload, Sparkles, Loader, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -122,11 +123,11 @@ interface RawBloc {
  * ligne juste au-dessus (le « bandeau noir » fusionné, dont la valeur est en colonne B ;
  * colonne A = logo, vide). Gère 1 ou plusieurs blocs par feuille.
  */
-function parseFeuille(ws: XLSX.WorkSheet, sheetName: string): RawBloc[] {
-  const rowsFmt = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false, defval: '', raw: false });
-  const rowsRaw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false, defval: '', raw: true });
+function parseFeuille(sheet: AoaSheetIn): RawBloc[] {
+  const rowsFmt = sheet.fmt;
+  const rowsRaw = sheet.raw;
   const txt = rowsFmt.map((r) => (r as unknown[]).map(nettoie));
-  const sheetPole = POLE_KW.find(([re]) => re.test(sheetName))?.[1] ?? null;
+  const sheetPole = POLE_KW.find(([re]) => re.test(sheet.name))?.[1] ?? null;
   const cell = (arr: unknown[] | undefined, i: number): unknown => (arr ? arr[i] : undefined);
   const blocs: RawBloc[] = [];
   for (let i = 0; i < txt.length; i++) {
@@ -170,15 +171,22 @@ export function ExcelRHImporter({
 
   const handleFile = useCallback(
     async (file: File) => {
-      if (!/\.(xlsx|xls|csv)$/i.test(file.name)) { setError('Format non supporté. Utilisez XLS, XLSX ou CSV.'); setStep('error'); return; }
+      if (!/\.(xlsx|csv)$/i.test(file.name)) {
+        setError(
+          /\.xls$/i.test(file.name)
+            ? "Le format .xls (ancien Excel) n'est plus supporté. Ré-enregistrez le fichier en .xlsx ou .csv."
+            : 'Format non supporté. Utilisez XLSX ou CSV.',
+        );
+        setStep('error');
+        return;
+      }
       if (file.size > 10 * 1024 * 1024) { setError('Fichier trop lourd (max 10 Mo).'); setStep('error'); return; }
       setFileName(file.name);
       setStep('reading');
       try {
-        const buf = await file.arrayBuffer();
-        const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-        // 1) Parser tous les blocs de toutes les feuilles.
-        const blocs = wb.SheetNames.flatMap((name) => parseFeuille(wb.Sheets[name], name));
+        // 1) Lire toutes les feuilles puis parser tous les blocs.
+        const sheets = await readSheetsFromFile(file);
+        const blocs = sheets.flatMap((s) => parseFeuille(s));
         if (blocs.length === 0) { setError('Aucun bloc agent détecté dans le fichier.'); setStep('error'); return; }
         // 2) Résoudre l'espace de chaque bloc restauration (pôles = hors resto, par mot-clé du titre).
         const review: ReviewAgent[] = [];
@@ -282,10 +290,10 @@ export function ExcelRHImporter({
           onClick={() => inputRef.current?.click()}
           className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-all ${dragOver ? 'border-amber-400 bg-amber-50' : 'border-stone-200 hover:border-amber-300 hover:bg-stone-50'}`}
         >
-          <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" onChange={(e) => e.target.files?.[0] && void handleFile(e.target.files[0])} className="hidden" />
+          <input ref={inputRef} type="file" accept=".xlsx,.csv" onChange={(e) => e.target.files?.[0] && void handleFile(e.target.files[0])} className="hidden" />
           <Upload size={32} className="mx-auto mb-3 text-stone-300" />
           <p className="text-sm font-semibold text-stone-700">Déposez ou cliquez pour choisir</p>
-          <p className="mt-1 text-xs text-stone-400">XLS · XLSX · CSV · Max 10 Mo</p>
+          <p className="mt-1 text-xs text-stone-400">XLSX · CSV · Max 10 Mo</p>
         </div>
         <button onClick={onClose} className="w-full py-2 text-sm text-stone-400 hover:text-stone-600">Saisir manuellement</button>
       </div>
