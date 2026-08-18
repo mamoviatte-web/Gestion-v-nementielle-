@@ -2,11 +2,10 @@
  * AdminLayout (ROLE_STADE) — sidebar noire animée + collapsible sur desktop,
  * bottom nav (4 items + « Plus ») sur mobile. Identité Provence Rugby.
  *
- * Navigation regroupée (règle NN/g : ~5 destinations de 1er niveau) :
- *   5 primaires · groupe « Ressources humaines » · groupe « Configuration »
- *   · bas utilitaire (Qualité des données / Santé / Accès / Export).
- * Menu seulement : toutes les pages existantes restent accessibles (aucune
- * page fusionnée) ; « Qualité des données » = ancien AuditPilot renommé.
+ * Navigation pilotée par UNE SEULE source (`navConfig`) — règle NN/g : ~5
+ * destinations de 1er niveau, groupes repliables indentés, utilitaires discrets
+ * en bas. « Analyses » et « Qualité des données » sont des pages à sous-onglets
+ * (fusions) ; aucune page supprimée. État d'ouverture des groupes persisté.
  */
 
 import { useEffect, useState } from 'react';
@@ -20,13 +19,11 @@ import {
   LogOut,
   AlertTriangle,
   TrendingUp,
-  Wallet,
   Users,
   UserPlus,
   Ruler,
   Building2,
   Beer,
-  Activity,
   ShieldCheck,
   KeyRound,
   ChevronLeft,
@@ -40,7 +37,7 @@ import {
 import { clsx } from 'clsx';
 import { useAuth } from '@/context/AuthContext';
 import { useLateProvidersCount } from '@/hooks/useProviders';
-import { useCriticalStatus } from '@/hooks/useDashboardLive';
+import { useInbox } from '@/hooks/useInbox';
 import { AlertBanner } from '@/components/admin/AlertBanner';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { Logo } from '@/components/ui';
@@ -50,60 +47,49 @@ interface NavItem {
   label: string;
   short?: string;
   icon: LucideIcon;
+  badge?: 'inbox';
 }
-interface NavGroup {
-  key: string;
-  label: string;
-  defaultOpen: boolean;
-  items: NavItem[];
-}
+type NavNode =
+  | ({ kind: 'primary' } & NavItem)
+  | { kind: 'group'; id: string; label: string; defaultOpen: boolean; children: NavItem[] }
+  | ({ kind: 'utility' } & NavItem);
 
-/* ─── Destinations primaires (≤5, le quotidien) ─── */
-const PRIMARY: NavItem[] = [
-  { to: '/admin/dashboard', label: 'Tableau de bord', short: 'Accueil', icon: LayoutDashboard },
-  { to: '/admin/events', label: 'Événements', icon: CalendarDays },
-  { to: '/admin/stock', label: 'Stocks', icon: Boxes },
-  { to: '/admin/analytics', label: 'Analyses', icon: TrendingUp },
-  { to: '/admin/analytics/staff', label: 'Staff & RH', icon: Users },
-];
-
-/* ─── Groupes repliables ─── */
-const GROUPS: NavGroup[] = [
+/* ═══ SOURCE UNIQUE DE NAVIGATION ═══ */
+const navConfig: NavNode[] = [
+  { kind: 'primary', to: '/admin/dashboard', label: 'Tableau de bord', short: 'Accueil', icon: LayoutDashboard, badge: 'inbox' },
+  { kind: 'primary', to: '/admin/events', label: 'Événements', icon: CalendarDays },
+  { kind: 'primary', to: '/admin/stock', label: 'Stocks', icon: Boxes },
+  { kind: 'primary', to: '/admin/analytics', label: 'Analyses', icon: TrendingUp },
+  { kind: 'primary', to: '/admin/analytics/staff', label: 'Staff & RH', icon: Users },
   {
-    key: 'rh',
-    label: 'Ressources humaines',
-    defaultOpen: true,
-    items: [
+    kind: 'group', id: 'rh', label: 'Ressources humaines', defaultOpen: false,
+    children: [
       { to: '/admin/rh/preplan', label: 'Planning RH Match', short: 'Planning RH', icon: UserPlus },
       { to: '/admin/rh/populations', label: 'Populations RH', short: 'Populations', icon: Users },
       { to: '/admin/analytics/coefficients', label: 'Coefficients espace', short: 'Coeff.', icon: Ruler },
-      { to: '/admin/analytics/costs', label: 'Contrôle de charges', short: 'Charges', icon: Wallet },
     ],
   },
   {
-    key: 'config',
-    label: 'Configuration',
-    defaultOpen: false,
-    items: [
+    kind: 'group', id: 'config', label: 'Configuration', defaultOpen: false,
+    children: [
       { to: '/admin/catalog', label: 'Catalogue', icon: Package },
       { to: '/admin/spaces', label: 'Espaces', icon: Building2 },
       { to: '/admin/assortiment', label: 'Assortiment buvettes', short: 'Assortiment', icon: Beer },
     ],
   },
+  { kind: 'utility', to: '/admin/audit', label: 'Qualité des données', short: 'Qualité', icon: ShieldCheck },
+  { kind: 'utility', to: '/admin/access', label: 'Gestion des accès', short: 'Accès', icon: KeyRound },
+  { kind: 'utility', to: '/admin/export', label: 'Export', icon: Download },
 ];
 
-/* ─── Bas utilitaire (posé une fois, rarement touché) ─── */
-const UTILITY: NavItem[] = [
-  { to: '/admin/audit', label: 'Qualité des données', short: 'Qualité', icon: ShieldCheck },
-  { to: '/admin/sante', label: 'Santé des données', short: 'Santé', icon: Activity },
-  { to: '/admin/access', label: 'Gestion des accès', short: 'Accès', icon: KeyRound },
-  { to: '/admin/export', label: 'Export', icon: Download },
-];
-
-/** Ordre à plat (sidebar réduite + « Plus » mobile) : primaires → groupes → utilitaire. */
-const FLAT: NavItem[] = [...PRIMARY, ...GROUPS.flatMap((g) => g.items), ...UTILITY];
-const MOBILE_MAIN = PRIMARY.slice(0, 4); // Accueil · Événements · Stocks · Analyses
-const MOBILE_MORE: NavItem[] = FLAT.slice(4); // le reste → sheet « Plus »
+const PRIMARY = navConfig.filter((n): n is Extract<NavNode, { kind: 'primary' }> => n.kind === 'primary');
+const GROUPS = navConfig.filter((n): n is Extract<NavNode, { kind: 'group' }> => n.kind === 'group');
+const UTILITY = navConfig.filter((n): n is Extract<NavNode, { kind: 'utility' }> => n.kind === 'utility');
+/** Ordre à plat (sidebar réduite + « Plus » mobile + palette) : primaires → groupes → utilitaire. */
+const FLAT: NavItem[] = [...PRIMARY, ...GROUPS.flatMap((g) => g.children), ...UTILITY];
+const MOBILE_MAIN = PRIMARY.slice(0, 4);
+const MOBILE_MORE: NavItem[] = FLAT.slice(4);
+const GROUP_STORAGE = 'stockpilot.navGroups';
 
 /** /admin/analytics est préfixe de costs/staff/coefficients → match exact. */
 const exactMatch = (to: string) => to === '/admin/analytics';
@@ -112,14 +98,25 @@ export function AdminLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { data: lateCount = 0 } = useLateProvidersCount();
-  const { data: critStatus } = useCriticalStatus();
-  const criticalAlerts = critStatus?.criticalAlerts ?? 0;
+  const { data: inboxItems } = useInbox();
+  const inboxCount = inboxItems?.length ?? 0;
   const [collapsed, setCollapsed] = useState(false);
   const [showMore, setShowMore] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(
-    Object.fromEntries(GROUPS.map((g) => [g.key, g.defaultOpen])),
-  );
   const [palette, setPalette] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const defaults = Object.fromEntries(GROUPS.map((g) => [g.id, g.defaultOpen]));
+    try {
+      const saved = JSON.parse(localStorage.getItem(GROUP_STORAGE) || '{}') as Record<string, boolean>;
+      return { ...defaults, ...saved };
+    } catch {
+      return defaults;
+    }
+  });
+
+  // Persiste l'état d'ouverture des groupes entre sessions.
+  useEffect(() => {
+    try { localStorage.setItem(GROUP_STORAGE, JSON.stringify(openGroups)); } catch { /* stockage indisponible */ }
+  }, [openGroups]);
 
   // Raccourci global ⌘K / Ctrl+K → palette de commande.
   useEffect(() => {
@@ -141,9 +138,9 @@ export function AdminLayout() {
   const initials = (user?.name ?? user?.email ?? 'MV')
     .split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || 'MV';
 
-  /** Un lien de navigation (desktop) — gère actif, badge « 9+ », tooltip réduit. */
+  /** Un lien de navigation (desktop) — gère actif, badge inbox, tooltip réduit. */
   function SideLink({ item, sub }: { item: NavItem; sub?: boolean }) {
-    const { to, label, icon: Icon } = item;
+    const { to, label, icon: Icon, badge } = item;
     return (
       <NavLink
         to={to}
@@ -161,9 +158,9 @@ export function AdminLayout() {
             {isActive && <span className="absolute bottom-2 left-0 top-2 w-[3px] origin-top animate-slideDown rounded-full bg-pr-gold" />}
             <Icon className={clsx('h-[18px] w-[18px] shrink-0 transition-transform group-hover:scale-110', sub && !collapsed && 'h-4 w-4', isActive && 'text-pr-gold')} />
             {!collapsed && <span className={clsx('flex-1 truncate leading-tight', sub ? 'text-[13px] font-medium' : 'text-sm font-medium')}>{label}</span>}
-            {to === '/admin/dashboard' && criticalAlerts > 0 && (
+            {badge === 'inbox' && inboxCount > 0 && (
               <span className={clsx('inline-flex items-center justify-center rounded-full bg-pr-rust text-[10px] font-black text-white', collapsed ? 'absolute -right-0.5 -top-0.5 h-4 w-4' : 'ml-auto h-5 min-w-[20px] px-1')}>
-                {criticalAlerts > 9 ? '9+' : criticalAlerts}
+                {inboxCount > 9 ? '9+' : inboxCount}
               </span>
             )}
             {collapsed && (
@@ -227,24 +224,24 @@ export function AdminLayout() {
         {/* Navigation */}
         <nav className="flex-1 space-y-1 overflow-y-auto overflow-x-hidden px-2 py-3">
           {collapsed ? (
-            // Réduit : liste à plat (icônes + tooltips), pas de groupes.
             FLAT.map((item) => <SideLink key={item.to} item={item} />)
           ) : (
             <>
               {PRIMARY.map((item) => <SideLink key={item.to} item={item} />)}
 
               {GROUPS.map((g) => {
-                const isOpen = openGroups[g.key];
+                const isOpen = openGroups[g.id];
                 return (
-                  <div key={g.key} className="pt-2">
+                  <div key={g.id} className="pt-2">
                     <button
-                      onClick={() => setOpenGroups((s) => ({ ...s, [g.key]: !s[g.key] }))}
+                      onClick={() => setOpenGroups((s) => ({ ...s, [g.id]: !s[g.id] }))}
+                      aria-expanded={isOpen}
                       className="flex w-full items-center gap-1 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-pr-stone/40 transition-colors hover:text-pr-stone/70"
                     >
                       <ChevronDown className={clsx('h-3 w-3 shrink-0 transition-transform', !isOpen && '-rotate-90')} />
                       {g.label}
                     </button>
-                    {isOpen && <div className="mt-0.5 space-y-0.5">{g.items.map((item) => <SideLink key={item.to} item={item} sub />)}</div>}
+                    {isOpen && <div className="mt-0.5 space-y-0.5">{g.children.map((item) => <SideLink key={item.to} item={item} sub />)}</div>}
                   </div>
                 );
               })}
@@ -291,6 +288,9 @@ export function AdminLayout() {
             <p className="font-display text-sm font-bold tracking-[0.1em] text-white">PROVENCE RUGBY</p>
           </div>
           <div className="flex items-center gap-3">
+            <button onClick={() => setPalette(true)} className="text-pr-stone/80" aria-label="Rechercher">
+              <Search className="h-5 w-5" />
+            </button>
             {lateCount > 0 && (
               <span className="inline-flex items-center gap-1 rounded-full bg-pr-rust px-2 py-0.5 text-xs font-semibold text-white">
                 <AlertTriangle className="h-3.5 w-3.5" /> {lateCount}
@@ -310,7 +310,7 @@ export function AdminLayout() {
 
         {/* ── Bottom nav mobile : 4 items + Plus ── */}
         <nav className="fixed inset-x-0 bottom-0 z-40 flex h-14 border-t border-white/10 bg-pr-black pb-[env(safe-area-inset-bottom)] md:hidden">
-          {MOBILE_MAIN.map(({ to, label, short, icon: Icon }) => (
+          {MOBILE_MAIN.map(({ to, label, short, icon: Icon, badge }) => (
             <NavLink
               key={to}
               to={to}
@@ -322,7 +322,14 @@ export function AdminLayout() {
               {({ isActive }) => (
                 <>
                   {isActive && <span className="absolute top-0 h-0.5 w-8 rounded-full bg-pr-gold" />}
-                  <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
+                  <span className="relative">
+                    <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
+                    {badge === 'inbox' && inboxCount > 0 && (
+                      <span className="absolute -right-2 -top-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-pr-rust px-0.5 text-[9px] font-black text-white">
+                        {inboxCount > 9 ? '9+' : inboxCount}
+                      </span>
+                    )}
+                  </span>
                   <span className="text-[9px] font-semibold tracking-wide">{short ?? label}</span>
                 </>
               )}

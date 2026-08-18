@@ -36,13 +36,11 @@ const EventPlanningPage = lazy(() => import('@/pages/admin/EventPlanningPage'));
 const CatalogPage = lazy(() => import('@/pages/admin/CatalogPage'));
 const SpacesPage = lazy(() => import('@/pages/admin/SpacesPage'));
 const BuvetteAssortmentPage = lazy(() => import('@/pages/admin/BuvetteAssortmentPage'));
-const DataHealthPage = lazy(() => import('@/pages/admin/DataHealthPage'));
-const AuditPilotPage = lazy(() => import('@/pages/admin/AuditPilotPage'));
+const QualityHubPage = lazy(() => import('@/pages/admin/QualityHubPage'));
 const RhPopulationsPage = lazy(() => import('@/pages/admin/RhPopulationsPage'));
 const AccessManagementPage = lazy(() => import('@/pages/admin/AccessManagementPage'));
 const StockPage = lazy(() => import('@/pages/admin/stock/StockPage'));
-const AnalyticsPage = lazy(() => import('@/pages/admin/AnalyticsPage'));
-const CostControlPage = lazy(() => import('@/pages/admin/CostControlPage'));
+const AnalysesHubPage = lazy(() => import('@/pages/admin/AnalysesHubPage'));
 const StaffAnalyticsPage = lazy(() => import('@/pages/admin/StaffRHPage'));
 const MonthlyStaffReportsPage = lazy(() => import('@/pages/admin/MonthlyStaffReportsPage'));
 const HRPreplanPage = lazy(() => import('@/pages/admin/HRPreplanPage'));
@@ -122,8 +120,9 @@ export default function App() {
           <Route path="events/:id/runner/:spaceId" element={<RunnerSpaceDetail />} />
           <Route path="events/:id/planning" element={<EventPlanningPage />} />
           <Route path="stock" element={<StockPage />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
-          <Route path="analytics/costs" element={<CostControlPage />} />
+          <Route path="analytics" element={<AnalysesHubPage />} />
+          {/* Fusion : ancienne route Contrôle de charges → onglet « Charges » */}
+          <Route path="analytics/costs" element={<Navigate to="/admin/analytics?tab=charges" replace />} />
           <Route path="analytics/staff" element={<StaffAnalyticsPage />} />
           <Route path="analytics/staff/monthly" element={<MonthlyStaffReportsPage />} />
           <Route path="analytics/coefficients" element={<CoefficientsPage />} />
@@ -132,8 +131,9 @@ export default function App() {
           <Route path="catalog" element={<CatalogPage />} />
           <Route path="spaces" element={<SpacesPage />} />
           <Route path="assortiment" element={<BuvetteAssortmentPage />} />
-          <Route path="sante" element={<DataHealthPage />} />
-          <Route path="audit" element={<AuditPilotPage />} />
+          {/* Fusion : ancienne route Santé des données → onglet « Santé » de Qualité */}
+          <Route path="sante" element={<Navigate to="/admin/audit?tab=sante" replace />} />
+          <Route path="audit" element={<QualityHubPage />} />
           <Route path="access" element={<AccessManagementPage />} />
           <Route path="export" element={<ExportPage />} />
         </Route>
