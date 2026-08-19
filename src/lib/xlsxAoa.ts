@@ -56,6 +56,8 @@ export interface AoaSheetIn {
   name: string;
   fmt: unknown[][];
   raw: unknown[][];
+  /** Feuille dont la lecture a échoué (corrompue) — à signaler, pas à bloquer. */
+  failed?: boolean;
 }
 
 /** Texte affiché d'une cellule exceljs (équiv. SheetJS `raw:false`). */
@@ -121,46 +123,65 @@ function parseCsv(text: string): string[][] {
  *  - `.csv`  → parseur manuel (une feuille)
  *  - `.xls`  → non supporté (message d'erreur explicite)
  */
-export async function readSheetsFromFile(file: File): Promise<AoaSheetIn[]> {
-  const lower = file.name.toLowerCase();
-
-  if (lower.endsWith('.xls')) {
-    throw new Error(
-      "Le format .xls (ancien Excel) n'est plus supporté. Enregistrez le fichier en .xlsx (Excel) ou .csv, puis réimportez-le.",
-    );
-  }
-
-  if (lower.endsWith('.csv')) {
-    const rows = parseCsv(await file.text());
-    return [{ name: file.name.replace(/\.csv$/i, ''), fmt: rows, raw: rows }];
-  }
-
-  // .xlsx
+/** Lecture .xlsx via exceljs, RÉSILIENTE : une feuille qui plante est ignorée,
+ *  les autres continuent (jamais d'échec global). */
+async function readXlsx(file: File): Promise<AoaSheetIn[]> {
   const ExcelJSMod = (await loadModule(() => import('exceljs'))).default;
   const wb = new ExcelJSMod.Workbook();
   await wb.xlsx.load(await file.arrayBuffer());
 
   const sheets: AoaSheetIn[] = [];
   wb.eachSheet((ws) => {
-    const fmt: unknown[][] = [];
-    const raw: unknown[][] = [];
-    const colCount = ws.columnCount;
-    ws.eachRow({ includeEmpty: true }, (rowObj) => {
-      const f: unknown[] = [];
-      const r: unknown[] = [];
-      for (let c = 1; c <= colCount; c++) {
-        const cell = rowObj.getCell(c);
-        f.push(cellText(cell));
-        r.push(cellRaw(cell));
-      }
-      // Ignore les lignes entièrement vides (équiv. `blankrows:false`),
-      // en gardant fmt et raw alignés.
-      if (f.some((x) => String(x ?? '').trim() !== '')) {
-        fmt.push(f);
-        raw.push(r);
-      }
-    });
-    sheets.push({ name: ws.name, fmt, raw });
+    try {
+      const fmt: unknown[][] = [];
+      const raw: unknown[][] = [];
+      const colCount = ws.columnCount;
+      ws.eachRow({ includeEmpty: true }, (rowObj) => {
+        const f: unknown[] = [];
+        const r: unknown[] = [];
+        for (let c = 1; c <= colCount; c++) {
+          const cell = rowObj.getCell(c);
+          f.push(cellText(cell));
+          r.push(cellRaw(cell));
+        }
+        // Ignore les lignes entièrement vides, en gardant fmt et raw alignés.
+        if (f.some((x) => String(x ?? '').trim() !== '')) {
+          fmt.push(f);
+          raw.push(r);
+        }
+      });
+      sheets.push({ name: ws.name, fmt, raw });
+    } catch {
+      // Feuille corrompue : on la marque et on continue (dégradation gracieuse).
+      sheets.push({ name: ws.name, fmt: [], raw: [], failed: true });
+    }
   });
   return sheets;
+}
+
+async function readCsv(file: File): Promise<AoaSheetIn[]> {
+  const rows = parseCsv(await file.text());
+  return [{ name: file.name.replace(/\.[^.]+$/i, '') || 'CSV', fmt: rows, raw: rows }];
+}
+
+/**
+ * Lit un fichier importé en feuilles-matrices, avec CHAÎNE DE REPLI et sans
+ * jamais refuser brutalement : on tente le lecteur adapté à l'extension puis
+ * l'autre (extension trompeuse tolérée). Ne throw qu'en dernier recours, avec
+ * un message actionnable (l'appelant l'affiche sans bloquer l'app).
+ * NB : le .xls binaire n'est pas lisible côté client → il tombe dans le repli
+ * et déclenche le message « illisible, réessayez / collez les données ».
+ */
+export async function readSheetsFromFile(file: File): Promise<AoaSheetIn[]> {
+  const lower = file.name.toLowerCase();
+  const chain = lower.endsWith('.csv') ? [readCsv, readXlsx] : [readXlsx, readCsv];
+  for (const reader of chain) {
+    try {
+      const sheets = await reader(file);
+      if (sheets.length) return sheets;
+    } catch {
+      // lecteur suivant
+    }
+  }
+  throw new Error('Fichier illisible. Réessayez, convertissez-le en .xlsx ou .csv, ou collez les données manuellement.');
 }

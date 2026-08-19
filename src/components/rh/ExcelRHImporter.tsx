@@ -1,9 +1,13 @@
 /**
- * ExcelRHImporter — import du planning prestataire RH, 100 % côté client.
- * Excel (exceljs) / CSV → détection des blocs par feuille → resolve_space
- * (restauration) ou pôle (hors resto) → revue/édition → insertion via
- * rh_import_agents_by_token. Plus AUCUN appel Edge Function.
- * Formats acceptés : .xlsx et .csv (le .xls binaire n'est plus supporté).
+ * ExcelRHImporter — import du planning prestataire RH « increvable », 100 % côté
+ * client. Lecture tolérante (chaîne de repli, jamais de refus) → détection des
+ * blocs par feuille + colonnes par intitulé → resolve_space (restauration) ou
+ * pôle (hors resto) → revue/édition (bac « à vérifier ») → insertion idempotente
+ * via rh_import_agents_by_token.
+ *
+ * Principe : dégradation gracieuse. Une feuille qui plante est passée + signalée
+ * (les autres continuent) ; une cellule/ligne illisible part en anomalie, jamais
+ * un échec global ; aucune écriture avant l'aperçu validé par l'humain.
  */
 
 import { useCallback, useRef, useState } from 'react';
@@ -48,14 +52,40 @@ const POLE_KW: [RegExp, string][] = [
 
 const nettoie = (v: unknown): string =>
   String(v ?? '').replace(/[✅☑✔]/g, '').replace(/#REF!/g, '').replace(/#+/g, '').trim();
+// En-tête = une ligne qui a une colonne « poste-ish » ET une colonne « nom-ish »
+// (accents/casse ignorés) — tolère « Fonction/Agent », « Poste/Nom Prénom »…
 const estEntete = (cells: string[]): boolean => {
-  const t = cells.map((c) => c.toLowerCase()).join(' ');
-  return t.includes('poste') && t.includes('nom');
+  const t = norm(cells.join(' '));
+  return /poste|fonction|role/.test(t) && /nom|prenom|agent|personne/.test(t);
 };
 const premiereCelluleNonVide = (row: string[]): string => {
   for (const c of row) { const v = nettoie(c); if (v) return v; }
   return '';
 };
+
+/** Minuscule + sans accents pour comparer des intitulés de colonnes. */
+const norm = (s: string): string => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+/** Détecte les colonnes par INTITULÉ d'en-tête (pas par position). Repli sur A/B/positions. */
+function mapColumns(header: string[]): { poste: number; nom: number; arr: number; dep: number; depReel: number } {
+  const find = (kw: RegExp, fallback: number): number => {
+    const i = header.findIndex((c) => kw.test(norm(c)));
+    return i >= 0 ? i : fallback;
+  };
+  const depReel = find(/reel|reelle/, 4);
+  const dep = (() => {
+    const i = header.findIndex((c) => /depart/.test(norm(c)) && !/reel/.test(norm(c)));
+    return i >= 0 ? i : 3;
+  })();
+  return { poste: find(/poste|fonction|role/, 0), nom: find(/nom|prenom|agent|personne/, 1), arr: find(/arriv/, 2), dep, depReel };
+}
+
+/** Bac « à vérifier » : rien n'est perdu silencieusement, rien n'est bloquant. */
+export interface ImportAnomaly {
+  kind: 'à affecter' | 'à vérifier' | 'feuille ignorée';
+  label: string;
+  detail: string;
+}
 
 /** Normalise une cellule d'heure (Date, nombre Excel = fraction/heures, ou texte) → 'HH:MM' ou null. */
 function normHeure(v: unknown): string | null {
@@ -123,7 +153,13 @@ interface RawBloc {
  * ligne juste au-dessus (le « bandeau noir » fusionné, dont la valeur est en colonne B ;
  * colonne A = logo, vide). Gère 1 ou plusieurs blocs par feuille.
  */
-function parseFeuille(sheet: AoaSheetIn): RawBloc[] {
+function parseFeuille(sheet: AoaSheetIn): { blocs: RawBloc[]; anomalies: ImportAnomaly[] } {
+  const anomalies: ImportAnomaly[] = [];
+  // Feuille dont la lecture a échoué (corrompue) → signalée, jamais bloquante.
+  if (sheet.failed) {
+    anomalies.push({ kind: 'feuille ignorée', label: sheet.name, detail: 'Feuille illisible — passée sans bloquer l\'import.' });
+    return { blocs: [], anomalies };
+  }
   const rowsFmt = sheet.fmt;
   const rowsRaw = sheet.raw;
   const txt = rowsFmt.map((r) => (r as unknown[]).map(nettoie));
@@ -132,25 +168,31 @@ function parseFeuille(sheet: AoaSheetIn): RawBloc[] {
   const blocs: RawBloc[] = [];
   for (let i = 0; i < txt.length; i++) {
     if (!estEntete(txt[i])) continue;
+    const col = mapColumns(txt[i]); // colonnes par intitulé (repli positions)
     let titre = i >= 1 ? premiereCelluleNonVide(txt[i - 1]) : '';
     if (!titre && i >= 2) titre = premiereCelluleNonVide(txt[i - 2]);
+    if (!titre) titre = sheet.name; // zone non nommée → nom de feuille (jamais perdu)
     const agents: RawBloc['agents'] = [];
     for (let j = i + 1; j < txt.length; j++) {
       if (estEntete(txt[j])) break;
       const c = txt[j];
-      const poste = c[0] ?? '', nomPrenom = c[1] ?? '';
+      const poste = c[col.poste] ?? '', nomPrenom = c[col.nom] ?? '';
       if (!nomPrenom && !poste) { if (agents.length) break; else continue; }
       if (/merci d'envoyer/i.test(c.join(' '))) continue;
-      if (!nomPrenom) continue;
-      const arr = normHeure(cell(rowsFmt[j] as unknown[], 2)) ?? normHeure(cell(rowsRaw[j] as unknown[], 2));
+      if (!nomPrenom) {
+        // Poste renseigné sans nom → « à affecter » (jamais perdu, jamais un crash).
+        if (poste) anomalies.push({ kind: 'à affecter', label: poste, detail: `${titre} — poste sans nom` });
+        continue;
+      }
+      const arr = normHeure(cell(rowsFmt[j], col.arr)) ?? normHeure(cell(rowsRaw[j], col.arr));
       const dep =
-        normHeure(cell(rowsFmt[j] as unknown[], 4)) ?? normHeure(cell(rowsRaw[j] as unknown[], 4)) ??  // départ réel (E)
-        normHeure(cell(rowsFmt[j] as unknown[], 3)) ?? normHeure(cell(rowsRaw[j] as unknown[], 3));    // départ théorique (D)
+        normHeure(cell(rowsFmt[j], col.depReel)) ?? normHeure(cell(rowsRaw[j], col.depReel)) ?? // départ réel
+        normHeure(cell(rowsFmt[j], col.dep)) ?? normHeure(cell(rowsRaw[j], col.dep)); // départ théorique
       agents.push({ poste, nomPrenom, arr: arr ?? '', dep: dep ?? '' });
     }
-    if (titre && agents.length) blocs.push({ titre, pole: sheetPole, agents });
+    if (agents.length) blocs.push({ titre, pole: sheetPole, agents });
   }
-  return blocs;
+  return { blocs, anomalies };
 }
 
 export function ExcelRHImporter({
@@ -163,6 +205,7 @@ export function ExcelRHImporter({
 }) {
   const [step, setStep] = useState<'upload' | 'reading' | 'review' | 'error'>('upload');
   const [agents, setAgents] = useState<ReviewAgent[]>([]);
+  const [anomalies, setAnomalies] = useState<ImportAnomaly[]>([]);
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -171,24 +214,31 @@ export function ExcelRHImporter({
 
   const handleFile = useCallback(
     async (file: File) => {
-      if (!/\.(xlsx|csv)$/i.test(file.name)) {
-        setError(
-          /\.xls$/i.test(file.name)
-            ? "Le format .xls (ancien Excel) n'est plus supporté. Ré-enregistrez le fichier en .xlsx ou .csv."
-            : 'Format non supporté. Utilisez XLSX ou CSV.',
-        );
-        setStep('error');
-        return;
-      }
+      // On ne refuse jamais sur l'extension : la lecture tolérante (chaîne de
+      // repli) tente les lecteurs adaptés. Seule garde : la taille.
       if (file.size > 10 * 1024 * 1024) { setError('Fichier trop lourd (max 10 Mo).'); setStep('error'); return; }
       setFileName(file.name);
       setStep('reading');
       try {
-        // 1) Lire toutes les feuilles puis parser tous les blocs.
+        // 1) Lecture tolérante (jamais de refus brutal ; extension trompeuse gérée).
         const sheets = await readSheetsFromFile(file);
-        const blocs = sheets.flatMap((s) => parseFeuille(s));
-        if (blocs.length === 0) { setError('Aucun bloc agent détecté dans le fichier.'); setStep('error'); return; }
-        // 2) Résoudre l'espace de chaque bloc restauration (pôles = hors resto, par mot-clé du titre).
+
+        // 2) Parse par feuille — CHAQUE feuille dans un try/catch : une qui plante
+        //    n'arrête pas les autres (dégradation gracieuse, jamais d'échec global).
+        const blocs: RawBloc[] = [];
+        const anos: ImportAnomaly[] = [];
+        for (const s of sheets) {
+          try {
+            const res = parseFeuille(s);
+            blocs.push(...res.blocs);
+            anos.push(...res.anomalies);
+          } catch {
+            anos.push({ kind: 'feuille ignorée', label: s.name, detail: 'Feuille non exploitable — passée.' });
+          }
+        }
+
+        // 3) Résolution espace/pôle par bloc (try/catch : échec = « à vérifier »,
+        //    jamais un crash).
         const review: ReviewAgent[] = [];
         for (const b of blocs) {
           const pole = b.pole ?? POLE_KW.find(([re]) => re.test(b.titre))?.[1] ?? null;
@@ -197,38 +247,38 @@ export function ExcelRHImporter({
           let confidence = 1;
           let aConfirmer = false;
           if (!pole) {
-            const { data } = await supabase.rpc('resolve_space', { p_label: b.titre });
-            const r = data as { space_id?: string | null; space_name?: string | null; confidence?: number; a_confirmer?: boolean } | null;
-            spaceId = r?.space_id ?? null;
-            spaceName = r?.space_name ?? null;
-            confidence = Number(r?.confidence ?? 0);
-            aConfirmer = r?.a_confirmer === true || !spaceId || confidence < 0.6;
+            try {
+              const { data } = await supabase.rpc('resolve_space', { p_label: b.titre });
+              const r = data as { space_id?: string | null; space_name?: string | null; confidence?: number; a_confirmer?: boolean } | null;
+              spaceId = r?.space_id ?? null;
+              spaceName = r?.space_name ?? null;
+              confidence = Number(r?.confidence ?? 0);
+              aConfirmer = r?.a_confirmer === true || !spaceId || confidence < 0.6;
+            } catch {
+              aConfirmer = true; // résolution indisponible → à vérifier
+            }
+            if (!spaceId || aConfirmer) {
+              anos.push({ kind: 'à vérifier', label: b.titre, detail: 'Zone non reconnue — choisir l\'espace dans l\'aperçu.' });
+            }
           }
           for (const a of b.agents) {
             const { nom, prenom } = splitNom(a.nomPrenom);
             review.push({
-              key: crypto.randomUUID(),
-              titre: b.titre,
-              pole,
-              nom,
-              prenom,
-              poste: a.poste,
-              role: mapRole(a.poste),
-              space_id: spaceId,
-              space_name: spaceName,
-              start: a.arr,
-              end: a.dep,
-              hours: dureeH(a.arr, a.dep),
-              rate: taux(a.poste),
-              confidence,
-              a_confirmer: aConfirmer,
+              key: crypto.randomUUID(), titre: b.titre, pole, nom, prenom, poste: a.poste,
+              role: mapRole(a.poste), space_id: spaceId, space_name: spaceName,
+              start: a.arr, end: a.dep, hours: dureeH(a.arr, a.dep), rate: taux(a.poste),
+              confidence, a_confirmer: aConfirmer,
             });
           }
         }
+
         setAgents(review);
+        setAnomalies(anos);
+        // Jamais d'échec bloquant : même 0 personne, on montre l'aperçu (anomalies + message).
         setStep('review');
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Erreur lors de la lecture.');
+        // Dernier recours (fichier totalement illisible) : message non bloquant.
+        setError(e instanceof Error ? e.message : 'Fichier illisible. Réessayez ou collez les données manuellement.');
         setStep('error');
       }
     },
@@ -251,6 +301,8 @@ export function ExcelRHImporter({
   const nbAuto = agents.filter((a) => !a.pole && a.space_id && !a.a_confirmer).length;
   const nbPole = agents.filter((a) => a.pole).length;
   const nbConfirm = agents.filter((a) => !a.pole && a.a_confirmer).length;
+  const nbZones = new Set(valides.filter((a) => !a.pole && a.space_id).map((a) => a.space_id)).size;
+  const nbPresta = new Set(valides.filter((a) => a.pole).map((a) => a.pole)).size;
 
   async function confirmer() {
     setSaving(true);
@@ -290,10 +342,10 @@ export function ExcelRHImporter({
           onClick={() => inputRef.current?.click()}
           className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-all ${dragOver ? 'border-amber-400 bg-amber-50' : 'border-stone-200 hover:border-amber-300 hover:bg-stone-50'}`}
         >
-          <input ref={inputRef} type="file" accept=".xlsx,.csv" onChange={(e) => e.target.files?.[0] && void handleFile(e.target.files[0])} className="hidden" />
+          <input ref={inputRef} type="file" accept=".xlsx,.xlsm,.xls,.csv" onChange={(e) => e.target.files?.[0] && void handleFile(e.target.files[0])} className="hidden" />
           <Upload size={32} className="mx-auto mb-3 text-stone-300" />
           <p className="text-sm font-semibold text-stone-700">Déposez ou cliquez pour choisir</p>
-          <p className="mt-1 text-xs text-stone-400">XLSX · CSV · Max 10 Mo</p>
+          <p className="mt-1 text-xs text-stone-400">XLSX · XLSM · XLS · CSV · lecture tolérante, jamais de refus</p>
         </div>
         <button onClick={onClose} className="w-full py-2 text-sm text-stone-400 hover:text-stone-600">Saisir manuellement</button>
       </div>
@@ -314,15 +366,33 @@ export function ExcelRHImporter({
   if (step === 'review')
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-bold text-stone-800">{agents.length} agents détectés</p>
-          <button onClick={() => { setStep('upload'); setAgents([]); }} className="text-xs text-stone-400 hover:text-stone-700">↩ Réimporter</button>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-bold text-stone-800">
+            {valides.length} personne{valides.length > 1 ? 's' : ''} · {nbZones} espace{nbZones > 1 ? 's' : ''} · {nbPresta} prestataire{nbPresta > 1 ? 's' : ''} · {anomalies.length} anomalie{anomalies.length > 1 ? 's' : ''}
+          </p>
+          <button onClick={() => { setStep('upload'); setAgents([]); setAnomalies([]); }} className="shrink-0 text-xs text-stone-400 hover:text-stone-700">↩ Réimporter</button>
         </div>
         <div className="flex flex-wrap gap-2">
           <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">✅ {nbAuto} auto-rattachés</span>
           {nbPole > 0 && <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">🏷 {nbPole} hors resto</span>}
           {nbConfirm > 0 && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">⚠️ {nbConfirm} à confirmer</span>}
         </div>
+        {anomalies.length > 0 && (
+          <details className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+            <summary className="cursor-pointer text-xs font-bold text-amber-800">🔎 {anomalies.length} à vérifier — non bloquant (aucune écriture avant ta validation)</summary>
+            <ul className="mt-2 space-y-1">
+              {anomalies.map((an, i) => (
+                <li key={i} className="flex items-start gap-2 text-[11px] text-amber-800">
+                  <span className="mt-0.5 shrink-0 rounded bg-amber-200 px-1.5 py-0.5 font-bold">{an.kind}</span>
+                  <span><b>{an.label || '—'}</b> — {an.detail}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+        {agents.length === 0 && (
+          <p className="py-4 text-center text-xs text-stone-400">Aucune personne détectée dans ce fichier. Vérifie la mise en page, réimporte, ou saisis manuellement — rien n'a été écrit.</p>
+        )}
         <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
           {agents.map((a) => (
             <div key={a.key} className={`rounded-xl border p-3 ${a.pole ? 'border-blue-200 bg-blue-50' : a.space_id && !a.a_confirmer ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
