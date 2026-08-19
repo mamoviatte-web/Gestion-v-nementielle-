@@ -1,0 +1,24 @@
+-- ═══════════════════════════════════════════════════════════════════════
+-- AuditPilot — correctif proposé (ÉCHAFAUDAGE — À COMPLÉTER AVANT MERGE)
+-- Anomalie : Bodega ouverte sans gamme vin
+-- Type : métier · Sévérité : moyenne · Règle : BODEGA_WINE_REQUIRED
+-- Finding : c2977c7a-e6d0-47bb-b808-977699d60583
+--
+-- Correctif suggéré par l'audit :
+-- La Bodega doit toujours proposer une gamme vin cohérente si elle est ouverte
+-- (au moins un produit de gamme Rouge / Blanc / Rosé dans son assortiment).
+--
+-- TODO (humain) : ajouter la gamme vin de référence à l'assortiment Bodega
+--   (table area_product_reference), puis marquer cette PR « prête » (elle est
+--   en draft). Exemple de forme attendue :
+--
+--     insert into public.area_product_reference (area_name, product_id, product_family, association_level)
+--     select 'Bodega', p.product_id, 'Vins', 'S'
+--     from public.products p
+--     where p.product_name in ('<Rouge>','<Blanc>','<Rosé>')
+--       and not exists ( ... );  -- idempotent
+--
+-- ⚠️ Tant que ce fichier ne contient que des commentaires, l'application est un
+--    no-op SÛR. Aucune donnée de production n'est modifiée avant complétion,
+--    revue humaine et CI verte.
+-- ═══════════════════════════════════════════════════════════════════════
