@@ -16,6 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Lock, ShieldCheck, CheckCircle2, Circle, Plus, Trash2, Users, Save, X,
   AlertTriangle, HeartHandshake, Building2, Wrench,
@@ -357,8 +358,10 @@ function ProvidersPanel({ eventId }: { eventId: string }) {
 
 export default function RhWorkstationPage() {
   const { responsableName } = useAuth();
+  const navigate = useNavigate();
+  const { eventId: routeEventId } = useParams<{ eventId?: string }>();
   const [events, setEvents] = useState<EventOption[]>([]);
-  const [selected, setSelected] = useState('');
+  const [selected, setSelected] = useState(routeEventId ?? '');
   const [rows, setRows] = useState<PreplanRow[]>([]);
   const [spaces, setSpaces] = useState<Record<string, string>>({});
   const [report, setReport] = useState<RhReport | null>(null);
@@ -375,7 +378,8 @@ export default function RhWorkstationPage() {
       .then(({ data }) => {
         const evs = (data ?? []) as EventOption[];
         setEvents(evs);
-        if (evs.length && !selected) setSelected(evs[0].event_id);
+        // Défaut canonique : si aucun événement dans l'URL, pointer le premier match.
+        if (evs.length && !routeEventId) navigate(`/admin/rh/poste/${evs[0].event_id}`, { replace: true });
       });
     void supabase.from('spaces').select('space_id, space_name').then(({ data }) => {
       const map: Record<string, string> = {};
@@ -384,6 +388,11 @@ export default function RhWorkstationPage() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // L'URL (`/admin/rh/poste/:eventId`) est la source de vérité de la sélection.
+  useEffect(() => {
+    if (routeEventId && routeEventId !== selected) setSelected(routeEventId);
+  }, [routeEventId, selected]);
 
   const loadEvent = useCallback(async () => {
     if (!selected) return;
@@ -480,8 +489,10 @@ export default function RhWorkstationPage() {
           <p className="ml-3.5 mt-1 text-sm text-stone-400">Pilotage RH d’un match — de l’import au gel du réel.</p>
         </div>
         {events.length > 0 && (
-          <select value={selected} onChange={(e) => setSelected(e.target.value)}
+          <select value={events.some((e) => e.event_id === selected) ? selected : ''}
+            onChange={(e) => navigate(`/admin/rh/poste/${e.target.value}`)}
             className="min-w-[280px] rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+            {!events.some((e) => e.event_id === selected) && <option value="" disabled>— Sélectionner un match —</option>}
             {events.map((e) => (
               <option key={e.event_id} value={e.event_id}>
                 🏉 {e.event_name} — {new Date(e.event_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}

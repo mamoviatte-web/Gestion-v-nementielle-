@@ -129,6 +129,7 @@ export default function App() {
           <Route path="analytics/coefficients" element={<CoefficientsPage />} />
           <Route path="rh/preplan" element={<HRPreplanPage />} />
           <Route path="rh/poste" element={<RhWorkstationPage />} />
+          <Route path="rh/poste/:eventId" element={<RhWorkstationPage />} />
           <Route path="rh/populations" element={<RhPopulationsPage />} />
           <Route path="catalog" element={<CatalogPage />} />
           <Route path="spaces" element={<SpacesPage />} />
