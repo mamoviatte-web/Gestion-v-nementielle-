@@ -44,6 +44,7 @@ const AnalysesHubPage = lazy(() => import('@/pages/admin/AnalysesHubPage'));
 const StaffAnalyticsPage = lazy(() => import('@/pages/admin/StaffRHPage'));
 const MonthlyStaffReportsPage = lazy(() => import('@/pages/admin/MonthlyStaffReportsPage'));
 const HRPreplanPage = lazy(() => import('@/pages/admin/HRPreplanPage'));
+const RhWorkstationPage = lazy(() => import('@/pages/admin/RhWorkstationPage'));
 const RHPlanningPage = lazy(() => import('@/pages/rh/RHPlanningPage'));
 const CoefficientsPage = lazy(() => import('@/pages/admin/CoefficientsPage'));
 const ExportPage = lazy(() => import('@/pages/admin/ExportPage'));
@@ -127,6 +128,7 @@ export default function App() {
           <Route path="analytics/staff/monthly" element={<MonthlyStaffReportsPage />} />
           <Route path="analytics/coefficients" element={<CoefficientsPage />} />
           <Route path="rh/preplan" element={<HRPreplanPage />} />
+          <Route path="rh/poste" element={<RhWorkstationPage />} />
           <Route path="rh/populations" element={<RhPopulationsPage />} />
           <Route path="catalog" element={<CatalogPage />} />
           <Route path="spaces" element={<SpacesPage />} />

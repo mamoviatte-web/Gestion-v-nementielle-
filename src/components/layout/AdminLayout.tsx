@@ -21,6 +21,7 @@ import {
   TrendingUp,
   Users,
   UserPlus,
+  ClipboardList,
   Ruler,
   Building2,
   Beer,
@@ -64,6 +65,7 @@ const navConfig: NavNode[] = [
   {
     kind: 'group', id: 'rh', label: 'Ressources humaines', defaultOpen: false,
     children: [
+      { to: '/admin/rh/poste', label: 'RH · Poste de travail', short: 'Poste RH', icon: ClipboardList },
       { to: '/admin/rh/preplan', label: 'Planning RH Match', short: 'Planning RH', icon: UserPlus },
       { to: '/admin/rh/populations', label: 'Populations RH', short: 'Populations', icon: Users },
       { to: '/admin/analytics/coefficients', label: 'Coefficients espace', short: 'Coeff.', icon: Ruler },
