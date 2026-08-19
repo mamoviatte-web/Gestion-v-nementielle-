@@ -1,0 +1,218 @@
+/**
+ * RhAnalytiquePage (ROLE_STADE) — « RH Analytique » : reporting inter-matchs.
+ *
+ * Vue agrégée des heures mensuelles par personne (source : vue `rh_monthly_hours`,
+ * union de zone_staff_hours + occasional_hours). Filtre par plage de mois,
+ * tableau par personne × mois, ventilation du coût par mission, et export Excel
+ * recalculable. Reporting pur — aucune écriture (les heures sont saisies dans RH Match).
+ * Route : /admin/rh/analytique.
+ */
+
+import { useEffect, useMemo, useState } from 'react';
+import { Download, TrendingUp, Users, Clock, Wallet, AlertTriangle } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { downloadAoaWorkbook, type AoaSheetOut } from '@/lib/xlsxAoa';
+
+interface MonthlyRow {
+  staff_name: string;
+  mois: string;
+  heures: number;
+  cout_ht: number;
+  nb_evenements: number;
+  missions: string;
+}
+
+const num = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+const eur = (v: number): string =>
+  v.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €';
+const hrs = (v: number): string => v.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+
+/** Mois courant au format YYYY-MM. */
+function ymNow(offset = 0): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + offset);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+const moisLabel = (ym: string): string => {
+  const [y, m] = ym.split('-');
+  const d = new Date(Number(y), Number(m) - 1, 1);
+  return d.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
+};
+
+function Tile({ icon, label, value, sub, accent }: { icon: React.ReactNode; label: string; value: string; sub?: string; accent?: string }) {
+  return (
+    <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-2 text-stone-400">{icon}<span className="text-[11px] font-semibold uppercase tracking-wide">{label}</span></div>
+      <p className={`mt-1 text-2xl font-black tabular-nums ${accent ?? 'text-stone-900'}`}>{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-stone-400">{sub}</p>}
+    </div>
+  );
+}
+
+export default function RhAnalytiquePage() {
+  const [debut, setDebut] = useState(ymNow(-11));
+  const [fin, setFin] = useState(ymNow(0));
+  const [rows, setRows] = useState<MonthlyRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    void supabase.from('rh_monthly_hours').select('*')
+      .gte('mois', debut).lte('mois', fin)
+      .order('mois', { ascending: false }).order('staff_name')
+      .then(({ data }) => {
+        if (!alive) return;
+        setRows((data ?? []).map((r) => ({
+          staff_name: String((r as MonthlyRow).staff_name ?? ''),
+          mois: String((r as MonthlyRow).mois ?? ''),
+          heures: num((r as MonthlyRow).heures),
+          cout_ht: num((r as MonthlyRow).cout_ht),
+          nb_evenements: num((r as MonthlyRow).nb_evenements),
+          missions: String((r as MonthlyRow).missions ?? ''),
+        })));
+        setLoading(false);
+      });
+    return () => { alive = false; };
+  }, [debut, fin]);
+
+  const totals = useMemo(() => {
+    const heures = rows.reduce((s, r) => s + r.heures, 0);
+    const cout = rows.reduce((s, r) => s + r.cout_ht, 0);
+    const personnes = new Set(rows.map((r) => r.staff_name)).size;
+    const mois = new Set(rows.map((r) => r.mois)).size;
+    return { heures, cout, personnes, mois };
+  }, [rows]);
+
+  const parMission = useMemo(() => {
+    const m = new Map<string, { heures: number; cout: number; n: number }>();
+    for (const r of rows) {
+      // `missions` peut lister plusieurs missions séparées par des virgules.
+      const list = r.missions.split(',').map((x) => x.trim()).filter(Boolean);
+      const keys = list.length ? list : ['—'];
+      for (const k of keys) {
+        const cur = m.get(k) ?? { heures: 0, cout: 0, n: 0 };
+        cur.heures += r.heures / keys.length;
+        cur.cout += r.cout_ht / keys.length;
+        cur.n += 1;
+        m.set(k, cur);
+      }
+    }
+    return [...m.entries()].map(([mission, v]) => ({ mission, ...v })).sort((a, b) => b.cout - a.cout);
+  }, [rows]);
+
+  function exportExcel() {
+    const detail: AoaSheetOut = {
+      name: 'Heures mensuelles',
+      aoa: [
+        ['Personne', 'Mois', 'Missions', 'Heures', 'Coût HT (€)', 'Nb événements'],
+        ...rows.map((r) => [r.staff_name, r.mois, r.missions, r.heures, r.cout_ht, r.nb_evenements]),
+        [],
+        ['TOTAL', '', '', totals.heures, totals.cout, ''],
+      ],
+      widths: [26, 10, 24, 10, 12, 14],
+    };
+    const missions: AoaSheetOut = {
+      name: 'Coût par mission',
+      aoa: [
+        ['Mission', 'Heures', 'Coût HT (€)', 'Lignes'],
+        ...parMission.map((r) => [r.mission, Math.round(r.heures * 10) / 10, Math.round(r.cout * 100) / 100, r.n]),
+      ],
+      widths: [24, 10, 12, 8],
+    };
+    void downloadAoaWorkbook([detail, missions], `rh-heures_${debut}_${fin}.xlsx`);
+  }
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-1.5 rounded-full bg-indigo-500" />
+          <div>
+            <h1 className="text-2xl font-black text-stone-900">RH Analytique</h1>
+            <p className="text-sm text-stone-400">Heures mensuelles par personne, coûts par mission — inter-matchs.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs font-semibold text-stone-500">Du
+            <input type="month" value={debut} max={fin} onChange={(e) => setDebut(e.target.value)}
+              className="ml-1 rounded-xl border border-stone-200 px-3 py-2 text-sm" />
+          </label>
+          <label className="text-xs font-semibold text-stone-500">au
+            <input type="month" value={fin} min={debut} onChange={(e) => setFin(e.target.value)}
+              className="ml-1 rounded-xl border border-stone-200 px-3 py-2 text-sm" />
+          </label>
+          <button onClick={exportExcel} disabled={rows.length === 0}
+            className="flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2 text-sm font-bold text-white hover:bg-stone-700 disabled:opacity-40">
+            <Download size={15} />Exporter Excel
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Tile icon={<Users size={14} />} label="Personnes" value={String(totals.personnes)} sub={`${totals.mois} mois`} />
+        <Tile icon={<Clock size={14} />} label="Heures" value={hrs(totals.heures)} sub="cumulées" />
+        <Tile icon={<Wallet size={14} />} label="Coût HT" value={eur(totals.cout)} accent="text-indigo-600" />
+        <Tile icon={<TrendingUp size={14} />} label="Coût moyen / h" value={totals.heures > 0 ? eur(totals.cout / totals.heures) : '—'} />
+      </div>
+
+      {/* Coût par mission */}
+      {parMission.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white">
+          <div className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-sm font-bold text-stone-700">Coût par mission</div>
+          <div className="flex flex-wrap gap-2 p-3">
+            {parMission.map((r) => (
+              <div key={r.mission} className="flex items-center gap-2 rounded-xl border border-stone-100 px-3 py-2">
+                <span className="text-sm font-semibold text-stone-800">{r.mission}</span>
+                <span className="text-xs text-stone-400">{hrs(r.heures)} h ·</span>
+                <span className="text-sm font-bold tabular-nums text-indigo-600">{eur(r.cout)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Détail par personne × mois */}
+      <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white">
+        <div className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-sm font-bold text-stone-700">Détail par personne × mois</div>
+        {loading ? (
+          <div className="h-40 animate-pulse bg-stone-50" />
+        ) : rows.length === 0 ? (
+          <p className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-stone-400">
+            <AlertTriangle size={16} className="text-stone-300" />Aucune heure enregistrée sur cette plage de mois.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-stone-100 text-left text-xs uppercase tracking-wide text-stone-400">
+                  <th className="px-4 py-2">Personne</th>
+                  <th className="px-3 py-2">Mois</th>
+                  <th className="px-3 py-2">Missions</th>
+                  <th className="px-3 py-2 text-right">Heures</th>
+                  <th className="px-3 py-2 text-right">Coût HT</th>
+                  <th className="px-3 py-2 text-right">Événements</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-50">
+                {rows.map((r, i) => (
+                  <tr key={`${r.staff_name}-${r.mois}-${i}`} className="text-stone-800">
+                    <td className="px-4 py-2 font-medium">{r.staff_name}</td>
+                    <td className="px-3 py-2 text-stone-500">{moisLabel(r.mois)}</td>
+                    <td className="px-3 py-2 text-stone-500">{r.missions || '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{hrs(r.heures)}</td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums">{eur(r.cout_ht)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-stone-500">{r.nb_evenements}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

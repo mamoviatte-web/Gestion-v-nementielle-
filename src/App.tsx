@@ -10,7 +10,7 @@
  */
 
 import { Suspense, lazy } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { RequireResponsableName } from '@/components/RequireResponsableName';
@@ -37,14 +37,15 @@ const CatalogPage = lazy(() => import('@/pages/admin/CatalogPage'));
 const SpacesPage = lazy(() => import('@/pages/admin/SpacesPage'));
 const BuvetteAssortmentPage = lazy(() => import('@/pages/admin/BuvetteAssortmentPage'));
 const QualityHubPage = lazy(() => import('@/pages/admin/QualityHubPage'));
-const RhPopulationsPage = lazy(() => import('@/pages/admin/RhPopulationsPage'));
 const AccessManagementPage = lazy(() => import('@/pages/admin/AccessManagementPage'));
 const StockPage = lazy(() => import('@/pages/admin/stock/StockPage'));
 const AnalysesHubPage = lazy(() => import('@/pages/admin/AnalysesHubPage'));
 const StaffAnalyticsPage = lazy(() => import('@/pages/admin/StaffRHPage'));
 const MonthlyStaffReportsPage = lazy(() => import('@/pages/admin/MonthlyStaffReportsPage'));
-const HRPreplanPage = lazy(() => import('@/pages/admin/HRPreplanPage'));
-const RhWorkstationPage = lazy(() => import('@/pages/admin/RhWorkstationPage'));
+const RhMatchPage = lazy(() => import('@/pages/admin/RhMatchPage'));
+const RhAnalytiquePage = lazy(() => import('@/pages/admin/RhAnalytiquePage'));
+const DataPilotCapacitesPage = lazy(() => import('@/pages/admin/DataPilotCapacitesPage'));
+const DataPilotFacteursPage = lazy(() => import('@/pages/admin/DataPilotFacteursPage'));
 const RHPlanningPage = lazy(() => import('@/pages/rh/RHPlanningPage'));
 const CoefficientsPage = lazy(() => import('@/pages/admin/CoefficientsPage'));
 const ExportPage = lazy(() => import('@/pages/admin/ExportPage'));
@@ -66,6 +67,12 @@ const TerrasseSupervisorPage = lazy(() => import('@/pages/zone/TerrasseSuperviso
 const BuvetteSupervisorPage = lazy(() => import('@/pages/zone/BuvetteSupervisorPage'));
 const BuvetteDetailPage = lazy(() => import('@/pages/zone/BuvetteDetailPage'));
 const ZoneStaffHoursPage = lazy(() => import('@/pages/zone/ZoneStaffHoursPage'));
+
+/** Redirige l'ancienne URL `rh/poste/:eventId` vers `rh/match/:eventId` en gardant l'événement. */
+function RedirectPosteEvent() {
+  const { eventId } = useParams<{ eventId?: string }>();
+  return <Navigate to={`/admin/rh/match/${eventId ?? ''}?vue=poste`} replace />;
+}
 
 /** Redirection de la racine selon l'état d'authentification et le rôle. */
 function RootRedirect() {
@@ -126,11 +133,21 @@ export default function App() {
           <Route path="analytics/costs" element={<Navigate to="/admin/analytics?tab=charges" replace />} />
           <Route path="analytics/staff" element={<StaffAnalyticsPage />} />
           <Route path="analytics/staff/monthly" element={<MonthlyStaffReportsPage />} />
-          <Route path="analytics/coefficients" element={<CoefficientsPage />} />
-          <Route path="rh/preplan" element={<HRPreplanPage />} />
-          <Route path="rh/poste" element={<RhWorkstationPage />} />
-          <Route path="rh/poste/:eventId" element={<RhWorkstationPage />} />
-          <Route path="rh/populations" element={<RhPopulationsPage />} />
+          {/* RH — 2 onglets : Match (opérationnel) + Analytique (reporting) */}
+          <Route path="rh/match" element={<RhMatchPage />} />
+          <Route path="rh/match/:eventId" element={<RhMatchPage />} />
+          <Route path="rh/analytique" element={<RhAnalytiquePage />} />
+          {/* Redirections — aucun lien mort (les composants sont remontés dans RH Match) */}
+          <Route path="rh/preplan" element={<Navigate to="/admin/rh/match?vue=planning" replace />} />
+          <Route path="rh/populations" element={<Navigate to="/admin/rh/match?vue=populations" replace />} />
+          <Route path="rh/poste" element={<Navigate to="/admin/rh/match?vue=poste" replace />} />
+          <Route path="rh/poste/:eventId" element={<RedirectPosteEvent />} />
+          {/* DataPilot — donnée de référence du stade (sortie de la RH) */}
+          <Route path="datapilot/coefficients" element={<CoefficientsPage />} />
+          <Route path="datapilot/capacites" element={<DataPilotCapacitesPage />} />
+          <Route path="datapilot/facteurs" element={<DataPilotFacteursPage />} />
+          {/* Ancienne URL des coefficients → DataPilot */}
+          <Route path="analytics/coefficients" element={<Navigate to="/admin/datapilot/coefficients" replace />} />
           <Route path="catalog" element={<CatalogPage />} />
           <Route path="spaces" element={<SpacesPage />} />
           <Route path="assortiment" element={<BuvetteAssortmentPage />} />

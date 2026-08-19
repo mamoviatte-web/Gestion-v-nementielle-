@@ -20,8 +20,9 @@ import {
   AlertTriangle,
   TrendingUp,
   Users,
-  UserPlus,
   ClipboardList,
+  LineChart,
+  Database,
   Ruler,
   Building2,
   Beer,
@@ -65,10 +66,16 @@ const navConfig: NavNode[] = [
   {
     kind: 'group', id: 'rh', label: 'Ressources humaines', defaultOpen: false,
     children: [
-      { to: '/admin/rh/poste', label: 'RH · Poste de travail', short: 'Poste RH', icon: ClipboardList },
-      { to: '/admin/rh/preplan', label: 'Planning RH Match', short: 'Planning RH', icon: UserPlus },
-      { to: '/admin/rh/populations', label: 'Populations RH', short: 'Populations', icon: Users },
-      { to: '/admin/analytics/coefficients', label: 'Coefficients espace', short: 'Coeff.', icon: Ruler },
+      { to: '/admin/rh/match', label: 'RH Match', short: 'RH Match', icon: ClipboardList },
+      { to: '/admin/rh/analytique', label: 'RH Analytique', short: 'Analytique', icon: LineChart },
+    ],
+  },
+  {
+    kind: 'group', id: 'datapilot', label: 'DataPilot', defaultOpen: false,
+    children: [
+      { to: '/admin/datapilot/coefficients', label: 'Coefficients de conso', short: 'Coefficients', icon: Ruler },
+      { to: '/admin/datapilot/capacites', label: 'Capacités & pax', short: 'Capacités', icon: Building2 },
+      { to: '/admin/datapilot/facteurs', label: 'Facteurs historiques', short: 'Facteurs', icon: Database },
     ],
   },
   {

@@ -356,7 +356,7 @@ function ProvidersPanel({ eventId }: { eventId: string }) {
 
 /* ───────────────────────── Page ───────────────────────── */
 
-export default function RhWorkstationPage() {
+export default function RhWorkstationPage({ basePath = '/admin/rh/poste' }: { basePath?: string } = {}) {
   const { responsableName } = useAuth();
   const navigate = useNavigate();
   const { eventId: routeEventId } = useParams<{ eventId?: string }>();
@@ -379,7 +379,7 @@ export default function RhWorkstationPage() {
         const evs = (data ?? []) as EventOption[];
         setEvents(evs);
         // Défaut canonique : si aucun événement dans l'URL, pointer le premier match.
-        if (evs.length && !routeEventId) navigate(`/admin/rh/poste/${evs[0].event_id}`, { replace: true });
+        if (evs.length && !routeEventId) navigate(`${basePath}/${evs[0].event_id}`, { replace: true });
       });
     void supabase.from('spaces').select('space_id, space_name').then(({ data }) => {
       const map: Record<string, string> = {};
@@ -490,7 +490,7 @@ export default function RhWorkstationPage() {
         </div>
         {events.length > 0 && (
           <select value={events.some((e) => e.event_id === selected) ? selected : ''}
-            onChange={(e) => navigate(`/admin/rh/poste/${e.target.value}`)}
+            onChange={(e) => navigate(`${basePath}/${e.target.value}`)}
             className="min-w-[280px] rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
             {!events.some((e) => e.event_id === selected) && <option value="" disabled>— Sélectionner un match —</option>}
             {events.map((e) => (
