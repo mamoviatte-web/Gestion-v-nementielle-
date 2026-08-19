@@ -28,9 +28,9 @@ import { useAuth } from '@/context/AuthContext';
 type RhState = 'importe' | 'valide_j1' | 'en_cours' | 'verrou_h30' | 'live';
 type StaffStatus = 'salarie' | 'autoentrepreneur' | 'benevole' | 'franchise';
 
+/** Option du sélecteur — alimentée par la vue `events_for_rh` (matchs uniquement). */
 interface EventOption {
-  event_id: string; event_name: string; event_date: string; event_type: string;
-  status: string; rh_state: RhState | null;
+  event_id: string; event_name: string; event_date: string;
 }
 
 interface PreplanRow {
@@ -364,13 +364,14 @@ export default function RhWorkstationPage() {
   const [report, setReport] = useState<RhReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [acting, setActing] = useState(false);
-
-  const current = events.find((e) => e.event_id === selected);
-  const rhState = current?.rh_state ?? 'importe';
+  const [rhState, setRhState] = useState<RhState>('importe');
+  const [isMatch, setIsMatch] = useState(true);
+  const [checkingMatch, setCheckingMatch] = useState(false);
 
   useEffect(() => {
-    void supabase.from('events').select('event_id, event_name, event_date, event_type, status, rh_state')
-      .in('status', ['brouillon', 'préparé', 'en_cours', 'clôture_en_attente']).order('event_date', { ascending: false })
+    // Sélecteur : matchs uniquement (vue events_for_rh — aucun séminaire ne peut apparaître).
+    void supabase.from('events_for_rh').select('event_id, event_name, event_date')
+      .order('event_date', { ascending: false })
       .then(({ data }) => {
         const evs = (data ?? []) as EventOption[];
         setEvents(evs);
@@ -410,12 +411,29 @@ export default function RhWorkstationPage() {
     setLoading(false);
   }, [selected]);
 
-  useEffect(() => { void loadEvent(); }, [loadEvent]);
+  // Garde d'accès + état RH pour l'événement sélectionné (deep link éventuel).
+  useEffect(() => {
+    if (!selected) return;
+    let alive = true;
+    setCheckingMatch(true);
+    void (async () => {
+      const [{ data: ok }, { data: ev }] = await Promise.all([
+        supabase.rpc('is_match_event', { p_event: selected }),
+        supabase.from('events').select('rh_state').eq('event_id', selected).single(),
+      ]);
+      if (!alive) return;
+      setIsMatch(ok === true);
+      setRhState(((ev as { rh_state?: RhState } | null)?.rh_state ?? 'importe'));
+      setCheckingMatch(false);
+    })();
+    return () => { alive = false; };
+  }, [selected]);
+
+  useEffect(() => { if (isMatch) void loadEvent(); }, [loadEvent, isMatch]);
 
   async function refreshState() {
-    const { data } = await supabase.from('events').select('event_id, event_name, event_date, event_type, status, rh_state')
-      .eq('event_id', selected).single();
-    if (data) setEvents((prev) => prev.map((e) => e.event_id === selected ? (data as EventOption) : e));
+    const { data } = await supabase.from('events').select('rh_state').eq('event_id', selected).single();
+    setRhState(((data as { rh_state?: RhState } | null)?.rh_state ?? 'importe'));
   }
 
   async function validateBaseline() {
@@ -459,14 +477,14 @@ export default function RhWorkstationPage() {
             <div className="h-8 w-1.5 rounded-full bg-emerald-500" />
             <h1 className="text-2xl font-black text-stone-900">RH · Poste de travail</h1>
           </div>
-          <p className="ml-3.5 mt-1 text-sm text-stone-400">Pilotage RH d’un événement — de l’import au gel du réel.</p>
+          <p className="ml-3.5 mt-1 text-sm text-stone-400">Pilotage RH d’un match — de l’import au gel du réel.</p>
         </div>
         {events.length > 0 && (
           <select value={selected} onChange={(e) => setSelected(e.target.value)}
             className="min-w-[280px] rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
             {events.map((e) => (
               <option key={e.event_id} value={e.event_id}>
-                {e.event_type === 'match' ? '🏉' : '📋'} {e.event_name} — {new Date(e.event_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                🏉 {e.event_name} — {new Date(e.event_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
               </option>
             ))}
           </select>
@@ -484,7 +502,16 @@ export default function RhWorkstationPage() {
 
       {events.length === 0 ? (
         <div className="rounded-2xl border border-stone-200 bg-white p-10 text-center text-sm text-stone-400">
-          Aucun événement ouvert à piloter.
+          Aucun match à piloter.
+        </div>
+      ) : !isMatch && !checkingMatch ? (
+        <div className="rounded-2xl border border-amber-200 bg-white p-10 text-center">
+          <AlertTriangle size={28} className="mx-auto mb-2 text-amber-500" />
+          <p className="text-base font-bold text-stone-800">Poste RH réservé aux matchs</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-stone-400">
+            La gestion RH par émargement ne concerne que les matchs. Les séminaires gardent leur propre gestion RH.
+            Sélectionnez un match pour piloter le poste.
+          </p>
         </div>
       ) : (
         <>
