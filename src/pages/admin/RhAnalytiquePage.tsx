@@ -9,9 +9,10 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Download, TrendingUp, Users, Clock, Wallet, AlertTriangle } from 'lucide-react';
+import { Download, TrendingUp, Users, Clock, Wallet, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { downloadAoaWorkbook, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { downloadPayrollWorkbook, type PayrollRow } from '@/lib/payrollExport';
 
 interface MonthlyRow {
   staff_name: string;
@@ -34,6 +35,10 @@ const STATUT_LABEL: Record<string, string> = {
   salarie: 'Salarié', autoentrepreneur: 'Auto-entrepreneur', benevole: 'Bénévole',
   franchise: 'Franchise', non_precise: 'Non précisé',
 };
+
+/** Circuit de paiement : franchise = facture (rouge) · contrat = paie (vert). */
+const payColor = (t: string): string =>
+  t === 'franchise' ? '#C00000' : t === 'contrat' ? '#1E7A34' : '#6B7280';
 
 const num = (v: unknown): number => {
   const n = Number(v);
@@ -97,6 +102,34 @@ export default function RhAnalytiquePage() {
   const [rows, setRows] = useState<MonthlyRow[]>([]);
   const [details, setDetails] = useState<DetailRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [payMonth, setPayMonth] = useState(ymNow(0));
+  const [payRows, setPayRows] = useState<PayrollRow[]>([]);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void supabase.from('rh_monthly_hours').select('staff_name, type_paiement, mois, missions, heures, cout_ht, nb_evenements')
+      .eq('mois', payMonth).order('staff_name')
+      .then(({ data }) => {
+        if (!alive) return;
+        setPayRows((data ?? []).map((r) => ({
+          staff_name: String((r as PayrollRow).staff_name ?? ''),
+          type_paiement: String((r as PayrollRow).type_paiement ?? 'non défini'),
+          mois: String((r as PayrollRow).mois ?? payMonth),
+          missions: String((r as PayrollRow).missions ?? ''),
+          heures: num((r as PayrollRow).heures),
+          cout_ht: num((r as PayrollRow).cout_ht),
+          nb_evenements: num((r as PayrollRow).nb_evenements),
+        })));
+      });
+    return () => { alive = false; };
+  }, [payMonth]);
+
+  async function exportPaie() {
+    setExporting(true);
+    try { await downloadPayrollWorkbook(payMonth, payRows); }
+    finally { setExporting(false); }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -236,6 +269,76 @@ export default function RhAnalytiquePage() {
             <Download size={15} />Exporter Excel
           </button>
         </div>
+      </div>
+
+      {/* ── Récapitulatif de paie mensuel (DAF) ── */}
+      <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="flex items-center gap-2 text-sm font-black text-stone-900">
+              <FileSpreadsheet size={16} className="text-emerald-600" />Récapitulatif de paie mensuel — DAF
+            </p>
+            <p className="mt-0.5 text-xs text-stone-400">
+              Une ligne par personne (tous matchs du mois). <span style={{ color: payColor('franchise') }} className="font-semibold">Franchise = à facturer</span> · <span style={{ color: payColor('contrat') }} className="font-semibold">Contrat = paie</span>. Montant « À verser » prêt pour virement.
+            </p>
+          </div>
+          <div className="flex items-end gap-2">
+            <label className="text-xs font-semibold text-stone-500">Mois de paie
+              <input type="month" value={payMonth} onChange={(e) => setPayMonth(e.target.value)}
+                className="ml-1 rounded-xl border border-stone-200 px-3 py-2 text-sm" />
+            </label>
+            <button onClick={() => void exportPaie()} disabled={exporting || payRows.length === 0}
+              className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-40">
+              <Download size={15} />{exporting ? 'Génération…' : 'Exporter Excel (paie DAF)'}
+            </button>
+          </div>
+        </div>
+
+        {payRows.length === 0 ? (
+          <p className="mt-3 rounded-xl bg-stone-50 px-4 py-4 text-center text-xs text-stone-400">
+            Aucune heure enregistrée pour {payMonth}.
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 overflow-x-auto rounded-xl border border-stone-100">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-stone-100 bg-stone-50 text-left text-xs uppercase tracking-wide text-stone-400">
+                    <th className="px-4 py-2">Personne</th>
+                    <th className="px-3 py-2">Circuit</th>
+                    <th className="px-3 py-2 text-right">Heures</th>
+                    <th className="px-3 py-2 text-right">Coût HT</th>
+                    <th className="px-4 py-2 text-right">À verser</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-50">
+                  {payRows.map((r, i) => (
+                    <tr key={`${r.staff_name}-${i}`}>
+                      <td className="px-4 py-2 font-bold" style={{ color: payColor(r.type_paiement) }}>{r.staff_name}</td>
+                      <td className="px-3 py-2 font-medium" style={{ color: payColor(r.type_paiement) }}>
+                        {r.type_paiement === 'franchise' ? 'Franchise' : r.type_paiement === 'contrat' ? 'Contrat' : r.type_paiement}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">{hrs(r.heures)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{eur(r.cout_ht)}</td>
+                      <td className="px-4 py-2 text-right font-bold tabular-nums">{eur(r.cout_ht)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-2 flex flex-wrap justify-end gap-4 text-sm">
+              <span style={{ color: payColor('franchise') }} className="font-bold">
+                Franchise (à facturer) : {eur(payRows.filter((r) => r.type_paiement === 'franchise').reduce((s, r) => s + r.cout_ht, 0))}
+              </span>
+              <span style={{ color: payColor('contrat') }} className="font-bold">
+                Contrat (paie) : {eur(payRows.filter((r) => r.type_paiement === 'contrat').reduce((s, r) => s + r.cout_ht, 0))}
+              </span>
+              <span className="font-black text-stone-900">
+                TOTAL : {eur(payRows.reduce((s, r) => s + r.cout_ht, 0))}
+              </span>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

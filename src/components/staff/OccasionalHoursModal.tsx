@@ -23,9 +23,12 @@ const MISSIONS = [
   { value: 'autre', label: 'Autre' },
 ];
 
+type PaymentType = 'franchise' | 'contrat';
+
 interface Entry {
   staff_name: string;
   mission_type: string;
+  payment_type: PaymentType;
   work_date: string;
   start_time: string;
   end_time: string;
@@ -37,6 +40,7 @@ function emptyEntry(): Entry {
   return {
     staff_name: '',
     mission_type: 'mise_en_place',
+    payment_type: 'contrat',
     work_date: new Date().toLocaleDateString('en-CA'),
     start_time: '',
     end_time: '',
@@ -44,6 +48,9 @@ function emptyEntry(): Entry {
     hourly_rate: '',
   };
 }
+
+/** Franchise = à facturer (rouge) · Contrat = à intégrer en paie (vert). */
+const PAY_COLOR: Record<PaymentType, string> = { franchise: '#C00000', contrat: '#1E7A34' };
 
 /** Heures entre deux HH:MM, avec passage minuit (+24h si fin < début). */
 function computeHours(start: string, end: string): number {
@@ -118,6 +125,7 @@ export function OccasionalHoursModal({ onClose }: { onClose: () => void }) {
       event_id: eventId || null,
       staff_name: e.staff_name.trim().toUpperCase(),
       mission_type: e.mission_type,
+      payment_type: e.payment_type,
       work_date: e.work_date,
       start_time: e.start_time || null,
       end_time: e.end_time || null,
@@ -174,12 +182,30 @@ export function OccasionalHoursModal({ onClose }: { onClose: () => void }) {
         <div className="space-y-3">
           {entries.map((e, i) => (
             <div key={i} className="rounded-lg bg-pr-cream/50 p-3">
+              {/* Circuit de paiement — caractéristique de l'agent (facture vs paie) */}
+              <div className="mb-2 flex items-center gap-2">
+                <span className="text-xs font-semibold text-pr-black-soft/70">Circuit de paiement *</span>
+                {(['contrat', 'franchise'] as PaymentType[]).map((pt) => (
+                  <button
+                    key={pt}
+                    type="button"
+                    onClick={() => setEntries((prev) => prev.map((row, idx) => (idx === i ? { ...row, payment_type: pt } : row)))}
+                    className={`rounded-full border px-3 py-1 text-xs font-bold transition-colors ${
+                      e.payment_type === pt ? 'text-white' : 'bg-white text-pr-black-soft/60'
+                    }`}
+                    style={e.payment_type === pt ? { backgroundColor: PAY_COLOR[pt], borderColor: PAY_COLOR[pt] } : { borderColor: PAY_COLOR[pt], color: PAY_COLOR[pt] }}
+                  >
+                    {pt === 'franchise' ? 'Franchise · facture' : 'Contrat · paie'}
+                  </button>
+                ))}
+              </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <Input
                   label="Nom Prénom *"
                   value={e.staff_name}
                   placeholder="NOM Prénom"
                   onChange={(ev) => update(i, 'staff_name', ev.target.value)}
+                  style={{ color: PAY_COLOR[e.payment_type], fontWeight: 600 }}
                 />
                 <Select
                   label="Mission"
