@@ -9,7 +9,9 @@
  */
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowDownToLine, Info, PackageOpen, Warehouse } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, ArrowDownToLine, ClipboardCheck, Info, PackageOpen, Warehouse } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 import {
   Alert,
@@ -242,6 +244,156 @@ function MovementModal({
 }
 
 /* ------------------------------------------------------------------ */
+/* Modale « Inventaire espace » — recale le stock réel de l'espace      */
+/* ------------------------------------------------------------------ */
+
+interface InventoryLine {
+  product: Product;
+  spaceQty: number;
+}
+
+function InventoryModal({
+  spaceId,
+  spaceName,
+  lines,
+  defaultResponsable,
+  onClose,
+  onSaved,
+}: {
+  spaceId: string;
+  spaceName: string;
+  lines: InventoryLine[];
+  defaultResponsable: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  // Valeur comptée par produit (pré-remplie avec la quantité espace actuelle).
+  const [counts, setCounts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(lines.map((l) => [l.product.product_id, String(l.spaceQty)])),
+  );
+  const [responsable, setResponsable] = useState(defaultResponsable);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dirty = lines.filter((l) => {
+    const v = counts[l.product.product_id];
+    return v !== undefined && v !== '' && Number.isFinite(Number(v)) && Number(v) !== l.spaceQty;
+  });
+
+  async function handleSave() {
+    setError(null);
+    if (responsable.trim().length < 2) {
+      setError('Nom du responsable requis (min. 2 caractères) — RG-001.');
+      return;
+    }
+    if (dirty.length === 0) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    for (const l of dirty) {
+      const { data, error: rpcErr } = await supabase.rpc('record_area_inventory', {
+        p_space: spaceId,
+        p_product: l.product.product_id,
+        p_count: Number(counts[l.product.product_id]),
+        p_by: responsable.trim(),
+      });
+      const r = data as { success?: boolean; error?: string } | null;
+      if (rpcErr || !r?.success) {
+        setSaving(false);
+        setError(r?.error ?? rpcErr?.message ?? 'Échec de l’inventaire.');
+        return;
+      }
+    }
+    setSaving(false);
+    onSaved();
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-pr-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-pr-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="flex items-center gap-2 font-display text-lg text-pr-black">
+          <ClipboardCheck className="h-5 w-5 text-pr-olive" /> Inventaire espace — {spaceName}
+        </h3>
+        <p className="mt-1 text-sm text-pr-black-soft">
+          Saisissez le stock réel compté sur place. La quantité de l’espace s’aligne sur le
+          comptage (traçable et daté) et sert de stock d’ouverture au prochain match.
+        </p>
+
+        <div className="mt-3">
+          <Input
+            label="Responsable (RG-001)"
+            value={responsable}
+            placeholder="Nom du responsable"
+            onChange={(e) => setResponsable(e.target.value)}
+          />
+        </div>
+
+        <div className="mt-3 overflow-x-auto rounded-lg ring-1 ring-pr-stone/40">
+          <Table>
+            <THead>
+              <TR>
+                <TH className="text-left">Produit</TH>
+                <TH className="text-right">Qté espace actuelle</TH>
+                <TH className="text-right">Compté (réel)</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {lines.map((l) => (
+                <TR key={l.product.product_id}>
+                  <TD className="font-medium text-pr-black">{l.product.product_name}</TD>
+                  <TD className="text-right tabular-nums text-pr-stone">{l.spaceQty}</TD>
+                  <TD className="text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      className="w-24 rounded-lg border-0 px-2 py-1 text-right tabular-nums ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-provence"
+                      value={counts[l.product.product_id] ?? ''}
+                      onChange={(e) =>
+                        setCounts((c) => ({ ...c, [l.product.product_id]: e.target.value }))
+                      }
+                    />
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </div>
+
+        {error && (
+          <Alert variant="error" className="mt-3">
+            {error}
+          </Alert>
+        )}
+
+        <div className="mt-5 flex items-center justify-between">
+          <span className="text-xs text-pr-stone">
+            {dirty.length} ligne{dirty.length > 1 ? 's' : ''} modifiée{dirty.length > 1 ? 's' : ''}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={saving}>
+              Annuler
+            </Button>
+            <Button loading={saving} disabled={dirty.length === 0} onClick={() => void handleSave()}>
+              Enregistrer l’inventaire ({dirty.length})
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Onglet principal                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -253,6 +405,7 @@ interface ActiveModal {
 export default function StockBySpace() {
   const { user } = useAuth();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: locations } = useStockLocations();
   const reserve = useReserveLocation();
@@ -264,6 +417,7 @@ export default function StockBySpace() {
   const [family, setFamily] = useState('all');
   const [status, setStatus] = useState('all');
   const [modal, setModal] = useState<ActiveModal | null>(null);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
 
   // Emplacements de type « espace » uniquement.
   const spaceLocations = useMemo<StockLocation[]>(
@@ -387,6 +541,20 @@ export default function StockBySpace() {
           onChange={(e) => setStatus(e.target.value)}
         />
       </div>
+
+      {selectedLocationId && rows.length > 0 && (
+        <div className="flex justify-end">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!selectedLocation?.area_id}
+            onClick={() => setInventoryOpen(true)}
+          >
+            <ClipboardCheck className="mr-1 h-4 w-4" />
+            Inventaire espace
+          </Button>
+        </div>
+      )}
 
       {!reserveId && (
         <Alert variant="warning" title="Réserve centrale introuvable">
@@ -522,6 +690,22 @@ export default function StockBySpace() {
           recording={recording}
           onClose={() => setModal(null)}
           onSubmit={handleMovementSubmit}
+        />
+      )}
+
+      {inventoryOpen && selectedLocation?.area_id && spaceName && (
+        <InventoryModal
+          spaceId={selectedLocation.area_id}
+          spaceName={spaceName}
+          lines={rows.map((r) => ({ product: r.product, spaceQty: r.spaceQty }))}
+          defaultResponsable={user?.name ?? ''}
+          onClose={() => setInventoryOpen(false)}
+          onSaved={() => {
+            void queryClient.invalidateQueries({ queryKey: ['stockBalances'] });
+            void queryClient.invalidateQueries({ queryKey: ['stockLiveBalance'] });
+            showToast('Inventaire enregistré — quantités espace recalées.', 'success');
+            setInventoryOpen(false);
+          }}
         />
       )}
     </div>
