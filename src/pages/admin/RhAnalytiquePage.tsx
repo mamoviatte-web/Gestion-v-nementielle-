@@ -22,6 +22,19 @@ interface MonthlyRow {
   missions: string;
 }
 
+interface DetailRow {
+  mois: string;
+  espace: string;
+  statut: string;
+  heures: number;
+  cout_ht: number;
+}
+
+const STATUT_LABEL: Record<string, string> = {
+  salarie: 'Salarié', autoentrepreneur: 'Auto-entrepreneur', benevole: 'Bénévole',
+  franchise: 'Franchise', non_precise: 'Non précisé',
+};
+
 const num = (v: unknown): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -52,30 +65,67 @@ function Tile({ icon, label, value, sub, accent }: { icon: React.ReactNode; labe
   );
 }
 
+interface BreakItem { key: string; label: string; heures: number; cout: number }
+function Breakdown({ title, items }: { title: string; items: BreakItem[] }) {
+  const max = Math.max(1, ...items.map((i) => i.cout));
+  return (
+    <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white">
+      <div className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-sm font-bold text-stone-700">{title}</div>
+      <div className="divide-y divide-stone-50">
+        {items.map((r) => (
+          <div key={r.key} className="px-4 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-sm font-medium text-stone-800">{r.label}</span>
+              <span className="shrink-0 text-sm font-bold tabular-nums text-indigo-600">{eur(r.cout)}</span>
+            </div>
+            <div className="mt-1 flex items-center gap-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-100">
+                <div className="h-full rounded-full bg-indigo-500" style={{ width: `${(r.cout / max) * 100}%` }} />
+              </div>
+              <span className="shrink-0 text-[11px] text-stone-400">{hrs(r.heures)} h</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function RhAnalytiquePage() {
   const [debut, setDebut] = useState(ymNow(-11));
   const [fin, setFin] = useState(ymNow(0));
   const [rows, setRows] = useState<MonthlyRow[]>([]);
+  const [details, setDetails] = useState<DetailRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    void supabase.from('rh_monthly_hours').select('*')
-      .gte('mois', debut).lte('mois', fin)
-      .order('mois', { ascending: false }).order('staff_name')
-      .then(({ data }) => {
-        if (!alive) return;
-        setRows((data ?? []).map((r) => ({
-          staff_name: String((r as MonthlyRow).staff_name ?? ''),
-          mois: String((r as MonthlyRow).mois ?? ''),
-          heures: num((r as MonthlyRow).heures),
-          cout_ht: num((r as MonthlyRow).cout_ht),
-          nb_evenements: num((r as MonthlyRow).nb_evenements),
-          missions: String((r as MonthlyRow).missions ?? ''),
-        })));
-        setLoading(false);
-      });
+    void Promise.all([
+      supabase.from('rh_monthly_hours').select('*')
+        .gte('mois', debut).lte('mois', fin)
+        .order('mois', { ascending: false }).order('staff_name'),
+      supabase.from('rh_monthly_hours_detail').select('mois, espace, statut, heures, cout_ht')
+        .gte('mois', debut).lte('mois', fin),
+    ]).then(([{ data: sum }, { data: det }]) => {
+      if (!alive) return;
+      setRows((sum ?? []).map((r) => ({
+        staff_name: String((r as MonthlyRow).staff_name ?? ''),
+        mois: String((r as MonthlyRow).mois ?? ''),
+        heures: num((r as MonthlyRow).heures),
+        cout_ht: num((r as MonthlyRow).cout_ht),
+        nb_evenements: num((r as MonthlyRow).nb_evenements),
+        missions: String((r as MonthlyRow).missions ?? ''),
+      })));
+      setDetails((det ?? []).map((r) => ({
+        mois: String((r as DetailRow).mois ?? ''),
+        espace: String((r as DetailRow).espace ?? '—'),
+        statut: String((r as DetailRow).statut ?? 'non_precise'),
+        heures: num((r as DetailRow).heures),
+        cout_ht: num((r as DetailRow).cout_ht),
+      })));
+      setLoading(false);
+    });
     return () => { alive = false; };
   }, [debut, fin]);
 
@@ -104,6 +154,26 @@ export default function RhAnalytiquePage() {
     return [...m.entries()].map(([mission, v]) => ({ mission, ...v })).sort((a, b) => b.cout - a.cout);
   }, [rows]);
 
+  const parEspace = useMemo(() => {
+    const m = new Map<string, { heures: number; cout: number }>();
+    for (const r of details) {
+      const cur = m.get(r.espace) ?? { heures: 0, cout: 0 };
+      cur.heures += r.heures; cur.cout += r.cout_ht;
+      m.set(r.espace, cur);
+    }
+    return [...m.entries()].map(([espace, v]) => ({ espace, ...v })).sort((a, b) => b.cout - a.cout);
+  }, [details]);
+
+  const parStatut = useMemo(() => {
+    const m = new Map<string, { heures: number; cout: number }>();
+    for (const r of details) {
+      const cur = m.get(r.statut) ?? { heures: 0, cout: 0 };
+      cur.heures += r.heures; cur.cout += r.cout_ht;
+      m.set(r.statut, cur);
+    }
+    return [...m.entries()].map(([statut, v]) => ({ statut, ...v })).sort((a, b) => b.cout - a.cout);
+  }, [details]);
+
   function exportExcel() {
     const detail: AoaSheetOut = {
       name: 'Heures mensuelles',
@@ -123,7 +193,23 @@ export default function RhAnalytiquePage() {
       ],
       widths: [24, 10, 12, 8],
     };
-    void downloadAoaWorkbook([detail, missions], `rh-heures_${debut}_${fin}.xlsx`);
+    const espaces: AoaSheetOut = {
+      name: 'Coût par espace',
+      aoa: [
+        ['Espace', 'Heures', 'Coût HT (€)'],
+        ...parEspace.map((r) => [r.espace, Math.round(r.heures * 10) / 10, Math.round(r.cout * 100) / 100]),
+      ],
+      widths: [26, 10, 12],
+    };
+    const statuts: AoaSheetOut = {
+      name: 'Coût par statut',
+      aoa: [
+        ['Statut d’emploi', 'Heures', 'Coût HT (€)'],
+        ...parStatut.map((r) => [STATUT_LABEL[r.statut] ?? r.statut, Math.round(r.heures * 10) / 10, Math.round(r.cout * 100) / 100]),
+      ],
+      widths: [22, 10, 12],
+    };
+    void downloadAoaWorkbook([detail, missions, espaces, statuts], `rh-heures_${debut}_${fin}.xlsx`);
   }
 
   return (
@@ -159,21 +245,18 @@ export default function RhAnalytiquePage() {
         <Tile icon={<TrendingUp size={14} />} label="Coût moyen / h" value={totals.heures > 0 ? eur(totals.cout / totals.heures) : '—'} />
       </div>
 
-      {/* Coût par mission */}
-      {parMission.length > 0 && (
-        <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white">
-          <div className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-sm font-bold text-stone-700">Coût par mission</div>
-          <div className="flex flex-wrap gap-2 p-3">
-            {parMission.map((r) => (
-              <div key={r.mission} className="flex items-center gap-2 rounded-xl border border-stone-100 px-3 py-2">
-                <span className="text-sm font-semibold text-stone-800">{r.mission}</span>
-                <span className="text-xs text-stone-400">{hrs(r.heures)} h ·</span>
-                <span className="text-sm font-bold tabular-nums text-indigo-600">{eur(r.cout)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Ventilations : mission / espace / statut */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        {parMission.length > 0 && (
+          <Breakdown title="Coût par mission" items={parMission.map((r) => ({ key: r.mission, label: r.mission, heures: r.heures, cout: r.cout }))} />
+        )}
+        {parEspace.length > 0 && (
+          <Breakdown title="Coût par espace" items={parEspace.map((r) => ({ key: r.espace, label: r.espace, heures: r.heures, cout: r.cout }))} />
+        )}
+        {parStatut.length > 0 && (
+          <Breakdown title="Coût par statut d’emploi" items={parStatut.map((r) => ({ key: r.statut, label: STATUT_LABEL[r.statut] ?? r.statut, heures: r.heures, cout: r.cout }))} />
+        )}
+      </div>
 
       {/* Détail par personne × mois */}
       <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white">
