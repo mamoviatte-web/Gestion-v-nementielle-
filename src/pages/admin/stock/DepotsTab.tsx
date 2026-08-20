@@ -16,12 +16,17 @@ import {
   Send,
   Truck,
   Warehouse,
+  ReceiptText,
+  PackagePlus,
   type LucideIcon,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Badge, Button, EmptyState, Spinner } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import { DeliveryModal } from '@/components/stock/DeliveryModal';
 import { MontanerReceptionModal } from '@/components/stock/MontanerReceptionModal';
+import { KegReceptionModal } from '@/components/stock/KegReceptionModal';
+import { InvoiceRegistryView } from '@/components/stock/InvoiceRegistryView';
 import KegStorageTab from './KegStorageTab';
 import {
   useDepots,
@@ -33,12 +38,13 @@ import {
   type Delivery,
 } from '@/hooks/useDepots';
 
-type DepotView = 'stock' | 'livraisons' | 'dispatch';
+type DepotView = 'stock' | 'livraisons' | 'dispatch' | 'factures';
 
 const VIEWS: { key: DepotView; label: string; Icon: LucideIcon }[] = [
   { key: 'stock', label: 'Stock actuel', Icon: Boxes },
   { key: 'livraisons', label: 'Livraisons', Icon: Truck },
   { key: 'dispatch', label: 'Dispatch espaces', Icon: Send },
+  { key: 'factures', label: 'Factures', Icon: ReceiptText },
 ];
 
 function frDate(iso: string | null): string {
@@ -54,6 +60,8 @@ export default function DepotsTab() {
   const [view, setView] = useState<DepotView>('stock');
   const [modalOpen, setModalOpen] = useState(false);
   const [montanerOpen, setMontanerOpen] = useState(false);
+  const [kegReceptionOpen, setKegReceptionOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   // Sélectionne AUC (1er) par défaut dès que la liste arrive.
   useEffect(() => {
@@ -110,6 +118,9 @@ export default function DepotsTab() {
               <Truck className="h-4 w-4" /> Enregistrer une livraison
             </Button>
           )}
+          <Button onClick={() => setKegReceptionOpen(true)}>
+            <PackagePlus className="h-4 w-4" /> Réceptionner des fûts
+          </Button>
           <Button variant="secondary" onClick={() => setMontanerOpen(true)}>
             <FileText className="h-4 w-4" /> Facture Montaner
           </Button>
@@ -148,6 +159,7 @@ export default function DepotsTab() {
           {view === 'stock' && <DepotStockView depotId={depotId} />}
           {view === 'livraisons' && <DepotDeliveriesView depotId={depotId} />}
           {view === 'dispatch' && <DepotDispatchView depotId={depotId} />}
+          {view === 'factures' && <InvoiceRegistryView />}
         </>
       )}
 
@@ -163,6 +175,19 @@ export default function DepotsTab() {
 
       {montanerOpen && (
         <MontanerReceptionModal onClose={() => setMontanerOpen(false)} onDone={() => setMontanerOpen(false)} />
+      )}
+
+      {kegReceptionOpen && (
+        <KegReceptionModal
+          onClose={() => setKegReceptionOpen(false)}
+          onDone={() => {
+            void queryClient.invalidateQueries({ queryKey: ['kegSummary'] });
+            void queryClient.invalidateQueries({ queryKey: ['invoiceRegistry'] });
+            void queryClient.invalidateQueries({ queryKey: ['depotDeliveries'] });
+            void queryClient.invalidateQueries({ queryKey: ['depotBalances'] });
+            setKegReceptionOpen(false);
+          }}
+        />
       )}
     </div>
   );

@@ -145,6 +145,47 @@ export function useDepotDeliveries(depotId: string | undefined) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Registre des factures (vue supplier_delivery_registry)              */
+/* ------------------------------------------------------------------ */
+
+export interface InvoiceRegistryRow {
+  id: string;
+  delivery_date: string | null;
+  invoice_date: string | null;
+  supplier_name: string;
+  invoice_ref: string | null;
+  status: string | null;
+  received_by: string | null;
+  depot: string | null;
+  invoice_pdf_url: string | null;
+  a_pdf: boolean;
+  nb_lignes: number;
+  total_recu: number;
+  total_refuse: number;
+  total_calcule_ht: number | null;
+  invoice_amount_ht: number | null;
+  ecart_facture_vs_lignes: number | null;
+  notes: string | null;
+}
+
+/** Registre des factures — une ligne par livraison, avec contrôle d'écart. */
+export function useInvoiceRegistry() {
+  return useQuery({
+    queryKey: ['invoiceRegistry'],
+    staleTime: 15_000,
+    queryFn: async (): Promise<InvoiceRegistryRow[]> => {
+      const { data, error } = await supabase
+        .from('supplier_delivery_registry')
+        .select('*')
+        .order('invoice_date', { ascending: false, nullsFirst: false })
+        .order('delivery_date', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as InvoiceRegistryRow[];
+    },
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* Dispatch dépôt → espaces (vue)                                      */
 /* ------------------------------------------------------------------ */
 
