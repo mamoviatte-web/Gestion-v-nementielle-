@@ -11,6 +11,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, Trash2, X, FileText, Check, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -19,6 +20,25 @@ import { Alert, Button, Input } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 
 const AUC = 'a291e38e-4d5d-42de-9277-fa6eec4d2592';
+const FUTS = '936472cf-25c7-43d3-bbd4-23a809906d82';
+
+/** Routage produit → dépôt de stockage (product_depot_routing) : source de vérité
+ *  pour associer chaque produit à son espace de stockage respectif. */
+interface DepotRef { id: string; name: string }
+function useDepotRouting() {
+  return useQuery({
+    queryKey: ['depotRouting'],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<Map<string, DepotRef>> => {
+      const { data } = await supabase.from('product_depot_routing').select('product_id, depot_id, depot_name');
+      const m = new Map<string, DepotRef>();
+      for (const r of (data ?? []) as { product_id: string; depot_id: string; depot_name: string }[]) {
+        m.set(r.product_id, { id: r.depot_id, name: r.depot_name });
+      }
+      return m;
+    },
+  });
+}
 
 type Volet = 'soft' | 'keg' | 'exclu' | 'unmapped';
 interface Mapped { product_id: string | null; label: string; volet: Volet; note?: string; }
@@ -92,6 +112,17 @@ export function MontanerReceptionModal({ onClose, onDone }: { onClose: () => voi
   const [lines, setLines] = useState<LineDraft[]>([newLine()]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const routing = useDepotRouting();
+
+  // Dépôt de destination d'une ligne mappée : fûts/CO2 → Stockage Fûts ;
+  // sinon le dépôt du produit (product_depot_routing), défaut AUC.
+  const destDepot = useMemo(() => {
+    const routeMap = routing.data ?? new Map<string, DepotRef>();
+    return (m: Mapped): DepotRef =>
+      m.volet === 'keg'
+        ? { id: FUTS, name: 'Stockage Fûts' }
+        : (m.product_id ? routeMap.get(m.product_id) : undefined) ?? { id: AUC, name: 'AUC — Réserve générale' };
+  }, [routing.data]);
 
   const mapped = useMemo(() => lines.map((l) => ({ ...l, m: mapLabel(l.raw) })), [lines]);
 
@@ -114,27 +145,39 @@ export function MontanerReceptionModal({ onClose, onDone }: { onClose: () => voi
     setError(null);
     if (receivedBy.trim().length < 2) return setError('Réceptionnaire requis (Prénom NOM).');
 
-    const softLines = mapped
-      .filter((l) => l.m.volet === 'soft' && l.m.product_id && Number(l.qty) > 0)
-      .map((l) => ({ product_id: l.m.product_id, qty_received: Number(l.qty), unit_price_ht: updatePrices && l.price ? Number(l.price) : null }));
+    // Fûts / CO2 → register_keg_reception (Stockage Fûts).
     const kegLines = mapped
       .filter((l) => l.m.volet === 'keg' && l.m.product_id && Number(l.qty) > 0)
       .map((l) => ({ product_id: l.m.product_id, qty: Number(l.qty), unit_price_ht: updatePrices && l.price ? Number(l.price) : null }));
 
-    if (softLines.length === 0 && kegLines.length === 0) return setError('Aucune ligne valide (produit mappé + quantité > 0).');
+    // Autres produits → register_delivery, GROUPÉS par leur dépôt de stockage réel
+    // (AUC, Stock EST, …) d'après product_depot_routing.
+    const byDepot = new Map<string, { name: string; lines: { product_id: string; qty_received: number; unit_price_ht: number | null }[] }>();
+    for (const l of mapped) {
+      if (l.m.volet !== 'soft' || !l.m.product_id || Number(l.qty) <= 0) continue;
+      const d = destDepot(l.m);
+      const g = byDepot.get(d.id) ?? { name: d.name, lines: [] };
+      g.lines.push({ product_id: l.m.product_id, qty_received: Number(l.qty), unit_price_ht: updatePrices && l.price ? Number(l.price) : null });
+      byDepot.set(d.id, g);
+    }
+
+    const nbDelivery = [...byDepot.values()].reduce((s, g) => s + g.lines.length, 0);
+    if (nbDelivery === 0 && kegLines.length === 0) return setError('Aucune ligne valide (produit mappé + quantité > 0).');
     if (mapped.some((l) => l.raw.trim() && l.m.volet === 'unmapped')) return setError('Des libellés ne sont pas rattachés à un produit — corrigez-les ou videz-les.');
 
     setBusy(true);
-    let softRes = 0, kegRes = 0;
+    let delivRes = 0, kegRes = 0;
+    const depotNames = new Set<string>();
     try {
-      if (softLines.length > 0) {
+      for (const [depotId, g] of byDepot) {
         const { data, error: e } = await supabase.rpc('register_delivery', {
-          p_supplier: 'Montaner Pietrini', p_date: date, p_location: AUC, p_received_by: receivedBy.trim(),
-          p_invoice: invoice.trim() || null, p_notes: notes.trim() || null, p_lines: softLines,
+          p_supplier: 'Montaner Pietrini', p_date: date, p_location: depotId, p_received_by: receivedBy.trim(),
+          p_invoice: invoice.trim() || null, p_notes: notes.trim() || null, p_lines: g.lines,
         });
         const r = data as { success?: boolean; error?: string; nb_lignes?: number } | null;
-        if (e || !r?.success) throw new Error(r?.error ?? e?.message ?? 'Échec volet softs');
-        softRes = r.nb_lignes ?? softLines.length;
+        if (e || !r?.success) throw new Error(r?.error ?? e?.message ?? `Échec livraison ${g.name}`);
+        delivRes += r.nb_lignes ?? g.lines.length;
+        depotNames.add(g.name);
       }
       if (kegLines.length > 0) {
         const { data, error: e } = await supabase.rpc('register_keg_reception', {
@@ -144,8 +187,9 @@ export function MontanerReceptionModal({ onClose, onDone }: { onClose: () => voi
         const r = data as { success?: boolean; error?: string; nb_produits?: number } | null;
         if (e || !r?.success) throw new Error(r?.error ?? e?.message ?? 'Échec volet fûts');
         kegRes = r.nb_produits ?? kegLines.length;
+        depotNames.add('Stockage Fûts');
       }
-      showToast(`Facture Montaner réceptionnée — ${softRes} soft(s) (AUC) + ${kegRes} fût/CO2 (Fûts)`, 'success');
+      showToast(`Facture Montaner réceptionnée — ${delivRes} produit(s) + ${kegRes} fût/CO2 · dépôts : ${[...depotNames].join(', ')}`, 'success');
       onDone();
       onClose();
     } catch (err) {
@@ -163,7 +207,7 @@ export function MontanerReceptionModal({ onClose, onDone }: { onClose: () => voi
         <div className="mb-4 flex items-start justify-between">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-black text-stone-900"><FileText className="h-5 w-5 text-amber-600" /> Réception facture Montaner</h2>
-            <p className="mt-0.5 text-xs text-stone-500">Softs → AUC · Fûts &amp; CO2 → Stockage Fûts · consignations/frais exclus</p>
+            <p className="mt-0.5 text-xs text-stone-500">Chaque produit est rangé dans son dépôt : Fûts/CO2 → Stockage Fûts · Vins/Spiritueux → Stock EST · autres → AUC · consignations/frais exclus</p>
           </div>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="h-5 w-5" /></button>
         </div>
@@ -205,7 +249,9 @@ export function MontanerReceptionModal({ onClose, onDone }: { onClose: () => voi
                 <tr key={l.key} className={l.m.volet === 'unmapped' && l.raw.trim() ? 'bg-rose-50/50' : ''}>
                   <td className="px-2 py-1.5"><input value={l.raw} onChange={(e) => update(l.key, { raw: e.target.value })} placeholder="ex. FUT BUD 30 L 5°" className="w-full rounded border border-stone-200 px-2 py-1 text-xs" /></td>
                   <td className="px-2 py-1.5">
-                    <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${VOLET_META[l.m.volet].cls}`}>{VOLET_META[l.m.volet].label}</span>
+                    <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${VOLET_META[l.m.volet].cls}`}>
+                      {l.m.volet === 'soft' || l.m.volet === 'keg' ? `→ ${destDepot(l.m).name}` : VOLET_META[l.m.volet].label}
+                    </span>
                     <span className="ml-1 text-xs text-stone-600">{l.m.label}</span>
                   </td>
                   <td className="px-2 py-1.5"><input type="number" value={l.qty} onChange={(e) => update(l.key, { qty: e.target.value })} className="w-full rounded border border-stone-200 px-2 py-1 text-right text-xs" /></td>
