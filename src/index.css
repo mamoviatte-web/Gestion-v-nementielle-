@@ -37,3 +37,20 @@
     animation: pr-fade-in 0.6s ease-out both;
   }
 }
+
+/* Impression : fiches propres (fond blanc, couleurs conservées, sans chrome).
+   force-color-adjust garantit que les barres/badges colorés sortent même si
+   l'option « graphismes d'arrière-plan » du navigateur est décochée. */
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  @page {
+    margin: 10mm;
+  }
+}

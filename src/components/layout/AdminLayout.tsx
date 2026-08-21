@@ -189,7 +189,7 @@ export function AdminLayout() {
       {/* ── Sidebar desktop ─────────────────────────────────────────── */}
       <aside
         className={clsx(
-          'relative z-10 hidden shrink-0 flex-col self-stretch bg-pr-black text-white transition-all duration-300 ease-in-out md:sticky md:top-0 md:flex md:h-screen',
+          'relative z-10 hidden shrink-0 flex-col self-stretch bg-pr-black text-white transition-all duration-300 ease-in-out md:sticky md:top-0 md:flex md:h-screen print:!hidden',
           collapsed ? 'w-16' : 'w-52',
         )}
       >
@@ -292,7 +292,7 @@ export function AdminLayout() {
       {/* ── Contenu ─────────────────────────────────────────────────── */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header mobile */}
-        <header className="flex items-center justify-between bg-pr-black px-4 py-3 md:hidden">
+        <header className="flex items-center justify-between bg-pr-black px-4 py-3 md:hidden print:hidden">
           <div className="flex items-center gap-2">
             <Logo variant="mark-white" size="sm" />
             <p className="font-display text-sm font-bold tracking-[0.1em] text-white">PROVENCE RUGBY</p>
