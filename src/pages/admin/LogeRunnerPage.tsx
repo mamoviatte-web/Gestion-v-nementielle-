@@ -86,19 +86,28 @@ export default function LogeRunnerPage() {
       ],
       widths: [26, 14, 14, 12],
     };
-    const detail: AoaSheetOut = {
-      name: 'Dotation par loge (fixe)',
-      aoa: [
-        ['Dotation fixe par loge — ne bouge jamais'],
-        ['Loge', 'Produit', 'Quantité'],
-        ...sheet.loges.flatMap((l) => [
-          ...l.lignes.map((x) => [l.loge, x.produit, x.qte]),
-          [l.loge, 'Total loge', l.lignes.reduce((a, x) => a + x.qte, 0)],
-        ]),
-      ],
-      widths: [24, 26, 10],
+    // Une feuille « prête à l'emploi » par loge (nom d'onglet Excel assaini/unique).
+    const used = new Set<string>();
+    const tabName = (label: string): string => {
+      const base = (label.replace(/[\\/?*[\]:]/g, ' ').replace(/\s+/g, ' ').trim() || 'Loge').slice(0, 28);
+      let name = base;
+      for (let i = 2; used.has(name.toLowerCase()); i++) name = `${base.slice(0, 25)} ${i}`;
+      used.add(name.toLowerCase());
+      return name;
     };
-    void downloadAoaWorkbook([synth, detail], `fiche_runner_${sheet.space_name.replace(/\s+/g, '_')}.xlsx`);
+    const perLoge: AoaSheetOut[] = sheet.loges.map((l) => ({
+      name: tabName(l.loge),
+      aoa: [
+        [`${sheet.space_name} — ${l.loge}`],
+        ['Dotation fixe (ne bouge jamais)'],
+        ['Produit', 'Quantité'],
+        ...l.lignes.map((x) => [x.produit, x.qte]),
+        [],
+        ['TOTAL', l.lignes.reduce((a, x) => a + x.qte, 0)],
+      ],
+      widths: [30, 10],
+    }));
+    void downloadAoaWorkbook([synth, ...perLoge], `fiche_runner_${sheet.space_name.replace(/\s+/g, '_')}.xlsx`);
   }
 
   return (
