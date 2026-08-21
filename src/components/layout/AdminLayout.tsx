@@ -84,6 +84,7 @@ const navConfig: NavNode[] = [
       { to: '/admin/catalog', label: 'Catalogue', icon: Package },
       { to: '/admin/spaces', label: 'Espaces', icon: Building2 },
       { to: '/admin/assortiment', label: 'Assortiment buvettes', short: 'Assortiment', icon: Beer },
+      { to: '/admin/loges', label: 'Fiche Runner Loges', short: 'Loges', icon: ClipboardList },
     ],
   },
   { kind: 'utility', to: '/admin/audit', label: 'Qualité des données', short: 'Qualité', icon: ShieldCheck },

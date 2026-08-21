@@ -43,6 +43,7 @@ const AnalysesHubPage = lazy(() => import('@/pages/admin/AnalysesHubPage'));
 const StaffAnalyticsPage = lazy(() => import('@/pages/admin/StaffRHPage'));
 const MonthlyStaffReportsPage = lazy(() => import('@/pages/admin/MonthlyStaffReportsPage'));
 const RhMatchPage = lazy(() => import('@/pages/admin/RhMatchPage'));
+const LogeRunnerPage = lazy(() => import('@/pages/admin/LogeRunnerPage'));
 const RhAnalytiquePage = lazy(() => import('@/pages/admin/RhAnalytiquePage'));
 const DataPilotCapacitesPage = lazy(() => import('@/pages/admin/DataPilotCapacitesPage'));
 const DataPilotFacteursPage = lazy(() => import('@/pages/admin/DataPilotFacteursPage'));
@@ -137,6 +138,7 @@ export default function App() {
           <Route path="rh/match" element={<RhMatchPage />} />
           <Route path="rh/match/:eventId" element={<RhMatchPage />} />
           <Route path="rh/analytique" element={<RhAnalytiquePage />} />
+          <Route path="loges" element={<LogeRunnerPage />} />
           {/* Redirections — aucun lien mort (les composants sont remontés dans RH Match) */}
           <Route path="rh/preplan" element={<Navigate to="/admin/rh/match?vue=planning" replace />} />
           <Route path="rh/populations" element={<Navigate to="/admin/rh/match?vue=populations" replace />} />
