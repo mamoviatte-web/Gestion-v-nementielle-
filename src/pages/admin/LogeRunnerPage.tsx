@@ -78,18 +78,23 @@ export default function LogeRunnerPage() {
       name: 'À monter',
       aoa: [
         [`Fiche Runner — ${sheet.space_name}`],
-        ['Produit', 'Total (dotation)', 'En office', 'À monter'],
+        ['Dotation fixe (ne bouge jamais) − Déjà en stock = À monter'],
+        ['Produit', 'Dotation fixe', 'Déjà en stock', 'À monter'],
         ...sheet.synthese.map((r) => [r.produit, r.total, r.en_office, r.a_monter]),
         [],
         ['TOTAL', totals.total, totals.office, totals.monter],
       ],
-      widths: [26, 16, 12, 12],
+      widths: [26, 14, 14, 12],
     };
     const detail: AoaSheetOut = {
-      name: 'Dotation par loge',
+      name: 'Dotation par loge (fixe)',
       aoa: [
+        ['Dotation fixe par loge — ne bouge jamais'],
         ['Loge', 'Produit', 'Quantité'],
-        ...sheet.loges.flatMap((l) => l.lignes.map((x) => [l.loge, x.produit, x.qte])),
+        ...sheet.loges.flatMap((l) => [
+          ...l.lignes.map((x) => [l.loge, x.produit, x.qte]),
+          [l.loge, 'Total loge', l.lignes.reduce((a, x) => a + x.qte, 0)],
+        ]),
       ],
       widths: [24, 26, 10],
     };
