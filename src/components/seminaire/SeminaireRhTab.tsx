@@ -17,10 +17,13 @@ import type { EventSpaceWithSpace } from '@/hooks/useEvents';
 import { EmptyState } from '@/components/ui';
 import { OccasionalHoursPanel } from '@/components/rh/OccasionalHoursPanel';
 import { SeminaireStaffHoursPanel } from './SeminaireStaffHoursPanel';
+import { SeminaireRhKpiCard } from './SeminaireRhKpiCard';
 
 export function SeminaireRhTab({ event, spaces }: { event: Event; spaces: EventSpaceWithSpace[] }) {
   const active = spaces.filter((s) => s.spaces);
   const [spaceId, setSpaceId] = useState<string>(active[0]?.space_id ?? '');
+  const [reloadKey, setReloadKey] = useState(0);
+  const bump = () => setReloadKey((k) => k + 1);
 
   useEffect(() => {
     if (active.length && !active.some((s) => s.space_id === spaceId)) setSpaceId(active[0].space_id);
@@ -32,8 +35,10 @@ export function SeminaireRhTab({ event, spaces }: { event: Event; spaces: EventS
     <div className="space-y-6">
       <div className="flex items-start gap-2 rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-sm text-sky-900">
         <Info size={16} className="mt-0.5 shrink-0 text-sky-500" />
-        <p>Saisissez les horaires du staff par espace, ainsi que les agents de manutention / runner. Les heures et coûts remontent automatiquement dans la <b>synthèse RH mensuelle</b> (onglet RH Analytique).</p>
+        <p>Saisissez les horaires du staff par espace, ainsi que les agents de manutention / runner. Les heures et coûts remontent automatiquement dans les <b>KPI RH</b> (Staff&nbsp;&amp;&nbsp;RH → Séminaires) et la <b>synthèse RH mensuelle</b> (RH Analytique).</p>
       </div>
+
+      <SeminaireRhKpiCard eventId={event.event_id} reloadKey={reloadKey} />
 
       {active.length === 0 ? (
         <EmptyState icon={MapPin} title="Aucun espace activé" message="Activez au moins un espace (onglet « Espaces & codes ») pour saisir le staff par espace." />
@@ -61,12 +66,13 @@ export function SeminaireRhTab({ event, spaces }: { event: Event; spaces: EventS
               eventId={event.event_id}
               spaceId={current.space_id}
               spaceName={current.spaces?.space_name ?? 'Espace'}
+              onChanged={bump}
             />
           )}
         </>
       )}
 
-      <OccasionalHoursPanel eventId={event.event_id} eventDate={event.event_date} />
+      <OccasionalHoursPanel eventId={event.event_id} eventDate={event.event_date} onChanged={bump} />
     </div>
   );
 }

@@ -59,7 +59,7 @@ function diffHours(start: string, end: string, breakMin: number): number {
   return Math.max(0, Math.round((d / 60 - breakMin / 60) * 100) / 100);
 }
 
-export function SeminaireStaffHoursPanel({ eventId, spaceId, spaceName }: { eventId: string; spaceId: string; spaceName: string }) {
+export function SeminaireStaffHoursPanel({ eventId, spaceId, spaceName, onChanged }: { eventId: string; spaceId: string; spaceName: string; onChanged?: () => void }) {
   const { user } = useAuth();
   const { showToast } = useToast();
   const by = user?.name ?? user?.email ?? 'Stade';
@@ -114,6 +114,7 @@ export function SeminaireStaffHoursPanel({ eventId, spaceId, spaceName }: { even
     showToast('Horaire enregistré.', 'success');
     setForm(null);
     await load();
+    onChanged?.();
   }
 
   async function remove(id: string) {
@@ -122,6 +123,7 @@ export function SeminaireStaffHoursPanel({ eventId, spaceId, spaceName }: { even
     if (error) { showToast(`Échec : ${error.message}`, 'warning'); return; }
     showToast('Agent supprimé.', 'success');
     await load();
+    onChanged?.();
   }
 
   return (
