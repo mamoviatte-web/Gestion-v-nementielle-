@@ -45,11 +45,30 @@ Analyse ce document et renvoie UNIQUEMENT du JSON valide (aucun texte avant/apr�
   "total_ht": 540.00
 }
 
-Règles :
+Format fréquent — facture d'accise (ex. « MONTANER PIETRINI », Document Commercial
+Simplifié d'Accompagnement). Les colonnes typiques sont, de gauche à droite :
+CODE | QUANTITE (2 sous-colonnes : « cas/fut » puis « Col/Pack ») | DESIGNATION |
+CONT.UNITE | DEGRE | Tarif PU HT | REMISE | TVA | PU NET HT | ACCISE | MONT. HT DS INCLUS | CONSIGNATION | POIDS.
+
+Règles de lecture des LIGNES :
+- qty = la 1re sous-colonne de QUANTITE (« cas/fut ») = NOMBRE d'unités physiques
+  reçues (nombre de fûts, de cartons/colis). N'utilise JAMAIS la colonne des litres
+  ni « Col/Pack » comme quantité. Ex. « 56  1680  FUT BUD 30 L » → qty = 56 fûts.
+- Fûts : « FUT 20L/30L <MARQUE> » → unit = "fut", qty = nombre de fûts.
+- price_ht = prix unitaire HT par unité reçue = (MONT. HT DS INCLUS) ÷ qty
+  (montant HT de la ligne, accise comprise, divisé par la quantité). N'utilise pas
+  « PU NET HT » seul pour les fûts : il est exprimé PAR LITRE, pas par fût.
+- EXCLURE totalement (ce ne sont pas des produits) toute ligne de :
+  consignation, déconsignation, « VIDE-PALETTE », « VIDE-GAZ », « REPRISE DE VIDE »,
+  « EMBALLAGE », « SURCOUT », « FRAIS », « RUPTURE », ou tout montant NÉGATIF (avoir/reprise).
+- Ignore les répétitions liées au « DUPLICATA » et aux pages : chaque produit une seule fois.
+
+Règles générales :
 - Information absente → null.
 - Bières : distingue fût (barrique) / bouteille / canette.
 - Unités : btl (bouteille), fut (fût), crt (carton), u (unité), kg, L.
-- Prix TOUJOURS en € HT. Si le document montre la TVA, retire-la pour obtenir le HT.
+- Prix TOUJOURS en € HT (hors TVA).
+- total_ht = TOTAL NET À PAYER HT si présent, sinon la somme des montants HT des produits.
 - Date illisible → utilise ${today}.
 - raw_name = nom EXACT sur le document.
 - Réponds UNIQUEMENT avec le JSON.`;
