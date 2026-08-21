@@ -111,7 +111,16 @@ export function InvoiceScanner({
       });
       const res = data as { success?: boolean; error?: string; invoice?: RawInvoice } | null;
       if (fnError || !res?.success || !res.invoice) {
-        setError(res?.error ?? fnError?.message ?? 'Lecture du document impossible.');
+        // Fonction edge injoignable / non déployée → message clair + repli manuel.
+        const unreachable = /Failed to send a request|Edge Function|non-2xx|FunctionsFetchError|not found/i.test(
+          fnError?.message ?? '',
+        );
+        setError(
+          res?.error ??
+            (unreachable
+              ? "Lecture automatique indisponible (service de lecture de facture non activé). Saisissez la livraison manuellement — c'est immédiat."
+              : fnError?.message ?? 'Lecture du document impossible.'),
+        );
         setStep('error');
         return;
       }

@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowDownToLine, ClipboardCheck, Info, PackageOpen, Warehouse } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -418,6 +418,7 @@ export default function StockBySpace() {
   const [status, setStatus] = useState('all');
   const [modal, setModal] = useState<ActiveModal | null>(null);
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [showAllCatalog, setShowAllCatalog] = useState(false);
 
   // Emplacements de type « espace » uniquement.
   const spaceLocations = useMemo<StockLocation[]>(
@@ -442,7 +443,27 @@ export default function StockBySpace() {
     return match?.space_name ?? selectedLocation.name;
   }, [selectedLocation, spaces]);
 
-  // Produits actifs, filtrés par famille + statut.
+  // Assortiment de l'espace : produits réellement affectés à cet espace
+  // (area_product_reference). Sert à n'afficher QUE les produits de l'espace,
+  // pas tout le catalogue.
+  const assortment = useQuery({
+    queryKey: ['areaAssortment', spaceName ?? 'none'],
+    enabled: !!spaceName,
+    staleTime: 60_000,
+    queryFn: async (): Promise<Set<string>> => {
+      const { data } = await supabase
+        .from('area_product_reference')
+        .select('product_id')
+        .ilike('area_name', (spaceName ?? '').trim())
+        .not('product_id', 'is', null);
+      return new Set((data ?? []).map((r) => (r as { product_id: string }).product_id));
+    },
+  });
+  const assortmentIds = useMemo(() => assortment.data ?? new Set<string>(), [assortment.data]);
+  const hasAssortment = assortmentIds.size > 0;
+
+  // Produits filtrés : assortiment de l'espace (+ tout produit ayant du stock),
+  // ou tout le catalogue si l'utilisateur le demande / si l'espace n'a pas d'assortiment.
   const rows = useMemo(() => {
     const activeProducts = (products.data ?? []).filter((p) => p.active);
     return activeProducts
@@ -458,11 +479,17 @@ export default function StockBySpace() {
         return { product, reserveQty, spaceQty, minStock, critical, lastMovement };
       })
       .filter((r) => {
+        // Périmètre espace : n'afficher que l'assortiment de l'espace + ce qui a du stock espace.
+        if (!showAllCatalog && hasAssortment
+            && !assortmentIds.has(r.product.product_id) && r.spaceQty === 0) return false;
+        return true;
+      })
+      .filter((r) => {
         if (status === 'alert') return r.critical;
         // « Dormant » : placeholder (aucun filtre spécifique pour l'instant).
         return true;
       });
-  }, [products.data, family, status, reserveBalances.data, spaceBalances.data]);
+  }, [products.data, family, status, reserveBalances.data, spaceBalances.data, showAllCatalog, hasAssortment, assortmentIds]);
 
   const handleMovementSubmit = async (params: {
     kind: ActionKind;
@@ -542,17 +569,30 @@ export default function StockBySpace() {
         />
       </div>
 
-      {selectedLocationId && rows.length > 0 && (
-        <div className="flex justify-end">
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!selectedLocation?.area_id}
-            onClick={() => setInventoryOpen(true)}
-          >
-            <ClipboardCheck className="mr-1 h-4 w-4" />
-            Inventaire espace
-          </Button>
+      {selectedLocationId && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs text-pr-black-soft/60">
+            {hasAssortment && !showAllCatalog
+              ? `Assortiment de l’espace (${rows.length} produit${rows.length > 1 ? 's' : ''})`
+              : `Tout le catalogue (${rows.length})`}
+          </div>
+          <div className="flex items-center gap-2">
+            {hasAssortment && (
+              <label className="flex items-center gap-1.5 text-sm text-pr-black-soft">
+                <input type="checkbox" checked={showAllCatalog} onChange={(e) => setShowAllCatalog(e.target.checked)} />
+                Tout le catalogue
+              </label>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!selectedLocation?.area_id || rows.length === 0}
+              onClick={() => setInventoryOpen(true)}
+            >
+              <ClipboardCheck className="mr-1 h-4 w-4" />
+              Inventaire espace
+            </Button>
+          </div>
         </div>
       )}
 
