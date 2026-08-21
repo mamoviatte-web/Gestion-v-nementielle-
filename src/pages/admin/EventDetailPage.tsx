@@ -19,6 +19,7 @@ import { MatchLiveStatusPanel } from '@/components/events/MatchLiveStatusPanel';
 import { IntegrityBadge } from '@/components/events/IntegrityBadge';
 import { SeminaireSpacesTab } from '@/components/seminaire/SeminaireSpacesTab';
 import { SeminaireBilanTab } from '@/components/seminaire/SeminaireBilanTab';
+import { SeminaireRhTab } from '@/components/seminaire/SeminaireRhTab';
 import { StaffEventInsights } from '@/components/staff/StaffEventInsights';
 import { DebriefScoresGrid } from '@/components/debrief/DebriefScoresGrid';
 import { StadeDebriefView } from '@/components/debrief/StadeDebriefView';
@@ -127,6 +128,7 @@ const SPACE_SUBS: MatchSub[] = ['pax', 'dotations', 'saisie', 'rh', 'final'];
 /** Onglets simplifiés pour un séminaire / événement hors match (sans Prestataires ni Runner). */
 const SEMINAIRE_TABS: { key: Tab; label: string }[] = [
   { key: 'espaces', label: '📍 Espaces & codes' },
+  { key: 'rh', label: '🧑‍🍳 RH & horaires' },
   { key: 'bilan', label: '📊 Bilan' },
   { key: 'debriefs', label: 'Débriefs' },
   { key: 'rapport', label: '📄 Rapport' },
@@ -529,6 +531,7 @@ export default function EventDetailPage() {
 
       {/* ───────── Contenu séminaire ───────── */}
       {!isMatch && activeTab === 'espaces' && <SeminaireSpacesTab event={event} spaces={spaces} />}
+      {!isMatch && activeTab === 'rh' && <SeminaireRhTab event={event} spaces={spaces} />}
       {!isMatch && activeTab === 'bilan' && <SeminaireBilanTab event={event} spaces={spaces} />}
       {!isMatch && activeTab === 'rapport' && <SeminarReportEditor event={event} />}
       {!isMatch && activeTab === 'debriefs' && (

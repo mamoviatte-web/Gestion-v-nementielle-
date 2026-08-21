@@ -20,11 +20,12 @@ interface Presta {
 }
 
 const MISSIONS = [
-  { value: 'runner', label: 'Runner' }, { value: 'logistique', label: 'Logistique' },
-  { value: 'livraison', label: 'Livraison' }, { value: 'montage', label: 'Montage' },
-  { value: 'démontage', label: 'Démontage' }, { value: 'mise_en_place', label: 'Mise en place' },
-  { value: 'nettoyage', label: 'Nettoyage' }, { value: 'technique', label: 'Technique' },
-  { value: 'sécurité', label: 'Sécurité' }, { value: 'autre', label: 'Autre' },
+  { value: 'runner', label: 'Runner' }, { value: 'manutention', label: 'Manutention' },
+  { value: 'logistique', label: 'Logistique' }, { value: 'livraison', label: 'Livraison' },
+  { value: 'montage', label: 'Montage' }, { value: 'démontage', label: 'Démontage' },
+  { value: 'mise_en_place', label: 'Mise en place' }, { value: 'nettoyage', label: 'Nettoyage' },
+  { value: 'technique', label: 'Technique' }, { value: 'sécurité', label: 'Sécurité' },
+  { value: 'autre', label: 'Autre' },
 ] as const;
 const MISSION_LABEL: Record<string, string> = Object.fromEntries(MISSIONS.map((m) => [m.value, m.label]));
 
