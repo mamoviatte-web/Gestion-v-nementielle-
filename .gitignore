@@ -37,3 +37,6 @@ supabase/scripts/*.env
 !.env.example
 
 *.tsbuildinfo
+
+# Supabase CLI cache
+supabase/.temp/
