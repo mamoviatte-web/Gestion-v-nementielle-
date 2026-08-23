@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;900&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;900&family=Hanken+Grotesk:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -37,6 +37,64 @@
     animation: pr-fade-in 0.6s ease-out both;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Système visuel homogène (refonte) — jetons de design centralisés + classes
+   réutilisables. Portée sous `.dash` : à ajouter sur un écran pour l'appliquer
+   (Tableau de bord d'abord). Présentation seule — aucune donnée ni liaison.
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  --bg: #f4f3ee; --surface: #ffffff; --surface-2: #fcfbf8;
+  --ink: #1b1a17; --ink-2: #6a6961; --muted: #9b998f;
+  --line: #eae8e2; --line-soft: #f0efe9;
+  --accent: #8a6a1e; --accent-soft: #faf6ec; --accent-border: #ecdfbe; --accent-ink: #7a5e1a;
+  --good: #2f7d54; --good-bg: #e9f4ee;
+  --warn: #a9790f; --warn-bg: #f9f0da;
+  --crit: #b5533f; --crit-bg: #f8ece8;
+  --r-card: 18px; --r-tile: 16px; --r-ctrl: 11px;
+  --shadow: 0 1px 3px rgba(20, 18, 12, 0.04);
+  --shadow-lift: 0 2px 8px rgba(20, 18, 12, 0.14);
+  --font-ui: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.num { font-variant-numeric: tabular-nums; }
+
+.dash { font-family: var(--font-ui); color: var(--ink); }
+
+/* Tuile KPI */
+.dash .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-tile); padding: 18px; box-shadow: var(--shadow); }
+.dash .kpi-l { font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; color: var(--muted); }
+.dash .kpi-v { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; margin-top: 7px; color: var(--ink); line-height: 1.05; }
+.dash .kpi-s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.dash .kpi-s.up { color: var(--good); font-weight: 700; }
+.dash .kpi-s.down { color: var(--crit); font-weight: 700; }
+.dash .kpi.accent { background: #fdfbf6; border-color: var(--accent-border); }
+.dash .kpi.accent .kpi-l { color: #9b7d2e; }
+.dash .kpi.accent .kpi-v { color: var(--accent-ink); }
+
+/* Carte + graphe barres */
+.dash .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow); }
+.dash .bar-row { display: grid; grid-template-columns: 92px 1fr 92px; align-items: center; gap: 12px; margin: 14px 0; }
+.dash .track { height: 22px; background: var(--line-soft); border-radius: 7px; overflow: hidden; }
+.dash .fill { height: 100%; border-radius: 7px; }
+.dash .fill.vip { background: #8a6a1e; }
+.dash .fill.bars { background: #b5804a; }
+.dash .fill.buv { background: #2f7d54; }
+.dash .bar-val { font-size: 12.5px; font-weight: 800; text-align: right; }
+
+/* Inbox */
+.dash .inbox .row { display: flex; align-items: center; gap: 11px; padding: 12px 16px; border-top: 1px solid var(--line-soft); }
+.dash .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dash .dot.crit { background: var(--crit); }
+.dash .dot.warn { background: var(--warn); }
+.dash .dot.good { background: var(--good); }
+.dash .row .act { font-size: 12.5px; font-weight: 700; color: var(--accent); }
+
+/* Pastilles de statut (icône + libellé, jamais couleur seule) */
+.dash .pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 700; }
+.dash .pill.good { background: var(--good-bg); color: var(--good); }
+.dash .pill.warn { background: var(--warn-bg); color: var(--warn); }
+.dash .pill.crit { background: var(--crit-bg); color: var(--crit); }
+.dash .pill.mute { background: #f1f0ec; color: var(--muted); }
 
 /* Impression : fiches propres (fond blanc, couleurs conservées, sans chrome).
    force-color-adjust garantit que les barres/badges colorés sortent même si
