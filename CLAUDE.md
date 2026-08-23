@@ -427,3 +427,35 @@ VITE_SUPABASE_ANON_KEY=[clé-anon-publique]
 3. Supabase region `eu-west-1` (Frankfurt) — RGPD obligatoire
 4. RG-002 : chaque mutation stock = ligne dans stock_movements (jamais bypasser)
 5. Performance : toujours filtrer par `event_id`, jamais charger toute la DB
+6. RG-011 : aucune suppression d'événement sans **justification tracée** (voir GOUVERNANCE ci-dessous)
+
+---
+
+## GOUVERNANCE — SUPPRESSION D'ÉVÉNEMENTS (RG-011, obligatoire pour toute session / agent IA)
+
+**Un événement supprimé DOIT toujours être justifié et attribué.** Cette règle
+s'applique à **toutes les sessions Claude Code / agents IA** comme aux utilisateurs.
+
+- **Ne jamais supprimer un événement sans demande explicite de l'utilisateur.**
+  Un agent IA ne supprime pas un match/séminaire de sa propre initiative.
+- **Passer par la RPC `delete_event_complete(p_event_id, p_confirm := 'CONFIRMER',
+  p_deleted_by, p_reason)`** — `p_reason` (motif) est **obligatoire** (refus si vide).
+- **Jamais de `DELETE FROM events` brut** depuis l'appli. Le seul cas de suppression
+  brute admis est le **nettoyage d'un événement de test jetable créé par la session
+  elle-même** ; dans ce cas, positionner le motif AVANT le delete, dans la même
+  transaction :
+  ```sql
+  do $$ begin
+    perform set_config('app.deleted_by', 'agent QA — <session>', true);
+    perform set_config('app.deletion_reason', 'nettoyage événement de test', true);
+    delete from events where event_id = '<uuid-test>';
+  end $$;
+  ```
+- **Ne jamais supprimer un événement réel de l'utilisateur** (match/séminaire de
+  production) pour « faire de la place » ou par confusion avec un événement de test.
+  En cas de doute : demander (`AskUserQuestion`), ne pas supprimer.
+- Toute suppression est journalisée dans **`event_deletion_log`** (event, auteur
+  `deleted_by`, `reason`, `db_role` SQL, compteurs). Une ligne avec `reason IS NULL`
+  = suppression **non justifiée** à signaler.
+- Préférer, quand c'est possible, `reset_event` (remet à zéro sans supprimer)
+  plutôt qu'une suppression définitive.

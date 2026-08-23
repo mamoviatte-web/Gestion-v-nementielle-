@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trash2, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
 
 interface DeleteReport {
   success: boolean;
@@ -37,16 +38,21 @@ async function cleanupStorage(eventId: string, paths: string[]) {
 
 export function DeleteEventButton({ event }: { event: { event_id: string; event_name: string; event_type: string | null } }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<DeleteReport | null>(null);
+  const [reason, setReason] = useState('');
+  const reasonOk = reason.trim().length >= 4;
 
   async function handleDelete() {
+    if (!reasonOk) return;
     setLoading(true);
     const { data, error } = await supabase.rpc('delete_event_complete', {
       p_event_id: event.event_id,
       p_confirm: 'CONFIRMER',
-      p_deleted_by: 'admin',
+      p_deleted_by: user?.name ?? user?.email ?? 'admin',
+      p_reason: reason.trim(),
     });
     const res = (data as DeleteReport | null) ?? null;
     if (error || !res?.success) {
@@ -91,11 +97,22 @@ export function DeleteEventButton({ event }: { event: { event_id: string; event_
                 <li>• L'événement sera retiré du planning hebdomadaire</li>
               </ul>
             </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-stone-700">Motif de suppression <span className="text-red-600">*</span></label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={2}
+                placeholder="Ex. doublon, événement de test, annulation match…"
+                className="w-full resize-none rounded-xl border border-stone-200 px-3 py-2 text-sm focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-100"
+              />
+              <p className="mt-1 text-xs text-stone-400">Obligatoire — la suppression est tracée (auteur, date, motif) dans le journal.</p>
+            </div>
             <div className="flex gap-3">
-              <button onClick={() => setOpen(false)} className="flex-1 rounded-xl border border-stone-200 py-3 text-sm font-medium text-stone-600 hover:bg-stone-50">
+              <button onClick={() => { setOpen(false); setReason(''); }} className="flex-1 rounded-xl border border-stone-200 py-3 text-sm font-medium text-stone-600 hover:bg-stone-50">
                 Annuler
               </button>
-              <button onClick={() => void handleDelete()} disabled={loading} className="flex-1 rounded-xl bg-red-600 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700 disabled:opacity-40">
+              <button onClick={() => void handleDelete()} disabled={loading || !reasonOk} className="flex-1 rounded-xl bg-red-600 py-3 text-sm font-bold text-white transition-colors hover:bg-red-700 disabled:opacity-40">
                 {loading ? '⏳ Suppression…' : '🗑 Supprimer définitivement'}
               </button>
             </div>
