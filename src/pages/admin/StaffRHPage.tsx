@@ -159,7 +159,7 @@ export default function StaffRHPage() {
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <Kpi label="Agents / événement" value={globalKpis.avgAgents.toFixed(1)} unit="moy." sub={`${globalKpis.totalEvts} événement(s)`} icon="👥" accent={BLEU_NUIT} />
               <Kpi label="Heures / agent" value={globalKpis.avgHeures.toFixed(1)} unit="h moy." sub="par prestation" icon="⏱" accent={OR_PR} />
-              <Kpi label="Taux heures sup" value={(globalKpis.totalHeures > 0 ? (globalKpis.totalHSup / globalKpis.totalHeures) * 100 : 0).toFixed(1)} unit="%" sub={globalKpis.totalHSup > 0 ? '⚠️ À surveiller' : '✅ Correct'} icon="📈" accent={globalKpis.totalHSup > 0 ? ORANGE_W : VERT_OK} />
+              <Kpi label="Taux heures sup" value={(globalKpis.totalHeures > 0 ? (globalKpis.totalHSup / globalKpis.totalHeures) * 100 : 0).toFixed(1)} unit="%" sub={globalKpis.totalHSup > 0 ? 'À surveiller' : 'Correct'} icon="📈" accent={globalKpis.totalHSup > 0 ? ORANGE_W : VERT_OK} />
               <Kpi label="Coût RH total" value={globalKpis.totalCout.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} unit="€ HT" sub={`${(globalKpis.totalCout / Math.max(globalKpis.totalEvts, 1)).toFixed(0)} €/evt`} icon="💰" accent={VERT_OK} />
             </div>
 
