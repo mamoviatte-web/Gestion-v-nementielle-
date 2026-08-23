@@ -31,6 +31,7 @@ import {
   TR,
 } from '@/components/ui';
 import { getRecommendation } from '@/lib/runnerFallbackRatios';
+import { LogeDistribution } from '@/components/runner/LogeDistribution';
 
 export default function RunnerSpaceDetail() {
   const { id, spaceId } = useParams<{ id: string; spaceId: string }>();
@@ -123,6 +124,9 @@ export default function RunnerSpaceDetail() {
           </Alert>
         );
       })()}
+
+      {/* Répartition loge par loge (espaces Loges uniquement) */}
+      <LogeDistribution spaceId={spaceId} />
 
       {/* Barre de synthèse opérationnelle */}
       {rows.length > 0 &&
