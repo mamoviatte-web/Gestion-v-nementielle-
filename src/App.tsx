@@ -35,7 +35,7 @@ const EventDetailPage = lazy(() => import('@/pages/admin/EventDetailPage'));
 const EventPlanningPage = lazy(() => import('@/pages/admin/EventPlanningPage'));
 const CatalogPage = lazy(() => import('@/pages/admin/CatalogPage'));
 const SpacesPage = lazy(() => import('@/pages/admin/SpacesPage'));
-const BuvetteAssortmentPage = lazy(() => import('@/pages/admin/BuvetteAssortmentPage'));
+const EspaceAssortmentPage = lazy(() => import('@/pages/admin/EspaceAssortmentPage'));
 const QualityHubPage = lazy(() => import('@/pages/admin/QualityHubPage'));
 const AccessManagementPage = lazy(() => import('@/pages/admin/AccessManagementPage'));
 const StockPage = lazy(() => import('@/pages/admin/stock/StockPage'));
@@ -152,7 +152,7 @@ export default function App() {
           <Route path="analytics/coefficients" element={<Navigate to="/admin/datapilot/coefficients" replace />} />
           <Route path="catalog" element={<CatalogPage />} />
           <Route path="spaces" element={<SpacesPage />} />
-          <Route path="assortiment" element={<BuvetteAssortmentPage />} />
+          <Route path="assortiment" element={<EspaceAssortmentPage />} />
           {/* Fusion : ancienne route Santé des données → onglet « Santé » de Qualité */}
           <Route path="sante" element={<Navigate to="/admin/audit?tab=sante" replace />} />
           <Route path="audit" element={<QualityHubPage />} />
