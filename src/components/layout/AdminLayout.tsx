@@ -313,7 +313,8 @@ export function AdminLayout() {
 
         <AlertBanner />
 
-        <main className="flex-1 px-4 py-5 pb-24 md:px-8 md:pb-8">
+        {/* Portée du système visuel homogène (jetons + police Hanken Grotesk). */}
+        <main className="dash flex-1 px-4 py-5 pb-24 md:px-8 md:pb-8" style={{ background: 'var(--bg)' }}>
           <Outlet />
         </main>
 
