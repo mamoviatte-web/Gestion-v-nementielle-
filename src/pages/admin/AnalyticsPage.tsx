@@ -489,48 +489,36 @@ export default function AnalyticsPage() {
           </div>
         ) : (
           <>
-            {/* HERO — 4 métriques */}
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            {/* HERO — 4 métriques (système visuel homogène) */}
+            <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
               {[
                 {
                   label: 'Unités consommées',
                   value: <AnimatedNumber value={data?.kpis.unites_consommees ?? 0} />,
-                  sub: `${data?.kpis.produits_actifs ?? 0} produit(s) actif(s)`,
-                  icon: '📦',
-                  accent: BLEU_NUIT,
+                  sub: `${data?.kpis.produits_actifs ?? 0} produit(s) actif(s)`, tone: '', accent: false,
                 },
                 {
                   label: 'Coût consommations HT',
                   value: <AnimatedNumber value={data?.kpis.cout_ht ?? 0} suffix=" €" decimals={2} />,
-                  sub: 'F&B consommé',
-                  icon: '💰',
-                  accent: '#059669',
+                  sub: 'F&B consommé', tone: '', accent: false,
                 },
                 {
                   label: 'Taux retour moyen',
                   value: <AnimatedNumber value={data?.kpis.taux_retour_moyen ?? 0} suffix=" %" decimals={1} />,
-                  sub: (data?.kpis.taux_retour_moyen ?? 0) > 20 ? '⚠️ À optimiser' : '✅ Bon niveau',
-                  icon: '↩️',
-                  accent: (data?.kpis.taux_retour_moyen ?? 0) > 25 ? '#DC2626' : '#F97316',
+                  sub: (data?.kpis.taux_retour_moyen ?? 0) > 20 ? 'À optimiser' : 'Bon niveau',
+                  tone: (data?.kpis.taux_retour_moyen ?? 0) > 20 ? 'down' : 'up', accent: false,
                 },
                 {
                   label: 'Buvette la + active',
                   value: <span>{data?.kpis.buvette_active?.code ?? '—'}</span>,
-                  sub: data?.kpis.buvette_active
-                    ? `${data.kpis.buvette_active.unites} unités`
-                    : 'Pas encore de données',
-                  icon: '🏆',
-                  accent: OR_PR,
+                  sub: data?.kpis.buvette_active ? `${data.kpis.buvette_active.unites} unités` : 'Pas encore de données',
+                  tone: '', accent: true,
                 },
               ].map((kpi, i) => (
-                <div key={i} className="relative overflow-hidden rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
-                  <div className="absolute left-0 right-0 top-0 h-1 rounded-t-2xl" style={{ background: kpi.accent }} />
-                  <div className="mb-3 flex items-start justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">{kpi.label}</p>
-                    <span className="text-xl">{kpi.icon}</span>
-                  </div>
-                  <p className="text-3xl font-black text-stone-900">{kpi.value}</p>
-                  <p className="mt-1 text-xs text-stone-400">{kpi.sub}</p>
+                <div key={i} className={`kpi${kpi.accent ? ' accent' : ''}`}>
+                  <div className="kpi-l">{kpi.label}</div>
+                  <div className="kpi-v num">{kpi.value}</div>
+                  <div className={`kpi-s${kpi.tone ? ` ${kpi.tone}` : ''}`}>{kpi.sub}</div>
                 </div>
               ))}
             </div>
