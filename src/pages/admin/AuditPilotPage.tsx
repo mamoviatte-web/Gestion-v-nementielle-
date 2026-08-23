@@ -39,7 +39,6 @@ const SEV_STYLE: Record<string, { bg: string; text: string; label: string }> = {
 const TYPES = ['métier', 'stock', 'code', 'sécurité', 'données'] as const;
 const STATUSES = ['ouverte', 'en analyse', 'correction proposée', 'corrigée', 'ignorée avec justification'] as const;
 const fmt = (d: string | null) => (d ? new Date(d).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—');
-const scoreColor = (s: number) => (s >= 90 ? '#059669' : s >= 70 ? '#B45309' : '#DC2626');
 
 export default function AuditPilotPage() {
   const { user } = useAuth();
@@ -178,13 +177,14 @@ export default function AuditPilotPage() {
         </div>
       </div>
 
-      {/* En-tête score */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="col-span-2 flex items-center gap-4 rounded-2xl border border-stone-100 bg-white p-4 sm:col-span-1">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-white" style={{ background: scoreColor(run.global_score) }}>
-            <span className="text-xl font-black">{run.global_score}</span>
+      {/* En-tête score (système visuel homogène) */}
+      <div className="mb-4 grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+        <div className="kpi accent col-span-2 sm:col-span-1">
+          <div className="kpi-l">Score global</div>
+          <div className="kpi-v num">{run.global_score}/100</div>
+          <div className={`kpi-s ${run.critical_count > 0 ? 'down' : run.global_score >= 90 ? 'up' : ''}`}>
+            {run.critical_count > 0 ? `${run.critical_count} critique(s) à traiter` : run.global_score >= 90 ? 'données saines' : 'à surveiller'}
           </div>
-          <div><p className="text-xs uppercase tracking-wide text-stone-400">Score global</p><p className="text-sm font-semibold text-stone-700">/ 100</p></div>
         </div>
         <StatChip label="Critiques" value={run.critical_count} tone="critique" />
         <StatChip label="Moyennes" value={run.warning_count} tone="moyenne" />
@@ -266,11 +266,11 @@ export default function AuditPilotPage() {
 }
 
 function StatChip({ label, value, tone }: { label: string; value: number; tone: 'critique' | 'moyenne' | 'faible' }) {
-  const st = SEV_STYLE[tone];
+  const color = value === 0 ? 'var(--muted)' : tone === 'critique' ? 'var(--crit)' : tone === 'moyenne' ? 'var(--warn)' : 'var(--ink-2)';
   return (
-    <div className="rounded-2xl border border-stone-100 bg-white p-4">
-      <p className="text-xs uppercase tracking-wide text-stone-400">{label}</p>
-      <p className={`mt-1 text-2xl font-black ${value > 0 ? st.text : 'text-stone-300'}`}>{value}</p>
+    <div className="kpi">
+      <div className="kpi-l">{label}</div>
+      <div className="kpi-v num" style={{ color }}>{value}</div>
     </div>
   );
 }

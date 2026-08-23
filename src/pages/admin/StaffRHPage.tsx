@@ -34,19 +34,12 @@ type ActiveTab = 'synthese' | 'par_agent' | 'par_espace' | 'par_evenement' | 'cu
 
 const initials = (nom: string) => nom.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
 
-function Kpi({ label, value, unit, sub, icon, accent }: { label: string; value: string; unit?: string; sub?: string; icon: string; accent: string }) {
+function Kpi({ label, value, unit, sub }: { label: string; value: string; unit?: string; sub?: string; icon?: string; accent?: string }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
-      <div className="absolute inset-x-0 top-0 h-1 rounded-t-2xl" style={{ background: accent }} />
-      <div className="mb-2 flex items-start justify-between">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-stone-400">{label}</p>
-        <span className="text-xl">{icon}</span>
-      </div>
-      <div className="flex items-end gap-1">
-        <p className="text-3xl font-black text-stone-900">{value}</p>
-        {unit && <p className="mb-0.5 text-sm text-stone-400">{unit}</p>}
-      </div>
-      {sub && <p className="mt-1.5 text-xs text-stone-400">{sub}</p>}
+    <div className="kpi">
+      <div className="kpi-l">{label}</div>
+      <div className="kpi-v num">{value}{unit && <span className="ml-1 text-base font-semibold" style={{ color: 'var(--muted)' }}>{unit}</span>}</div>
+      {sub && <div className="kpi-s">{sub}</div>}
     </div>
   );
 }
@@ -265,10 +258,10 @@ export default function StaffRHPage() {
 
             {tab === 'par_evenement' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-2xl border border-stone-100 bg-white p-4 text-center"><p className="text-2xl font-black text-stone-900">{globalKpis.totalEvts}</p><p className="text-xs text-stone-400">événements sur la période</p></div>
-                  <div className="rounded-2xl border border-stone-100 bg-white p-4 text-center"><p className="text-2xl font-black" style={{ color: OR_PR }}>{globalKpis.totalCout.toFixed(0)} €</p><p className="text-xs text-stone-400">coût RH total période</p></div>
-                  <div className="rounded-2xl border border-stone-100 bg-white p-4 text-center"><p className="text-2xl font-black text-stone-900">{globalKpis.totalHeures.toFixed(0)} h</p><p className="text-xs text-stone-400">heures travaillées</p></div>
+                <div className="grid grid-cols-3 gap-3.5">
+                  <div className="kpi"><div className="kpi-v num">{globalKpis.totalEvts}</div><div className="kpi-s">événements sur la période</div></div>
+                  <div className="kpi accent"><div className="kpi-v num">{globalKpis.totalCout.toFixed(0)} €</div><div className="kpi-s">coût RH total période</div></div>
+                  <div className="kpi"><div className="kpi-v num">{globalKpis.totalHeures.toFixed(0)} h</div><div className="kpi-s">heures travaillées</div></div>
                 </div>
                 {kpis.length === 0 ? <div className="rounded-2xl border border-stone-100 bg-white p-10 text-center text-stone-400">Aucun événement sur cette période.</div> : kpis.map((k) => (
                   <EventRow key={k.event_id} k={k} totalCout={globalKpis.totalCout} />

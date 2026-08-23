@@ -27,14 +27,12 @@ import type { StockAlert, StockBalanceView } from '@/lib/types';
 /** Familles de produits affichées dans la répartition. */
 const CATEGORIES = ['Vins', 'Bières', 'Soft', 'Sirops', 'Spiritueux', 'Matériel'] as const;
 
-/** Carte KPI compacte du bandeau supérieur. */
+/** Carte KPI compacte du bandeau supérieur (système visuel homogène). */
 function KpiCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-pr-stone border-t-[3px] border-t-pr-black bg-white p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-pr-olive-dark">
-        {label}
-      </p>
-      <p className="mt-1 font-display text-3xl font-black text-pr-black">{value}</p>
+    <div className="kpi">
+      <div className="kpi-l">{label}</div>
+      <div className="kpi-v num">{value}</div>
     </div>
   );
 }
