@@ -32,6 +32,32 @@ interface Line {
 
 const num = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
+// Espaces Loges : dotation par loge (get_loge_runner_sheet) → détail dans le PDF.
+const LOGE_IDS = new Set([
+  'a96044d1-9ab0-45d0-85eb-73672df6ab82', // Loge Est
+  '673b6e4e-0f5a-406f-9029-c35b25a38103', // Loge Ouest Nord
+  '8be2956e-a379-4e8e-a3eb-65401bac3c56', // Loge Ouest Sud
+]);
+interface LogeBlock { loge: string; lignes: { produit: string; qte: number }[] }
+
+/** Grille « répartition par loge » (détail dotation fixe par loge) pour le PDF. */
+function buildLogeDetailHtml(blocks: LogeBlock[]): string {
+  if (!blocks.length) return '';
+  const cards = blocks.map((b) => {
+    const sub = b.lignes.reduce((a, x) => a + x.qte, 0);
+    const rows = b.lignes.map((x) =>
+      `<tr><td style="padding:2px 6px;border-bottom:1px solid #eee">${x.produit}</td><td style="padding:2px 6px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${x.qte}</td></tr>`).join('');
+    return `<div style="display:inline-block;vertical-align:top;width:32%;margin:0 1% 8px 0;border:1px solid #E7E2D8;border-radius:8px;overflow:hidden;font-size:10px">
+      <div style="background:#FBF3DD;padding:3px 6px;font-weight:700;color:#0B1F3A"><span>${b.loge}</span><span style="float:right;color:#B8860B">${sub}</span></div>
+      <table style="width:100%;border-collapse:collapse">${rows}</table>
+    </div>`;
+  }).join('');
+  return `<div style="margin-top:12px">
+    <p style="margin:0 0 5px;font-size:11px;font-weight:700;color:#0B1F3A">Répartition par loge — dotation fixe par loge (${blocks.length} loges)</p>
+    <div>${cards}</div>
+  </div>`;
+}
+
 // Ordre d'affichage des catégories sur la fiche runner (le vin en premier, bien visible).
 const CATEGORY_ORDER = ['Vins', 'Champagne', 'Bières', 'Soft', 'Softs', 'Spiritueux', 'Sirops', 'Gaz', 'Matériel'];
 const catRank = (c: string): number => {
@@ -58,14 +84,28 @@ export function UnifiedRunnerPanel({
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [logeSheets, setLogeSheets] = useState<Record<string, LogeBlock[]>>({});
 
   const load = useCallback(async () => {
     const [c, b] = await Promise.all([
       supabase.from('event_runner_space_summary').select('*').eq('event_id', eventId).order('family').order('space_name'),
       supabase.from('event_runner_board').select('*').eq('event_id', eventId),
     ]);
-    setCards((c.data as Card[] | null) ?? []);
+    const cardList = (c.data as Card[] | null) ?? [];
+    setCards(cardList);
     setBoard((b.data as Line[] | null) ?? []);
+    // Détail loge par loge (pour le PDF) des espaces Loges présents.
+    const logeIds = cardList.filter((x) => LOGE_IDS.has(x.space_id)).map((x) => x.space_id);
+    const sheets: Record<string, LogeBlock[]> = {};
+    await Promise.all(logeIds.map(async (sid) => {
+      const { data } = await supabase.rpc('get_loge_runner_sheet', { p_space: sid });
+      const d = data as { loges?: { loge: string; lignes?: { produit: string; qte: number }[] }[] } | null;
+      sheets[sid] = (d?.loges ?? []).map((l) => ({
+        loge: String(l.loge),
+        lignes: (l.lignes ?? []).map((x) => ({ produit: String(x.produit), qte: num(x.qte) })),
+      }));
+    }));
+    setLogeSheets(sheets);
     setLoading(false);
   }, [eventId]);
 
@@ -111,6 +151,7 @@ export function UnifiedRunnerPanel({
         </tr>`;
       }).join('');
       const totMove = lines.reduce((s, l) => s + num(l.qty_to_move), 0);
+      const logeDetail = LOGE_IDS.has(sid) ? buildLogeDetailHtml(logeSheets[sid] ?? []) : '';
       return `<div style="${idx > 0 ? 'page-break-before:always;' : ''}font-family:Arial,sans-serif;padding:4px">
         <h2 style="margin:0 0 2px;color:#0B1F3A">${card?.space_name ?? ''} <span style="font-size:12px;color:#8A94A2">· ${card?.family ?? ''}</span></h2>
         <p style="margin:0 0 8px;font-size:11px;color:#8A94A2">${matchNom} · ${matchDate} · ${lines.length} produit(s) · ${totMove} à acheminer</p>
@@ -125,6 +166,7 @@ export function UnifiedRunnerPanel({
           <tfoot><tr style="background:#F2F5F9;font-weight:700"><td colspan="3" style="padding:5px 6px;border:1px solid #ddd">TOTAL</td>
             <td style="padding:5px 6px;border:1px solid #ddd;text-align:right">${totMove}</td><td colspan="3" style="border:1px solid #ddd"></td></tr></tfoot>
         </table>
+        ${logeDetail}
       </div>`;
     }).join('');
     return `<div>${pages}</div>`;
