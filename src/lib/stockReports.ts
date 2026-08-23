@@ -10,6 +10,7 @@
  */
 
 import { downloadAoaWorkbook, type AoaSheetOut } from './xlsxAoa';
+import { EUR, INT, type ColumnStyle } from './excelTheme';
 import { computeConsumed } from './calculations';
 import { supabase } from '@/lib/supabase';
 
@@ -31,15 +32,23 @@ function sanitize(name: string): string {
     .replace(/^_+|_+$/g, '');
 }
 
-/** Ajoute une feuille (matrice + largeurs) à la liste des feuilles à écrire. */
+/** Ajoute une feuille (matrice + largeurs) à la liste des feuilles à écrire.
+ *  `title` (optionnel) préfixe un bandeau marine ; `columns` (optionnel) porte
+ *  les formats de colonnes (€, entier…) appliqués par la charte commune. */
 function appendSheet(
   sheets: AoaSheetOut[],
   name: string,
   aoa: Row[],
   widths: number[],
+  columns?: (ColumnStyle | undefined)[],
+  title?: string,
 ): void {
-  sheets.push({ name, aoa, widths });
+  const body = title ? ([[title], [], ...aoa] as Row[]) : aoa;
+  sheets.push({ name, aoa: body, widths, columns });
 }
+
+/** Bandeau titre commun : « PROVENCE RUGBY — {sujet} ». */
+const bandeau = (sujet: string): string => `PROVENCE RUGBY — ${sujet}`;
 
 /* ------------------------------------------------------------------ */
 /* Types de lignes récupérées (colonnes minimales nécessaires)         */
@@ -163,7 +172,15 @@ export async function exportRapportEvenement(eventId: string): Promise<void> {
   const ev = events.get(eventId);
   const label = ev ? `${sanitize(ev.name)}_${ev.date}` : sanitize(eventId);
   const sheets: AoaSheetOut[] = [];
-  appendSheet(sheets,'Événement', aoa, [16, 26, 9, 9, 8, 10, 12, 14, 28, 18]);
+  appendSheet(
+    sheets, 'Événement', aoa, [16, 26, 9, 9, 8, 10, 12, 14, 28, 18],
+    [
+      { align: 'left' }, { align: 'left' }, { numFmt: INT }, { numFmt: INT },
+      { numFmt: INT }, { numFmt: INT }, { numFmt: EUR }, { align: 'center' },
+      { align: 'left' }, { align: 'left' },
+    ],
+    bandeau(`BILAN STOCKS PAR ESPACE — ${ev ? `${ev.name} — ${ev.date}` : eventId}`),
+  );
   await downloadAoaWorkbook(sheets,`Rapport_Evenement_${label}_${today()}.xlsx`);
 }
 
@@ -203,7 +220,11 @@ export async function exportRapportEspace(spaceId: string): Promise<void> {
 
   const spaceName = spaces.get(spaceId) ?? spaceId;
   const sheets: AoaSheetOut[] = [];
-  appendSheet(sheets,'Espace', aoa, [28, 16, 14]);
+  appendSheet(
+    sheets, 'Espace', aoa, [28, 16, 14],
+    [{ align: 'left' }, { numFmt: INT }, { numFmt: EUR }],
+    bandeau(`CONSOMMATION PAR PRODUIT — ${spaceName}`),
+  );
   await downloadAoaWorkbook(sheets,`Rapport_Espace_${sanitize(spaceName)}_${today()}.xlsx`);
 }
 
@@ -262,7 +283,14 @@ export async function exportRapportProduit(productId: string): Promise<void> {
 
   const productName = products.get(productId)?.product_name ?? productId;
   const sheets: AoaSheetOut[] = [];
-  appendSheet(sheets,'Produit', aoa, [12, 26, 16, 10, 12, 18]);
+  appendSheet(
+    sheets, 'Produit', aoa, [12, 26, 16, 10, 12, 18],
+    [
+      { align: 'center' }, { align: 'left' }, { align: 'left' },
+      { numFmt: INT }, { numFmt: EUR }, { align: 'left' },
+    ],
+    bandeau(`HISTORIQUE PRODUIT — ${productName}`),
+  );
   await downloadAoaWorkbook(sheets,`Rapport_Produit_${sanitize(productName)}_${today()}.xlsx`);
 }
 
@@ -373,9 +401,24 @@ export async function exportRapportStockGeneral(): Promise<void> {
   }
 
   const sheets: AoaSheetOut[] = [];
-  appendSheet(sheets,'Vue globale', globalAoa, [28, 16, 14, 10, 10, 12]);
-  appendSheet(sheets,'Par emplacement', locAoa, [22, 28, 12]);
-  appendSheet(sheets,'Alertes', alertAoa, [16, 28, 22, 26]);
+  appendSheet(
+    sheets, 'Vue globale', globalAoa, [28, 16, 14, 10, 10, 12],
+    [
+      { align: 'left' }, { numFmt: INT }, { numFmt: EUR },
+      { numFmt: INT }, { numFmt: INT }, { align: 'center' },
+    ],
+    bandeau('STOCK GÉNÉRAL — VUE GLOBALE'),
+  );
+  appendSheet(
+    sheets, 'Par emplacement', locAoa, [22, 28, 12],
+    [{ align: 'left' }, { align: 'left' }, { numFmt: INT }],
+    bandeau('STOCK GÉNÉRAL — PAR EMPLACEMENT'),
+  );
+  appendSheet(
+    sheets, 'Alertes', alertAoa, [16, 28, 22, 26],
+    [{ align: 'center' }, { align: 'left' }, { align: 'left' }, { align: 'left' }],
+    bandeau('STOCK GÉNÉRAL — ALERTES'),
+  );
   await downloadAoaWorkbook(sheets,`Rapport_Stock_General_${today()}.xlsx`);
 }
 
@@ -422,7 +465,14 @@ export async function exportRapportPrestataires(eventId: string): Promise<void> 
   const ev = events.get(eventId);
   const label = ev ? `${sanitize(ev.name)}_${ev.date}` : sanitize(eventId);
   const sheets: AoaSheetOut[] = [];
-  appendSheet(sheets,'Prestataires', aoa, [24, 14, 14, 14, 14, 18]);
+  appendSheet(
+    sheets, 'Prestataires', aoa, [24, 14, 14, 14, 14, 18],
+    [
+      { align: 'left' }, { align: 'center' }, { align: 'center' },
+      { align: 'center' }, { align: 'center' }, { align: 'left' },
+    ],
+    bandeau(`PRESTATAIRES — ${ev ? `${ev.name} — ${ev.date}` : eventId}`),
+  );
   await downloadAoaWorkbook(sheets,`Rapport_Prestataires_${label}_${today()}.xlsx`);
 }
 
@@ -476,6 +526,13 @@ export async function exportRapportInventaire(locationId: string): Promise<void>
 
   const locName = locations.get(locationId) ?? locationId;
   const sheets: AoaSheetOut[] = [];
-  appendSheet(sheets,'Inventaire', aoa, [28, 11, 9, 9, 18, 12, 30, 8]);
+  appendSheet(
+    sheets, 'Inventaire', aoa, [28, 11, 9, 9, 18, 12, 30, 8],
+    [
+      { align: 'left' }, { numFmt: INT }, { numFmt: INT }, { numFmt: INT },
+      { align: 'left' }, { align: 'center' }, { align: 'left' }, { align: 'center' },
+    ],
+    bandeau(`INVENTAIRE — ${locName}`),
+  );
   await downloadAoaWorkbook(sheets,`Rapport_Inventaire_${sanitize(locName)}_${today()}.xlsx`);
 }

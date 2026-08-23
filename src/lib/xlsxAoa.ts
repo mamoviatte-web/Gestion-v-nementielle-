@@ -13,16 +13,27 @@
 
 import type * as ExcelJS from 'exceljs';
 import { loadModule } from '@/lib/lazyModule';
+import { paintAoaWorksheet, type ColumnStyle } from '@/lib/excelTheme';
 
 /* ─────────────────────────  ÉCRITURE  ───────────────────────── */
 
-export type AoaCell = string | number | null | undefined;
+/** Cellule-formule : `{ f: '=H4+I4-J4' }` → Excel recalcule à l'ouverture. */
+export interface AoaFormula {
+  f: string;
+}
+export type AoaCell = string | number | null | undefined | AoaFormula;
+
 export interface AoaSheetOut {
   name: string;
   aoa: AoaCell[][];
   /** Largeurs de colonnes (unités ≈ caractères, comme SheetJS `wch`). */
   widths?: number[];
+  /** Formats / alignements par colonne (index 0 = colonne A) — habillage. */
+  columns?: (ColumnStyle | undefined)[];
 }
+
+const isFormula = (v: AoaCell): v is AoaFormula =>
+  v != null && typeof v === 'object' && typeof (v as AoaFormula).f === 'string';
 
 function download(buf: ExcelJS.Buffer, name: string): void {
   const b = new Blob([buf], {
@@ -36,15 +47,30 @@ function download(buf: ExcelJS.Buffer, name: string): void {
   URL.revokeObjectURL(u);
 }
 
-/** Construit un classeur à partir de feuilles-matrices et déclenche le téléchargement. */
+/** Construit un classeur à partir de feuilles-matrices et déclenche le téléchargement.
+ *
+ * Chaque feuille reçoit automatiquement la charte graphique commune
+ * (`paintAoaWorksheet`) : bandeau titre marine, en-tête figé + filtre, lignes
+ * zébrées, sous-totaux/total surlignés, formats de colonnes (€, entier…).
+ * Les cellules `{ f: '=…' }` deviennent de vraies formules Excel. */
 export async function downloadAoaWorkbook(sheets: AoaSheetOut[], filename: string): Promise<void> {
   const ExcelJSMod = (await loadModule(() => import('exceljs'))).default;
   const wb = new ExcelJSMod.Workbook();
   wb.creator = 'StockPilot MD';
   for (const s of sheets) {
     const ws = wb.addWorksheet(s.name);
-    for (const row of s.aoa) ws.addRow(row as ExcelJS.CellValue[]);
+    for (const row of s.aoa) {
+      const excelRow = ws.addRow([]);
+      row.forEach((cell, i) => {
+        const c = excelRow.getCell(i + 1);
+        c.value = isFormula(cell) ? ({ formula: cell.f } as ExcelJS.CellFormulaValue) : (cell ?? null);
+      });
+    }
     if (s.widths) s.widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
+    paintAoaWorksheet(ws, s.aoa as unknown[][], {
+      ncols: Math.max(s.widths?.length ?? 0, s.columns?.length ?? 0),
+      columns: s.columns,
+    });
   }
   download(await wb.xlsx.writeBuffer(), filename);
 }
