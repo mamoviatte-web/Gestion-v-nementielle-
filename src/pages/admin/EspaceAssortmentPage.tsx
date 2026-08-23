@@ -43,7 +43,6 @@ const TYPE_LABEL: Record<string, string> = { vip: 'VIP / Salons', bar: 'Bars', b
 const TYPE_ORDER: ServiceType[] = ['vip', 'bar', 'bodega', 'buvette'];
 const CATEGORY_ORDER = ['Bières', 'Soft', 'Sirops', 'Spiritueux', 'Vins', 'Matériel'];
 const catRank = (c: string) => { const i = CATEGORY_ORDER.indexOf(c); return i === -1 ? CATEGORY_ORDER.length : i; };
-const is50cl = (name: string) => /50\s*cl/i.test(name);
 
 export default function EspaceAssortmentPage() {
   const { showToast } = useToast();
@@ -88,12 +87,8 @@ export default function EspaceAssortmentPage() {
   );
   const presentIds = useMemo(() => new Set(socleOfSelected.map((r) => r.product_id)), [socleOfSelected]);
   const svc = selectedSpace?.service_type ?? null;
-  const available = useMemo(
-    () => products.filter((p) => !presentIds.has(p.product_id))
-      // 50cl interdit en VIP/Bars (garde runner) → non proposé à l'ajout pour ces espaces.
-      .filter((p) => !((svc === 'vip' || svc === 'bar') && is50cl(p.product_name))),
-    [products, presentIds, svc],
-  );
+  // Aucune différenciation VIP / buvette : tous les produits sont proposés partout.
+  const available = useMemo(() => products.filter((p) => !presentIds.has(p.product_id)), [products, presentIds]);
   const countByArea = useMemo(() => {
     const m = new Map<string, number>();
     for (const r of socle) { const k = r.area_name.trim().toUpperCase(); m.set(k, (m.get(k) ?? 0) + 1); }
@@ -158,7 +153,7 @@ export default function EspaceAssortmentPage() {
 
       <div className="mb-4 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
         <Info size={16} className="mt-0.5 shrink-0" />
-        <span>Le socle est global (par espace, pas par match) : la modification s'applique dès la prochaine régénération des dotations. Les <b>Loges</b> gardent leur dotation par loge dédiée. En <b>VIP/Bars</b>, le format 50cl reste réservé aux buvettes/Bodega.</span>
+        <span>Modulez chaque espace par ses produits : <b>tous les produits sont disponibles pour tous les espaces</b> (un produit buvette peut être mis en VIP et inversement). Le socle est global (par espace, pas par match) et s'applique dès la prochaine régénération des dotations. Les <b>Loges</b> gardent leur dotation par loge dédiée.</span>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[240px_1fr]">
