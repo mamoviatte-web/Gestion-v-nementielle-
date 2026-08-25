@@ -28,7 +28,7 @@ export const FAMILIES_BY_SPACE: Record<string, SpaceFamily[]> = {
   ],
   // LOGE — bière en verre en premier
   loge: [
-    { key: 'Bières', label: '🌟 Bière en verre', emoji: '🍺' },
+    { key: 'Bières', label: '🌟 BUD bouteille 33cl', emoji: '🍺' },
     { key: 'Vins', label: 'Vins & Champagnes', emoji: '🍷' },
     { key: 'Spiritueux', label: 'Whisky & Ricard', emoji: '🥃' },
     { key: 'Soft', label: 'Softs & Eaux', emoji: '💧' },
@@ -45,7 +45,7 @@ export const FAMILIES_BY_SPACE: Record<string, SpaceFamily[]> = {
   // WINE BAR — vins en premier
   wine_bar: [
     { key: 'Vins', label: 'Vins & Champagnes', emoji: '🍷' },
-    { key: 'Bières', label: 'Bière en verre', emoji: '🍺' },
+    { key: 'Bières', label: 'BUD bouteille 33cl', emoji: '🍺' },
     { key: 'Spiritueux', label: 'Spiritueux', emoji: '🥃' },
     { key: 'Soft', label: 'Softs & Eaux', emoji: '💧' },
   ],
