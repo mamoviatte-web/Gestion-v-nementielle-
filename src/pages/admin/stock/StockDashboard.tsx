@@ -68,8 +68,13 @@ export default function StockDashboard() {
   const alerts = useStockAlerts();
   const { products } = useCatalog();
 
+  // Fûts (+ CO2) : stock piloté exclusivement par le sous-système keg (tableau
+  // « Fûts »). On les exclut du stock général pour éviter tout double comptage.
   const allBalances: StockBalanceView[] = useMemo(
-    () => balances.data ?? [],
+    () =>
+      (balances.data ?? []).filter(
+        (b) => b.product?.unit !== 'fût' && b.product?.product_name !== 'CO2',
+      ),
     [balances.data],
   );
 
@@ -85,7 +90,10 @@ export default function StockDashboard() {
 
   // KPI 2 — produits actifs sous leur seuil en réserve centrale.
   const criticalStats = useMemo(() => {
-    const activeProducts = (products.data ?? []).filter((p) => p.active);
+    // Fûts/CO2 exclus : suivi de seuil géré par le tableau « Fûts » (keg).
+    const activeProducts = (products.data ?? []).filter(
+      (p) => p.active && p.unit !== 'fût' && p.product_name !== 'CO2',
+    );
     const reserveQty = new Map<string, number>();
     for (const b of reserveBalances.data ?? []) {
       reserveQty.set(b.product_id, (reserveQty.get(b.product_id) ?? 0) + b.current_quantity);
