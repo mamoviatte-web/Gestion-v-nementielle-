@@ -8,7 +8,7 @@
  * Route : /admin/rh/analytique.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, TrendingUp, Users, Clock, Wallet, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { downloadAoaWorkbook, type AoaSheetOut } from '@/lib/xlsxAoa';
@@ -106,24 +106,41 @@ export default function RhAnalytiquePage() {
   const [payRows, setPayRows] = useState<PayrollRow[]>([]);
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-    void supabase.from('rh_monthly_hours').select('staff_name, type_paiement, mois, missions, heures, cout_ht, nb_evenements')
-      .eq('mois', payMonth).order('staff_name')
-      .then(({ data }) => {
-        if (!alive) return;
-        setPayRows((data ?? []).map((r) => ({
-          staff_name: String((r as PayrollRow).staff_name ?? ''),
-          type_paiement: String((r as PayrollRow).type_paiement ?? 'non défini'),
-          mois: String((r as PayrollRow).mois ?? payMonth),
-          missions: String((r as PayrollRow).missions ?? ''),
-          heures: num((r as PayrollRow).heures),
-          cout_ht: num((r as PayrollRow).cout_ht),
-          nb_evenements: num((r as PayrollRow).nb_evenements),
-        })));
-      });
-    return () => { alive = false; };
+  const loadPay = useCallback(async () => {
+    const { data } = await supabase
+      .from('rh_monthly_hours')
+      .select('staff_name, type_paiement, mois, missions, heures, cout_ht, nb_evenements')
+      .eq('mois', payMonth)
+      .order('staff_name');
+    setPayRows((data ?? []).map((r) => ({
+      staff_name: String((r as PayrollRow).staff_name ?? ''),
+      type_paiement: String((r as PayrollRow).type_paiement ?? 'non défini'),
+      mois: String((r as PayrollRow).mois ?? payMonth),
+      missions: String((r as PayrollRow).missions ?? ''),
+      heures: num((r as PayrollRow).heures),
+      cout_ht: num((r as PayrollRow).cout_ht),
+      nb_evenements: num((r as PayrollRow).nb_evenements),
+    })));
   }, [payMonth]);
+
+  useEffect(() => { void loadPay(); }, [loadPay]);
+
+  const [savingCircuit, setSavingCircuit] = useState<string | null>(null);
+  /** Bascule le circuit d'une personne (Franchise/Contrat) ; Contrat = 18 €/h. */
+  async function setCircuit(staff: string, type: 'franchise' | 'contrat') {
+    setSavingCircuit(staff);
+    try {
+      const { error } = await supabase.rpc('set_staff_payment_circuit', {
+        p_staff: staff, p_mois: payMonth, p_type: type,
+      });
+      if (error) throw error;
+      await loadPay();
+    } catch (e) {
+      alert('Échec du changement de circuit : ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setSavingCircuit(null);
+    }
+  }
 
   async function exportPaie() {
     setExporting(true);
@@ -315,8 +332,29 @@ export default function RhAnalytiquePage() {
                   {payRows.map((r, i) => (
                     <tr key={`${r.staff_name}-${i}`}>
                       <td className="px-4 py-2 font-bold" style={{ color: payColor(r.type_paiement) }}>{r.staff_name}</td>
-                      <td className="px-3 py-2 font-medium" style={{ color: payColor(r.type_paiement) }}>
-                        {r.type_paiement === 'franchise' ? 'Franchise' : r.type_paiement === 'contrat' ? 'Contrat' : r.type_paiement}
+                      <td className="px-3 py-2">
+                        <div className="inline-flex overflow-hidden rounded-lg border border-stone-200 text-xs font-semibold">
+                          <button
+                            type="button"
+                            disabled={savingCircuit === r.staff_name}
+                            onClick={() => void setCircuit(r.staff_name, 'franchise')}
+                            title="Franchise = à facturer (taux de base)"
+                            className={`px-2.5 py-1 transition-colors ${r.type_paiement === 'franchise' ? 'text-white' : 'bg-white text-stone-500 hover:bg-stone-50'}`}
+                            style={r.type_paiement === 'franchise' ? { background: payColor('franchise') } : {}}
+                          >
+                            Franchise
+                          </button>
+                          <button
+                            type="button"
+                            disabled={savingCircuit === r.staff_name}
+                            onClick={() => void setCircuit(r.staff_name, 'contrat')}
+                            title="Contrat = paie · taux porté à 18 €/h"
+                            className={`border-l border-stone-200 px-2.5 py-1 transition-colors ${r.type_paiement === 'contrat' ? 'text-white' : 'bg-white text-stone-500 hover:bg-stone-50'}`}
+                            style={r.type_paiement === 'contrat' ? { background: payColor('contrat') } : {}}
+                          >
+                            Contrat 18€
+                          </button>
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">{hrs(r.heures)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{eur(r.cout_ht)}</td>
