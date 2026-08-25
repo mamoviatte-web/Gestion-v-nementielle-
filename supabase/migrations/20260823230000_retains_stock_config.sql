@@ -10,7 +10,7 @@
 --
 -- Espaces à stock conservé (retains_stock = true) :
 --   Bodega, Salon Nord, Salon Sud, Loge Est, Loge Ouest Nord, Loge Ouest Sud,
---   Bistrot, Club 70 Nord, Club 70 Sud, Comptoir, Wine bar Nord, Wine bar Sud,
+--   Bistrot, Club 70 Nord, Club 70 Sud, Comptoir, Le Pub, Wine bar Nord, Wine bar Sud,
 --   + buvettes Nord EST, EST NORD, EST SUD.
 -- Tous les autres espaces : retains_stock = false (retour dépôt automatique).
 
@@ -19,7 +19,7 @@ update spaces set retains_stock = true
  where space_name in (
    'Bodega', 'Salon Nord', 'Salon Sud',
    'Loge Est', 'Loge Ouest Nord', 'Loge Ouest Sud',
-   'Bistrot', 'Club 70 Nord', 'Club 70 Sud', 'Comptoir',
+   'Bistrot', 'Club 70 Nord', 'Club 70 Sud', 'Comptoir', 'Le Pub',
    'Wine bar Nord', 'Wine bar Sud',
    'Nord EST', 'EST NORD', 'EST SUD'
  );
@@ -29,7 +29,7 @@ update spaces set retains_stock = false
  where space_name not in (
    'Bodega', 'Salon Nord', 'Salon Sud',
    'Loge Est', 'Loge Ouest Nord', 'Loge Ouest Sud',
-   'Bistrot', 'Club 70 Nord', 'Club 70 Sud', 'Comptoir',
+   'Bistrot', 'Club 70 Nord', 'Club 70 Sud', 'Comptoir', 'Le Pub',
    'Wine bar Nord', 'Wine bar Sud',
    'Nord EST', 'EST NORD', 'EST SUD'
  )
