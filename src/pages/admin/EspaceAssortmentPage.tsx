@@ -104,18 +104,19 @@ export default function EspaceAssortmentPage() {
     const p = products.find((x) => x.product_id === toAdd);
     if (!p || !selectedSpace) return;
     setBusy(true);
-    const { error } = await supabase.from('area_product_reference').upsert(
-      {
-        area_name: selectedSpace.space_name,
-        area_group: GROUP_BY_SERVICE[selectedSpace.service_type ?? 'bar'] ?? 'VIP',
-        product_id: p.product_id,
-        product_name: p.product_name,
-        product_family: FAMILY_BY_CATEGORY[p.category] ?? 'Autres',
-        association_level: 'S',
-        cdc_version: 'custom',
-      },
-      { onConflict: 'area_name,product_name', ignoreDuplicates: true },
-    );
+    // area_product_reference est désormais une VUE sur space_product_catalog (CTR-1).
+    // Un INSERT simple suffit : le trigger INSTEAD OF gère l'idempotence
+    // (upsert interne sur le catalogue). PostgREST upsert/onConflict est rejeté
+    // sur une vue (pas de contrainte unique) → on reste sur .insert().
+    const { error } = await supabase.from('area_product_reference').insert({
+      area_name: selectedSpace.space_name,
+      area_group: GROUP_BY_SERVICE[selectedSpace.service_type ?? 'bar'] ?? 'VIP',
+      product_id: p.product_id,
+      product_name: p.product_name,
+      product_family: FAMILY_BY_CATEGORY[p.category] ?? 'Autres',
+      association_level: 'S',
+      cdc_version: 'custom',
+    });
     setBusy(false);
     if (error) return showToast(`Échec : ${error.message}`, 'warning');
     setToAdd('');
