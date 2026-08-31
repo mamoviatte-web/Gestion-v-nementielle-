@@ -2,12 +2,14 @@
  * RunnerPdfButton — « Télécharger les fiches runner (PDF) ».
  * StockPilot MD · Stade Maurice-David · Provence Rugby.
  *
- * Flux : 1) (re)génère les dotations via generate_runner_dotations (toujours à
- * jour), 2) récupère les fiches formatées via get_runner_pdf_data, 3) produit un
- * PDF « 1 page par espace activé ». Aucun coût affiché (règle CDC).
+ * Flux : 1) récupère les fiches formatées via get_runner_pdf_data (état actuel,
+ * quantités modifiées manuellement comprises — AUCUNE régénération ici, pour ne
+ * pas écraser les ajustements), 2) produit un PDF « 1 page par espace activé ».
+ * Aucun coût affiché (règle CDC). La (re)génération est une action explicite
+ * séparée (« Générer les dotations »).
  *
- * Les deux RPC lisent event_spaces : un événement sans espace lié produit un PDF
- * vide → message clair invitant à lier des espaces d'abord.
+ * get_runner_pdf_data lit event_spaces : un événement sans espace lié produit un
+ * PDF vide → message clair invitant à lier des espaces d'abord.
  */
 
 import { useState } from 'react';
@@ -176,11 +178,11 @@ export function RunnerPdfButton({
     setBusy(true);
     let holder: HTMLDivElement | null = null;
     try {
-      // 1) (Re)générer les dotations pour être toujours à jour.
-      const gen = await supabase.rpc('generate_runner_dotations', { p_event_id: eventId });
-      if (gen.error) throw gen.error;
-
-      // 2) Récupérer les fiches formatées.
+      // On N' APPELLE PLUS generate_runner_dotations ici : l'impression reflète
+      // l'état actuel des fiches (y compris les quantités modifiées manuellement),
+      // sans écraser le travail. La (re)génération reste une action explicite via
+      // le bouton dédié « Générer les dotations ».
+      // Récupérer les fiches formatées telles quelles.
       const { data, error } = await supabase.rpc('get_runner_pdf_data', { p_event_id: eventId });
       if (error) throw error;
 
