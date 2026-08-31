@@ -72,8 +72,15 @@ export default function MatchZoneStocks() {
     setError('');
     setSavedMsg('');
     if (nom.trim().length < 2) return setError('Indiquez votre nom (RG-001).');
-    if (step === 'cloture' && anomalies.length > 0)
-      return setError(`Consommation négative sur ${anomalies.length} produit(s) : ajoutez un commentaire d'anomalie (RG-004).`);
+    if (step === 'cloture' && anomalies.length > 0) {
+      // On NOMME les produits fautifs : le responsable voit tout de suite où
+      // corriger l'ouverture ou ajouter le commentaire d'anomalie (RG-004).
+      const noms = anomalies.map((l) => l.product_name);
+      const liste = noms.slice(0, 3).join(', ') + (noms.length > 3 ? `… (+${noms.length - 3})` : '');
+      return setError(
+        `Stock final supérieur au stock ouvert sur : ${liste}. Corrigez l'ouverture, ou ajoutez un commentaire d'anomalie sur ce(s) produit(s) pour valider (RG-004).`,
+      );
+    }
     setSaving(true);
     const payload = lines.map((l) => ({
       product_id: l.product_id,
