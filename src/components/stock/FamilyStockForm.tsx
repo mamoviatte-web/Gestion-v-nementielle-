@@ -109,6 +109,15 @@ export function FamilyStockForm({ lines, mode, onChange, spaceType }: Props) {
         <span className="text-xs text-stone-400">{lines.length} produit(s) au total</span>
       </div>
 
+      {mode === 'final' && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-bold text-amber-900">RESTANT — ce qu'il reste en fin de match</p>
+          <p className="mt-0.5 text-xs text-amber-700">
+            Comptez ce qu'il <strong>RESTE physiquement</strong>, PAS le total reçu (initial + réassort).
+          </p>
+        </div>
+      )}
+
       {families.map((familyKey) => {
         const cfg = famConfig.find((f) => f.key === familyKey) ?? { key: familyKey, label: familyKey, emoji: '📋', color: 'bg-stone-50' };
         const fLines = byFamily[familyKey] ?? [];
@@ -161,6 +170,8 @@ export function FamilyStockForm({ lines, mode, onChange, spaceType }: Props) {
                   const finalVal = mode === 'final' ? line.final_qty : null;
                   const consumed = finalVal !== null && finalVal !== undefined ? totalIn - finalVal : null;
                   const isAnomaly = consumed !== null && consumed < 0;
+                  // Conso nulle sur un produit qui avait du stock = « restant = total reçu » probable.
+                  const isZeroConsSuspect = mode === 'final' && consumed === 0 && totalIn > 0;
                   const field: keyof StockLine =
                     mode === 'initial' ? 'initial_qty' : mode === 'reassort' ? 'reassort_qty' : 'final_qty';
                   return (
@@ -171,11 +182,11 @@ export function FamilyStockForm({ lines, mode, onChange, spaceType }: Props) {
                           <p className="mt-0.5 text-xs text-stone-400">{line.unit}</p>
                           {mode === 'final' && totalIn > 0 && (
                             <p className="mt-1 text-xs text-stone-500">
-                              Entré : {line.initial_qty}
-                              {(line.reassort_qty ?? 0) > 0 ? ` + ${line.reassort_qty} réassort = ${totalIn}` : ` ${line.unit}`}
+                              Reçu <strong className="text-stone-700">{totalIn}</strong> {line.unit} max — saisissez le{' '}
+                              <strong>restant</strong>
                               {consumed !== null && (
                                 <span
-                                  className={`ml-1 font-medium ${isAnomaly ? 'text-red-600' : consumed > 0 ? 'text-stone-700' : 'text-stone-400'}`}
+                                  className={`ml-1 font-medium ${isAnomaly ? 'text-red-600' : isZeroConsSuspect ? 'text-amber-700' : 'text-stone-700'}`}
                                 >
                                   → {consumed >= 0 ? consumed : `⚠️ ${consumed}`} consommé(s)
                                 </span>
@@ -217,6 +228,12 @@ export function FamilyStockForm({ lines, mode, onChange, spaceType }: Props) {
                             className="w-full rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
                           />
                         </div>
+                      )}
+
+                      {isZeroConsSuspect && !isAnomaly && (
+                        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 ring-1 ring-amber-300">
+                          ⚠️ Consommation nulle : avez-vous saisi le <strong>RESTANT</strong> et non le total reçu&nbsp;?
+                        </p>
                       )}
                     </div>
                   );
