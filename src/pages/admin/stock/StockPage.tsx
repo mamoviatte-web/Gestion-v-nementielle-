@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { BarChart3, Building2, ArrowLeftRight, ClipboardList, FileDown, Warehouse, type LucideIcon } from 'lucide-react';
+import { BarChart3, Building2, ArrowLeftRight, ClipboardList, FileDown, Warehouse, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { clsx } from 'clsx';
 import { PageHeader } from '@/components/layout/PageHeader';
 import StockDashboard from './StockDashboard';
@@ -12,14 +12,16 @@ import StockBySpace from './StockBySpace';
 import StockMovements from './StockMovements';
 import StockInventory from './StockInventory';
 import StockReports from './StockReports';
+import StockFlowControl from './StockFlowControl';
 import DepotsTab from './DepotsTab';
 
-type StockTabKey = 'general' | 'depots' | 'espace' | 'mouvements' | 'inventaire' | 'rapports';
+type StockTabKey = 'general' | 'depots' | 'espace' | 'controle' | 'mouvements' | 'inventaire' | 'rapports';
 
 const TABS: { key: StockTabKey; label: string; Icon: LucideIcon }[] = [
   { key: 'general', label: 'Vue générale', Icon: BarChart3 },
   { key: 'depots', label: 'Dépôts', Icon: Warehouse },
   { key: 'espace', label: 'Par espace', Icon: Building2 },
+  { key: 'controle', label: 'Contrôle départs/retours', Icon: ShieldCheck },
   { key: 'mouvements', label: 'Mouvements', Icon: ArrowLeftRight },
   { key: 'inventaire', label: 'Inventaire', Icon: ClipboardList },
   { key: 'rapports', label: 'Rapports', Icon: FileDown },
@@ -58,6 +60,7 @@ export default function StockPage() {
       {tab === 'general' && <StockDashboard />}
       {tab === 'depots' && <DepotsTab />}
       {tab === 'espace' && <StockBySpace />}
+      {tab === 'controle' && <StockFlowControl />}
       {tab === 'mouvements' && <StockMovements />}
       {tab === 'inventaire' && <StockInventory />}
       {tab === 'rapports' && <StockReports />}
