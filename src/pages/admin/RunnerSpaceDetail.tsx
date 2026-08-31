@@ -254,7 +254,7 @@ export default function RunnerSpaceDetail() {
               <TH className="text-right">Reco.</TH>
               <TH className="text-right">À monter</TH>
               <TH className="text-right">Stock dépôt</TH>
-              <TH>Validée</TH>
+              <TH>Qté à monter ✎</TH>
               <TH>Alerte</TH>
               <TH />
             </TR>
@@ -344,6 +344,7 @@ export default function RunnerSpaceDetail() {
                       type="number"
                       min={0}
                       className="w-20"
+                      title="Modifiez la quantité à monter si elle vous semble trop faible (reporting historique sous-évalué), puis validez la ligne (✓). Votre valeur prime sur le calcul auto et s'imprime sur la fiche."
                       value={editVal(p)}
                       onChange={(e) =>
                         setEdits((prev) => ({
