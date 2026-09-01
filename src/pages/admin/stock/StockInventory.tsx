@@ -4,7 +4,7 @@
  * RG-001 : responsable_nom obligatoire (≥ 2 car.).
  * RG-004 : commentaire obligatoire dès qu'un écart est constaté.
  */
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Plus, ClipboardList, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   Button,
@@ -37,10 +37,31 @@ import { computeInventoryVariance } from '@/lib/stockCalculations';
 interface CountLine {
   productId: string;
   productName: string;
+  category: string;
+  unit: string;
   theoretical: number;
   real: number;
   comment: string;
 }
+
+/** Ordre & libellé des familles pour le pointage (fûts pointés avec les bières). */
+const FAMILY_ORDER: Record<string, number> = {
+  Bières: 0,
+  Soft: 1,
+  Sirops: 2,
+  Spiritueux: 3,
+  Vins: 4,
+  Matériel: 5,
+};
+const FAMILY_LABEL: Record<string, string> = {
+  Bières: '🍺 Bières & Fûts',
+  Soft: '🥤 Softs',
+  Sirops: '🫙 Sirops',
+  Spiritueux: '🥃 Spiritueux',
+  Vins: '🍷 Vins',
+  Matériel: '📦 Matériel',
+};
+const familyRank = (category: string): number => FAMILY_ORDER[category] ?? 99;
 
 const formatDate = (iso: string): string =>
   new Date(iso).toLocaleDateString('fr-FR', {
@@ -112,10 +133,21 @@ export default function StockInventory() {
       .map((b) => ({
         productId: b.product_id,
         productName: b.product?.product_name ?? '—',
+        category: b.product?.category ?? 'Autre',
+        unit: b.product?.unit ?? '',
         theoretical: b.current_quantity,
         real: b.current_quantity,
         comment: '',
-      }));
+      }))
+      // Tri par famille (fûts en tête des bières), puis alphabétique — pointage rapide.
+      .sort((a, b) => {
+        const fr = familyRank(a.category) - familyRank(b.category);
+        if (fr !== 0) return fr;
+        const ua = a.unit === 'fût' ? 0 : 1;
+        const ub = b.unit === 'fût' ? 0 : 1;
+        if (ua !== ub) return ua - ub;
+        return a.productName.localeCompare(b.productName, 'fr');
+      });
     setLines(seeded);
     setSelecting(false);
     setView('counting');
@@ -205,11 +237,23 @@ export default function StockInventory() {
             </TR>
           </THead>
           <TBody>
-            {lines.map((l) => {
+            {lines.map((l, idx) => {
               const variance = computeInventoryVariance(l.real, l.theoretical);
               const needsComment = variance !== 0;
+              const showFamily = idx === 0 || lines[idx - 1].category !== l.category;
               return (
-                <TR key={l.productId}>
+                <Fragment key={l.productId}>
+                {showFamily && (
+                  <tr className="bg-pr-cream/70">
+                    <td
+                      colSpan={5}
+                      className="px-3 py-2 font-display text-xs font-bold uppercase tracking-wide text-pr-black-soft/60"
+                    >
+                      {FAMILY_LABEL[l.category] ?? l.category}
+                    </td>
+                  </tr>
+                )}
+                <TR>
                   <TD className="font-medium text-pr-black">{l.productName}</TD>
                   <TD className="text-right tabular-nums">{l.theoretical}</TD>
                   <TD className="text-right">
@@ -245,6 +289,7 @@ export default function StockInventory() {
                     />
                   </TD>
                 </TR>
+                </Fragment>
               );
             })}
           </TBody>
