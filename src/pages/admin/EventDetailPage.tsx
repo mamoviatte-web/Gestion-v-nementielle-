@@ -39,9 +39,8 @@ import { useAuth } from '@/context/AuthContext';
 import { RevenueMarginPanel } from '@/components/events/RevenueMarginPanel';
 import { EventResetButton } from '@/components/events/EventResetButton';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
-import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
-import { Zap, CheckCircle2, CalendarClock, Pencil, AlertTriangle } from 'lucide-react';
+import { Zap, CalendarClock, Pencil, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 
 type Tab =
@@ -236,21 +235,14 @@ export default function EventDetailPage() {
   // Séminaires : onglets simples inchangés.
   const activeTab: Tab = SEMINAIRE_TABS.some((t) => t.key === tab) ? tab : SEMINAIRE_TABS[0].key;
 
+  const isClosed = event.status === 'clôturé' || event.status === 'archivé';
+  // Fil d'Ariane : match précédent / suivant (continuité de série).
+  const seriesEvents = allEvents.data ?? [];
+  const prevEvent = seriesEvents.find((e) => e.event_id === event.previous_event_id);
+  const nextEvent = seriesEvents.find((e) => e.previous_event_id === event.event_id);
+
   return (
     <div>
-      <Link
-        to="/admin/events"
-        className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700"
-      >
-        <ArrowLeft className="h-4 w-4" /> Événements
-      </Link>
-
-      <PageHeader
-        title={event.event_name}
-        description={`${new Date(event.event_date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}${event.start_time ? ` · ${event.start_time.slice(0, 5)}` : ''}${event.expected_attendees ? ` · ${event.expected_attendees} spectateurs` : ''}`}
-        action={<Badge tone={status.tone}>{status.label}</Badge>}
-      />
-
       {/* R1 — Bandeau bloquant de clôture : données incomplètes → chiffres faux */}
       {closureIssues && !closureIssues.pret_a_cloturer && (
         <div className="mb-4 rounded-2xl border border-rose-300 bg-rose-50 p-4">
@@ -280,37 +272,154 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* Fil d'Ariane de continuité (matchs) */}
-      {event.event_type === 'match' &&
-        (() => {
-          const events = allEvents.data ?? [];
-          const prev = events.find((e) => e.event_id === event.previous_event_id);
-          const next = events.find((e) => e.previous_event_id === event.event_id);
-          return (
-            <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-pr-black-soft/70">
-              {prev ? (
-                <Link to={`/admin/events/${prev.event_id}`} className="hover:text-pr-olive hover:underline">
-                  ← {prev.event_name}
-                </Link>
-              ) : (
-                <span>← début de la série</span>
+      {/* ═══ Barre de commande (fiche compacte) ═══ */}
+      <div className="mb-5 overflow-hidden rounded-2xl border border-pr-stone bg-pr-cream/70">
+        <div className="p-4 sm:p-5">
+          <Link
+            to="/admin/events"
+            className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-pr-black-soft/50 transition-colors hover:text-pr-black"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Événements
+          </Link>
+
+          {/* Ligne 1 — identité + actions */}
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="font-display text-2xl font-black tracking-tight text-pr-black">{event.event_name}</h1>
+                <Badge tone={status.tone}>{status.label}</Badge>
+                {isMatch && event.sequence_number ? (
+                  <span className="text-xs font-semibold uppercase tracking-wide text-pr-black-soft/45">Match n°{event.sequence_number}</span>
+                ) : null}
+              </div>
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-pr-black-soft/60">
+                <span>
+                  {new Date(event.event_date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+                  {event.start_time ? ` · ${event.start_time.slice(0, 5)}` : ''}
+                  {event.expected_attendees ? ` · ${event.expected_attendees} spectateurs` : ''}
+                </span>
+                {isMatch && (prevEvent || nextEvent) && (
+                  <span className="flex items-center gap-2 text-pr-black-soft/45">
+                    <span className="text-pr-stone">•</span>
+                    {prevEvent && (
+                      <Link to={`/admin/events/${prevEvent.event_id}`} className="hover:text-pr-olive hover:underline">← {prevEvent.event_name}</Link>
+                    )}
+                    {nextEvent && (
+                      <Link to={`/admin/events/${nextEvent.event_id}`} className="hover:text-pr-olive hover:underline">{nextEvent.event_name} →</Link>
+                    )}
+                  </span>
+                )}
+              </p>
+            </div>
+
+            {/* Barre d'outils — mêmes actions, regroupées */}
+            <div className="flex flex-wrap items-center gap-2">
+              {!isClosed && (
+                <>
+                  <Button size="sm" variant={editMode ? 'primary' : 'secondary'} onClick={() => setEditMode((v) => !v)}>
+                    <Pencil className="h-4 w-4" /> {editMode ? 'Fermer l’édition' : 'Modifier'}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => setShowSpacesModal(true)}>
+                    🏟️ Espaces ({spaces.length})
+                  </Button>
+                </>
               )}
-              <span className="text-pr-stone">•</span>
-              <span className="font-display font-bold uppercase tracking-wide text-pr-black">
-                {event.event_name}
-                {event.sequence_number ? ` · Match n°${event.sequence_number}` : ''}
-              </span>
-              <span className="text-pr-stone">•</span>
-              {next ? (
-                <Link to={`/admin/events/${next.event_id}`} className="hover:text-pr-olive hover:underline">
-                  Suivant : {next.event_name} →
-                </Link>
-              ) : (
-                <span>Suivant : —</span>
+              {(event.status === 'brouillon' || event.status === 'préparé') && (
+                <Button size="sm" variant="secondary" loading={updating} onClick={() => void setStatus('en_cours')}>
+                  Passer en cours
+                </Button>
+              )}
+              {isMatch && (event.status === 'brouillon' || event.status === 'préparé') && (
+                <Button size="sm" onClick={() => setShowRunnerModal(true)}>
+                  <Zap className="h-4 w-4" /> Dotations runner
+                </Button>
+              )}
+              <Link
+                to={`/admin/events/${event.event_id}/planning`}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-pr-stone bg-white px-3 py-2 text-sm font-medium text-pr-black-soft/70 transition-colors hover:bg-pr-cream"
+              >
+                <CalendarClock className="h-4 w-4" /> Planning
+              </Link>
+              {!isClosed && (
+                <Button size="sm" loading={updating} onClick={() => void handleCloseEvent(event.event_name)}>
+                  Clôturer
+                </Button>
+              )}
+              {isMatch && (
+                <EventResetButton eventId={event.event_id} eventName={event.event_name} onDone={() => window.location.reload()} />
+              )}
+              <DeleteEventButton event={{ event_id: event.event_id, event_name: event.event_name, event_type: event.event_type }} />
+              {isClosed && (event.event_type === 'match' || event.event_type === 'séminaire') && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    event.event_type === 'séminaire'
+                      ? void genererRapportSeminaire(event.event_id)
+                      : void genererRapportMatch(event.event_id)
+                  }
+                >
+                  📊 Rapport Excel
+                </Button>
               )}
             </div>
-          );
-        })()}
+          </div>
+
+          {/* Ligne 2 — compteurs clés + intégrité */}
+          <div className="mt-4 flex flex-wrap items-stretch gap-2">
+            <div className="rounded-xl border border-pr-stone bg-white px-3.5 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-pr-black-soft/45">Stocks soumis</p>
+              <p className={clsx('font-display text-lg font-black tabular-nums', stats.spacesClosed >= stats.spacesTotal && stats.spacesTotal > 0 ? 'text-pr-olive-dark' : 'text-pr-black')}>
+                {stats.spacesClosed}/{stats.spacesTotal}
+              </p>
+            </div>
+            <div className="rounded-xl border border-pr-stone bg-white px-3.5 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-pr-black-soft/45">Débriefs</p>
+              <p className="font-display text-lg font-black tabular-nums text-pr-black">
+                {stats.debriefsReceived}/{stats.spacesTotal}
+              </p>
+            </div>
+            <div className="flex min-w-[220px] flex-1 items-center">
+              <IntegrityBadge eventId={event.event_id} />
+            </div>
+          </div>
+
+          {/* Codes d'accès — repliés (ouverts tant que le match n'est pas clôturé) */}
+          {isMatch && (
+            <details className="group mt-3 rounded-xl border border-pr-stone bg-white" open={!isClosed}>
+              <summary className="flex cursor-pointer list-none items-center gap-2.5 px-4 py-3 font-display text-sm font-bold text-pr-black [&::-webkit-details-marker]:hidden">
+                <svg className="h-4 w-4 text-pr-black-soft/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="10" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                Codes d'accès match
+                <span className="text-xs font-medium text-pr-black-soft/40">· responsables de zone &amp; RH</span>
+                <svg className="ml-auto h-4 w-4 text-pr-black-soft/40 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" /></svg>
+              </summary>
+              <div className="space-y-4 border-t border-pr-stone/70 p-4">
+                <MatchAccessCode eventId={event.event_id} code={event.match_access_code ?? null} eventName={event.event_name} />
+                {event.rh_access_code && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="mb-1 text-xs font-bold uppercase tracking-wide text-amber-700">Code accès Responsable RH</p>
+                        <p className="font-display text-3xl font-black tracking-[0.25em] text-stone-900">{event.rh_access_code}</p>
+                        <p className="mt-1 text-xs text-amber-600">À communiquer uniquement à la responsable RH · Valide pour ce match uniquement</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          void navigator.clipboard.writeText(event.rh_access_code ?? '');
+                          showToast('Code RH copié.', 'success');
+                        }}
+                        className="shrink-0 rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-white"
+                      >
+                        📋 Copier
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+        </div>
+      </div>
 
       {/* Séminaire préparé : activation automatique nocturne (00:01) */}
       {event.event_type === 'séminaire' && event.status === 'préparé' && (
@@ -324,86 +433,6 @@ export default function EventDetailPage() {
           </div>
         </div>
       )}
-
-      {/* Compteurs + actions de statut */}
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <Badge tone="neutral">
-          Stocks soumis : {stats.spacesClosed}/{stats.spacesTotal}
-        </Badge>
-        <Badge tone="neutral">
-          Débriefs : {stats.debriefsReceived}/{stats.spacesTotal}
-        </Badge>
-        <div className="ml-auto flex flex-wrap gap-2">
-          {event.status !== 'clôturé' && event.status !== 'archivé' && (
-            <>
-              <Button size="sm" variant={editMode ? 'primary' : 'secondary'} onClick={() => setEditMode((v) => !v)}>
-                <Pencil className="h-4 w-4" /> {editMode ? 'Fermer l’édition' : 'Modifier'}
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => setShowSpacesModal(true)}>
-                🏟️ Gérer les espaces ({spaces.length})
-              </Button>
-            </>
-          )}
-          {(event.status === 'brouillon' || event.status === 'préparé') && (
-            <Button
-              size="sm"
-              variant="secondary"
-              loading={updating}
-              onClick={() => void setStatus('en_cours')}
-            >
-              Passer en cours
-            </Button>
-          )}
-          {isMatch && (event.status === 'brouillon' || event.status === 'préparé') && (
-            <Button size="sm" onClick={() => setShowRunnerModal(true)}>
-              <Zap className="h-4 w-4" /> Générer les dotations runner
-            </Button>
-          )}
-          <Link
-            to={`/admin/events/${event.event_id}/planning`}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
-          >
-            <CalendarClock className="h-4 w-4" /> Planning opérationnel
-          </Link>
-          {event.status !== 'clôturé' && event.status !== 'archivé' && (
-            <Button
-              size="sm"
-              loading={updating}
-              onClick={() => void handleCloseEvent(event.event_name)}
-            >
-              Clôturer l'événement
-            </Button>
-          )}
-          {isMatch && (
-            <EventResetButton
-              eventId={event.event_id}
-              eventName={event.event_name}
-              onDone={() => window.location.reload()}
-            />
-          )}
-          <DeleteEventButton event={{ event_id: event.event_id, event_name: event.event_name, event_type: event.event_type }} />
-          {(event.status === 'clôturé' || event.status === 'archivé') && (
-            <>
-              {(event.event_type === 'match' || event.event_type === 'séminaire') && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() =>
-                    event.event_type === 'séminaire'
-                      ? void genererRapportSeminaire(event.event_id)
-                      : void genererRapportMatch(event.event_id)
-                  }
-                >
-                  📊 Rapport Excel
-                </Button>
-              )}
-              <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700">
-                <CheckCircle2 className="h-4 w-4" /> Événement clôturé
-              </span>
-            </>
-          )}
-        </div>
-      </div>
 
       {editMode && <EventEditPanel event={event} onClose={() => setEditMode(false)} />}
 
@@ -424,53 +453,19 @@ export default function EventDetailPage() {
         />
       )}
 
-      {/* Intégrité des liaisons de charges */}
-      <IntegrityBadge eventId={event.event_id} />
-
-      {/* Code d'accès match (responsables de zone) */}
+      {/* Bilan post-match (clôturé) ou suivi live (en cours) */}
       {isMatch && (
-        <>
-          <MatchAccessCode eventId={event.event_id} code={event.match_access_code ?? null} eventName={event.event_name} />
-          {event.rh_access_code && (
-            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="mb-1 text-xs font-bold uppercase tracking-wide text-amber-700">Code accès Responsable RH</p>
-                  <p className="font-display text-3xl font-black tracking-[0.25em] text-stone-900">{event.rh_access_code}</p>
-                  <p className="mt-1 text-xs text-amber-600">À communiquer uniquement à la responsable RH · Valide pour ce match uniquement</p>
-                </div>
-                <button
-                  onClick={() => {
-                    void navigator.clipboard.writeText(event.rh_access_code ?? '');
-                    showToast('Code RH copié.', 'success');
-                  }}
-                  className="shrink-0 rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-white"
-                >
-                  📋 Copier
-                </button>
-              </div>
-            </div>
-          )}
-          {event.status === 'clôturé' || event.status === 'archivé' ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 rounded-2xl bg-stone-900 px-5 py-4">
-                <CheckCircle2 className="h-5 w-5 shrink-0 text-green-400" />
-                <div>
-                  <p className="font-bold text-white">Match clôturé</p>
-                  <p className="text-xs text-white/50">Bilan post-match — remplace le suivi live</p>
-                </div>
-                <span className="ml-auto hidden text-xs text-white/30 sm:inline">{event.event_name}</span>
-              </div>
-              <MatchClosedView
-                eventId={event.event_id}
-                eventName={event.event_name}
-                paxCount={event.expected_attendees ?? 0}
-              />
-            </div>
+        <div className="mb-5">
+          {isClosed ? (
+            <MatchClosedView
+              eventId={event.event_id}
+              eventName={event.event_name}
+              paxCount={event.expected_attendees ?? 0}
+            />
           ) : (
             <MatchLiveStatusPanel eventId={event.event_id} />
           )}
-        </>
+        </div>
       )}
 
       {/* Navigation en 4 phases (matchs) : Préparation → Jour J → Clôture → Résultats */}
