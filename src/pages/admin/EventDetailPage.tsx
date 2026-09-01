@@ -462,21 +462,6 @@ export default function EventDetailPage() {
         />
       )}
 
-      {/* Bilan post-match (clôturé) ou suivi live (en cours) */}
-      {isMatch && (
-        <div className="mb-5">
-          {isClosed ? (
-            <MatchClosedView
-              eventId={event.event_id}
-              eventName={event.event_name}
-              paxCount={event.expected_attendees ?? 0}
-            />
-          ) : (
-            <MatchLiveStatusPanel eventId={event.event_id} />
-          )}
-        </div>
-      )}
-
       {/* Protocole en 4 étapes (matchs) : Préparation → Jour J → Clôture → Résultats */}
       {isMatch && (
         <nav aria-label="Protocole du match" className="mb-4">
@@ -541,6 +526,21 @@ export default function EventDetailPage() {
             })}
           </ol>
         </nav>
+      )}
+
+      {/* Bilan post-match (clôturé) ou suivi live (en cours) — sous le protocole */}
+      {isMatch && (
+        <div className="mb-5">
+          {isClosed ? (
+            <MatchClosedView
+              eventId={event.event_id}
+              eventName={event.event_name}
+              paxCount={event.expected_attendees ?? 0}
+            />
+          ) : (
+            <MatchLiveStatusPanel eventId={event.event_id} />
+          )}
+        </div>
       )}
 
       {/* Sous-onglets : phase active (matchs) ou onglets séminaire */}
