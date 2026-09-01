@@ -236,6 +236,15 @@ export default function EventDetailPage() {
   const activeTab: Tab = SEMINAIRE_TABS.some((t) => t.key === tab) ? tab : SEMINAIRE_TABS[0].key;
 
   const isClosed = event.status === 'clôturé' || event.status === 'archivé';
+  const isStarted = event.status !== 'brouillon' && event.status !== 'préparé';
+  // Avancement du protocole (matchs) : une phase est « terminée » quand son
+  // étape opérationnelle a franchi son jalon. Sert au stepper de navigation.
+  const phaseDone: Record<Phase, boolean> = {
+    prep: isStarted,
+    jourj: isClosed || stats.spacesClosed > 0,
+    cloture: isClosed,
+    resultats: false, // les résultats sont l'aboutissement, jamais « terminés »
+  };
   // Fil d'Ariane : match précédent / suivant (continuité de série).
   const seriesEvents = allEvents.data ?? [];
   const prevEvent = seriesEvents.find((e) => e.event_id === event.previous_event_id);
@@ -468,24 +477,70 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* Navigation en 4 phases (matchs) : Préparation → Jour J → Clôture → Résultats */}
+      {/* Protocole en 4 étapes (matchs) : Préparation → Jour J → Clôture → Résultats */}
       {isMatch && (
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {MATCH_PHASES.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => selectPhase(p.key)}
-              className={clsx(
-                'rounded-xl px-4 py-2 text-sm font-semibold transition-colors',
-                phase === p.key
-                  ? 'bg-pr-black text-pr-cream shadow-sm'
-                  : 'bg-pr-stone/50 text-pr-black-soft/60 hover:bg-pr-stone',
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+        <nav aria-label="Protocole du match" className="mb-4">
+          <ol className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-0">
+            {MATCH_PHASES.map((p, i) => {
+              const active = phase === p.key;
+              const done = phaseDone[p.key];
+              const label = p.label.replace(/^[①②③④]\s*/, '');
+              const state = active ? 'En cours' : done ? 'Terminé' : 'À venir';
+              return (
+                <li key={p.key} className="flex flex-1 items-center">
+                  <button
+                    onClick={() => selectPhase(p.key)}
+                    aria-current={active ? 'step' : undefined}
+                    className={clsx(
+                      'group flex flex-1 items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors',
+                      active ? 'bg-pr-black' : 'hover:bg-pr-stone/50',
+                    )}
+                  >
+                    <span
+                      className={clsx(
+                        'grid h-7 w-7 shrink-0 place-items-center rounded-full font-display text-xs font-black transition-colors',
+                        active
+                          ? 'bg-pr-gold text-pr-black'
+                          : done
+                            ? 'bg-pr-olive text-white'
+                            : 'border border-pr-stone bg-white text-pr-black-soft/50',
+                      )}
+                    >
+                      {done && !active ? '✓' : i + 1}
+                    </span>
+                    <span className="min-w-0">
+                      <span
+                        className={clsx(
+                          'block truncate font-display text-sm font-bold leading-tight',
+                          active ? 'text-pr-cream' : 'text-pr-black',
+                        )}
+                      >
+                        {label}
+                      </span>
+                      <span
+                        className={clsx(
+                          'block text-[11px] font-medium leading-tight',
+                          active ? 'text-pr-gold' : done ? 'text-pr-olive' : 'text-pr-black-soft/40',
+                        )}
+                      >
+                        {state}
+                      </span>
+                    </span>
+                  </button>
+                  {i < MATCH_PHASES.length - 1 && (
+                    <span
+                      aria-hidden
+                      className={clsx(
+                        'mx-1 hidden h-px flex-1 sm:block',
+                        done ? 'bg-pr-olive' : 'bg-pr-stone',
+                      )}
+                    />
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
       )}
 
       {/* Sous-onglets : phase active (matchs) ou onglets séminaire */}
