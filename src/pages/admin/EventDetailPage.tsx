@@ -478,8 +478,8 @@ export default function EventDetailPage() {
               className={clsx(
                 'rounded-xl px-4 py-2 text-sm font-semibold transition-colors',
                 phase === p.key
-                  ? 'bg-provence text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                  ? 'bg-pr-black text-pr-cream shadow-sm'
+                  : 'bg-pr-stone/50 text-pr-black-soft/60 hover:bg-pr-stone',
               )}
             >
               {p.label}
@@ -489,7 +489,7 @@ export default function EventDetailPage() {
       )}
 
       {/* Sous-onglets : phase active (matchs) ou onglets séminaire */}
-      <div className="mb-5 flex flex-wrap gap-1 border-b border-slate-200">
+      <div className="mb-5 flex flex-wrap gap-1 border-b border-pr-stone">
         {(isMatch
           ? phaseSubs.map((s) => ({ key: s.key as string, label: s.label, active: activeSub === s.key, on: () => setSub(s.key) }))
           : SEMINAIRE_TABS.map((t) => ({ key: t.key as string, label: t.label, active: activeTab === t.key, on: () => setTab(t.key) }))
@@ -500,8 +500,8 @@ export default function EventDetailPage() {
             className={clsx(
               '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
               t.active
-                ? 'border-provence text-provence'
-                : 'border-transparent text-slate-500 hover:text-slate-700',
+                ? 'border-pr-black text-pr-black'
+                : 'border-transparent text-pr-black-soft/50 hover:text-pr-black',
             )}
           >
             {t.label}
