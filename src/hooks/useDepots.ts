@@ -229,6 +229,59 @@ export function useDepotDispatch(depotId: string | undefined) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Registre des mouvements d'un dépôt (entrées / sorties / retours)    */
+/* ------------------------------------------------------------------ */
+
+export interface DepotMovement {
+  movement_id: string;
+  created_at: string;
+  movement_type: string;
+  qty: number;
+  product_name: string;
+  space_name: string | null;
+  direction: 'in' | 'out'; // in = crédite le dépôt, out = débite le dépôt
+}
+
+/** Derniers mouvements touchant un dépôt (source ou destination), récents d'abord. */
+export function useDepotMovements(depotId: string | undefined, limit = 40) {
+  return useQuery({
+    queryKey: ['depotMovements', depotId ?? 'none', limit],
+    enabled: !!depotId,
+    staleTime: 15_000,
+    queryFn: async (): Promise<DepotMovement[]> => {
+      const { data, error } = await supabase
+        .from('stock_movements')
+        .select(
+          'movement_id, created_at, movement_type, qty, from_location_id, to_location_id, product:products(product_name), space:spaces(space_name)',
+        )
+        .or(`from_location_id.eq.${depotId},to_location_id.eq.${depotId}`)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      type Row = {
+        movement_id: string;
+        created_at: string;
+        movement_type: string;
+        qty: number;
+        from_location_id: string | null;
+        to_location_id: string | null;
+        product: { product_name: string } | null;
+        space: { space_name: string } | null;
+      };
+      return ((data ?? []) as unknown as Row[]).map((r) => ({
+        movement_id: r.movement_id,
+        created_at: r.created_at,
+        movement_type: r.movement_type,
+        qty: Number(r.qty),
+        product_name: r.product?.product_name ?? '—',
+        space_name: r.space?.space_name ?? null,
+        direction: r.to_location_id === depotId ? 'in' : 'out',
+      }));
+    },
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* Synthèse dépôts (dashboard)                                         */
 /* ------------------------------------------------------------------ */
 

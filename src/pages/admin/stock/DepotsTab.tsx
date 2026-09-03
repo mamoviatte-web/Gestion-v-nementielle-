@@ -18,9 +18,14 @@ import {
   Warehouse,
   ReceiptText,
   PackagePlus,
+  ArrowLeftRight,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Wine,
   type LucideIcon,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { clsx as cx } from 'clsx';
 import { Badge, Button, EmptyState, Spinner } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import { DeliveryModal } from '@/components/stock/DeliveryModal';
@@ -34,14 +39,19 @@ import {
   useDepotDeliveries,
   useDepotDispatch,
   useDepotProductScope,
+  useDepotsSummary,
+  useDepotMovements,
   useLiveBalanceMap,
   type Delivery,
+  type DepotMovement,
+  type DepotSummary,
 } from '@/hooks/useDepots';
 
-type DepotView = 'stock' | 'livraisons' | 'dispatch' | 'factures';
+type DepotView = 'stock' | 'registre' | 'livraisons' | 'dispatch' | 'factures';
 
 const VIEWS: { key: DepotView; label: string; Icon: LucideIcon }[] = [
   { key: 'stock', label: 'Stock actuel', Icon: Boxes },
+  { key: 'registre', label: 'Registre mouvements', Icon: ArrowLeftRight },
   { key: 'livraisons', label: 'Livraisons', Icon: Truck },
   { key: 'dispatch', label: 'Dispatch espaces', Icon: Send },
   { key: 'factures', label: 'Factures', Icon: ReceiptText },
@@ -50,6 +60,13 @@ const VIEWS: { key: DepotView; label: string; Icon: LucideIcon }[] = [
 function frDate(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/** Rôle affiché d'un dépôt, déduit de son nom. */
+function depotRole(name: string): string {
+  if (/EST/i.test(name)) return 'Cave vins & spiritueux';
+  if (/f[uû]ts/i.test(name)) return 'Stockage fûts · pleins / vides';
+  return 'Réserve générale · point d’entrée';
 }
 
 /* ─────────────────────────── Onglet principal ─────────────────────────── */
@@ -75,6 +92,16 @@ export default function DepotsTab() {
   const scope = useDepotProductScope(currentDepot?.name);
   const isKeg = /f[uû]ts/i.test(currentDepot?.name ?? '');
 
+  const summary = useDepotsSummary();
+  const summaryById = useMemo(
+    () => new Map((summary.data ?? []).map((s) => [s.id, s])),
+    [summary.data],
+  );
+  const maxValue = useMemo(
+    () => Math.max(1, ...(summary.data ?? []).map((s) => s.total_value_ht)),
+    [summary.data],
+  );
+
   if (depots.isLoading) return <Spinner fullPage label="Chargement des dépôts…" />;
   if (!depots.data || depots.data.length === 0) {
     return (
@@ -88,43 +115,33 @@ export default function DepotsTab() {
 
   return (
     <div className="space-y-5">
-      {/* Sélecteur de dépôt + action */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2">
-          {depots.data.map((d) => {
-            const active = d.id === depotId;
-            return (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => setDepotId(d.id)}
-                className={clsx(
-                  'flex items-center gap-2 rounded-xl border px-4 py-2.5 text-left transition-colors',
-                  active
-                    ? 'border-pr-black bg-pr-black text-pr-white'
-                    : 'border-pr-stone bg-white text-pr-black hover:bg-pr-cream',
-                )}
-              >
-                <Warehouse className="h-4 w-4 shrink-0" />
-                <span className="text-sm font-semibold">{d.name}</span>
-              </button>
-            );
-          })}
-        </div>
+      {/* Cockpit — les 3 espaces de stockage, toujours visibles */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        {depots.data.map((d) => (
+          <DepotHealthCard
+            key={d.id}
+            name={d.name}
+            summary={summaryById.get(d.id)}
+            maxValue={maxValue}
+            active={d.id === depotId}
+            onSelect={() => setDepotId(d.id)}
+          />
+        ))}
+      </div>
 
-        <div className="flex gap-2">
-          {!isKeg && (
-            <Button onClick={() => setModalOpen(true)} disabled={!currentDepot}>
-              <Truck className="h-4 w-4" /> Enregistrer une livraison
-            </Button>
-          )}
-          <Button onClick={() => setKegReceptionOpen(true)}>
-            <PackagePlus className="h-4 w-4" /> Réceptionner des fûts
+      {/* Actions dépôt */}
+      <div className="flex flex-wrap gap-2">
+        {!isKeg && (
+          <Button onClick={() => setModalOpen(true)} disabled={!currentDepot}>
+            <Truck className="h-4 w-4" /> Enregistrer une livraison
           </Button>
-          <Button variant="secondary" onClick={() => setMontanerOpen(true)}>
-            <FileText className="h-4 w-4" /> Facture Montaner
-          </Button>
-        </div>
+        )}
+        <Button onClick={() => setKegReceptionOpen(true)}>
+          <PackagePlus className="h-4 w-4" /> Réceptionner des fûts
+        </Button>
+        <Button variant="secondary" onClick={() => setMontanerOpen(true)}>
+          <FileText className="h-4 w-4" /> Facture Montaner
+        </Button>
       </div>
 
       {currentDepot?.description && (
@@ -157,6 +174,7 @@ export default function DepotsTab() {
           </div>
 
           {view === 'stock' && <DepotStockView depotId={depotId} />}
+          {view === 'registre' && <DepotRegistreView depotId={depotId} />}
           {view === 'livraisons' && <DepotDeliveriesView depotId={depotId} />}
           {view === 'dispatch' && <DepotDispatchView depotId={depotId} />}
           {view === 'factures' && <InvoiceRegistryView />}
@@ -486,6 +504,157 @@ function DepotDispatchView({ depotId }: { depotId: string | null }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+/* ─────────────────────── Cockpit — carte-santé dépôt ─────────────────────── */
+
+function DepotHealthCard({
+  name,
+  summary,
+  maxValue,
+  active,
+  onSelect,
+}: {
+  name: string;
+  summary?: DepotSummary;
+  maxValue: number;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const isKeg = /f[uû]ts/i.test(name);
+  const value = summary?.total_value_ht ?? 0;
+  const qty = summary?.total_qty ?? 0;
+  const refs = summary?.product_lines ?? 0;
+  const share = Math.min(100, Math.round((value / maxValue) * 100));
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cx(
+        'flex flex-col rounded-2xl border p-4 text-left transition-colors',
+        active
+          ? 'border-pr-black bg-white shadow-sm ring-1 ring-pr-black'
+          : 'border-pr-stone bg-white hover:bg-pr-cream',
+      )}
+    >
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-pr-black-soft/45">
+        {isKeg ? <Wine className="h-3.5 w-3.5" /> : <Warehouse className="h-3.5 w-3.5" />}
+        {depotRole(name)}
+      </div>
+      <div className="mt-1 font-display text-base font-black tracking-tight text-pr-black">{name}</div>
+      <div className="mt-2.5 font-display text-2xl font-black tabular-nums text-pr-black">
+        {isKeg ? (
+          <>
+            {qty.toLocaleString('fr-FR')} <span className="text-sm font-bold text-pr-black-soft/50">fûts</span>
+          </>
+        ) : (
+          formatEuro(value)
+        )}
+      </div>
+      <div className="mt-0.5 text-xs text-pr-black-soft/55">
+        {refs} réf · {qty.toLocaleString('fr-FR')} u{isKeg ? '' : ' · valorisation HT'}
+      </div>
+      {!isKeg && (
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-pr-stone">
+          <div className="h-full rounded-full bg-pr-olive" style={{ width: `${share}%` }} />
+        </div>
+      )}
+      <div className="mt-2 text-[11px] text-pr-black-soft/40">
+        Dernière livraison : {frDate(summary?.last_delivery_date ?? null)}
+      </div>
+    </button>
+  );
+}
+
+/* ─────────────────────── Registre des mouvements (dépôt) ─────────────────────── */
+
+const MOVE_META: Record<string, { label: string; tone: 'ok' | 'crit' | 'warn' | 'neutral' }> = {
+  entrée_fournisseur: { label: 'Entrée', tone: 'ok' },
+  réassort_événement: { label: 'Réassort', tone: 'warn' },
+  sortie: { label: 'Sortie', tone: 'crit' },
+  transfert_espace: { label: 'Transfert', tone: 'crit' },
+  retour: { label: 'Retour', tone: 'neutral' },
+  retour_réutilisable: { label: 'Retour', tone: 'neutral' },
+  retour_fournisseur: { label: 'Retour fourn.', tone: 'neutral' },
+  inventaire: { label: 'Inventaire', tone: 'ok' },
+  correction: { label: 'Correction', tone: 'warn' },
+  consommation: { label: 'Conso', tone: 'crit' },
+  perte_casse: { label: 'Perte / casse', tone: 'crit' },
+};
+
+function DepotRegistreView({ depotId }: { depotId: string | null }) {
+  const moves = useDepotMovements(depotId ?? undefined);
+  if (moves.isLoading) return <Spinner label="Chargement du registre…" />;
+  const rows = moves.data ?? [];
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        icon={ArrowLeftRight}
+        title="Aucun mouvement"
+        message="Aucune entrée, sortie ou retour enregistré sur ce dépôt."
+      />
+    );
+  }
+  return (
+    <div className="overflow-x-auto rounded-xl border border-pr-stone bg-white">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-pr-stone text-left text-xs uppercase tracking-wide text-pr-black-soft/60">
+            <th className="px-4 py-2.5 font-semibold">Type</th>
+            <th className="px-4 py-2.5 font-semibold">Produit</th>
+            <th className="px-4 py-2.5 font-semibold">Espace / origine</th>
+            <th className="px-4 py-2.5 text-right font-semibold">Qté</th>
+            <th className="px-4 py-2.5 text-right font-semibold">Date</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-pr-stone">
+          {rows.map((m) => (
+            <RegistreRow key={m.movement_id} m={m} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function RegistreRow({ m }: { m: DepotMovement }) {
+  const meta = MOVE_META[m.movement_type] ?? { label: m.movement_type, tone: 'neutral' as const };
+  const toneCls =
+    meta.tone === 'ok'
+      ? 'bg-emerald-100 text-emerald-800'
+      : meta.tone === 'crit'
+        ? 'bg-pr-rust/10 text-pr-rust'
+        : meta.tone === 'warn'
+          ? 'bg-amber-100 text-amber-800'
+          : 'bg-pr-stone text-pr-black-soft/70';
+  const inbound = m.direction === 'in';
+  const signed = `${inbound ? '+' : '−'}${m.qty.toLocaleString('fr-FR')}`;
+  return (
+    <tr className="hover:bg-pr-cream/40">
+      <td className="px-4 py-2.5">
+        <span
+          className={cx(
+            'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide',
+            toneCls,
+          )}
+        >
+          {inbound ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
+          {meta.label}
+        </span>
+      </td>
+      <td className="px-4 py-2.5 font-medium text-pr-black">{m.product_name}</td>
+      <td className="px-4 py-2.5 text-pr-black-soft/60">{m.space_name ?? '—'}</td>
+      <td
+        className={cx(
+          'px-4 py-2.5 text-right font-display font-bold tabular-nums',
+          inbound ? 'text-pr-olive-dark' : 'text-pr-rust',
+        )}
+      >
+        {signed}
+      </td>
+      <td className="px-4 py-2.5 text-right tabular-nums text-pr-black-soft/50">{frDate(m.created_at)}</td>
+    </tr>
   );
 }
 
