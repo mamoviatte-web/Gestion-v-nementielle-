@@ -628,8 +628,11 @@ function RegistreRow({ m }: { m: DepotMovement }) {
         : meta.tone === 'warn'
           ? 'bg-amber-100 text-amber-800'
           : 'bg-pr-stone text-pr-black-soft/70';
-  const inbound = m.direction === 'in';
-  const signed = `${inbound ? '+' : '−'}${m.qty.toLocaleString('fr-FR')}`;
+  // L'inventaire porte un delta SIGNÉ dans qty ; les flux portent une magnitude
+  // positive dont le sens vient de la direction (dépôt source = sortie).
+  const isInv = m.movement_type === 'inventaire';
+  const positive = isInv ? m.qty >= 0 : m.direction === 'in';
+  const signed = `${positive ? '+' : '−'}${Math.abs(m.qty).toLocaleString('fr-FR')}`;
   return (
     <tr className="hover:bg-pr-cream/40">
       <td className="px-4 py-2.5">
@@ -639,7 +642,7 @@ function RegistreRow({ m }: { m: DepotMovement }) {
             toneCls,
           )}
         >
-          {inbound ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
+          {positive ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
           {meta.label}
         </span>
       </td>
@@ -648,7 +651,7 @@ function RegistreRow({ m }: { m: DepotMovement }) {
       <td
         className={cx(
           'px-4 py-2.5 text-right font-display font-bold tabular-nums',
-          inbound ? 'text-pr-olive-dark' : 'text-pr-rust',
+          positive ? 'text-pr-olive-dark' : 'text-pr-rust',
         )}
       >
         {signed}
