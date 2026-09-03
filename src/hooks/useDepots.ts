@@ -290,7 +290,8 @@ export interface DepotSummary {
   name: string;
   total_qty: number;
   total_value_ht: number;
-  product_lines: number;
+  product_lines: number; // références avec du stock (qty > 0)
+  total_refs: number; // références de l'assortiment (toutes lignes de solde)
   last_delivery_date: string | null;
 }
 
@@ -318,16 +319,17 @@ export function useDepotsSummary() {
         supabase.from('supplier_deliveries').select('location_id, delivery_date').in('location_id', ids),
       ]);
 
-      const byDepot = new Map<string, { qty: number; value: number; lines: number }>();
+      const byDepot = new Map<string, { qty: number; value: number; lines: number; refs: number }>();
       for (const b of (balances ?? []) as {
         location_id: string;
         current_quantity: number;
         unit_value_ht: number | null;
       }[]) {
-        const agg = byDepot.get(b.location_id) ?? { qty: 0, value: 0, lines: 0 };
+        const agg = byDepot.get(b.location_id) ?? { qty: 0, value: 0, lines: 0, refs: 0 };
         const qty = Number(b.current_quantity);
         agg.qty += qty;
         agg.value += qty * Number(b.unit_value_ht ?? 0);
+        agg.refs += 1;
         if (qty > 0) agg.lines += 1;
         byDepot.set(b.location_id, agg);
       }
@@ -344,13 +346,14 @@ export function useDepotsSummary() {
         ...depots.filter((d) => d.id !== auc?.id),
       ];
       return ordered.map((d) => {
-        const agg = byDepot.get(d.id) ?? { qty: 0, value: 0, lines: 0 };
+        const agg = byDepot.get(d.id) ?? { qty: 0, value: 0, lines: 0, refs: 0 };
         return {
           id: d.id,
           name: d.name,
           total_qty: agg.qty,
           total_value_ht: agg.value,
           product_lines: agg.lines,
+          total_refs: agg.refs,
           last_delivery_date: lastDelivery.get(d.id) ?? null,
         };
       });

@@ -97,10 +97,6 @@ export default function DepotsTab() {
     () => new Map((summary.data ?? []).map((s) => [s.id, s])),
     [summary.data],
   );
-  const maxValue = useMemo(
-    () => Math.max(1, ...(summary.data ?? []).map((s) => s.total_value_ht)),
-    [summary.data],
-  );
 
   if (depots.isLoading) return <Spinner fullPage label="Chargement des dépôts…" />;
   if (!depots.data || depots.data.length === 0) {
@@ -122,7 +118,6 @@ export default function DepotsTab() {
             key={d.id}
             name={d.name}
             summary={summaryById.get(d.id)}
-            maxValue={maxValue}
             active={d.id === depotId}
             onSelect={() => setDepotId(d.id)}
           />
@@ -512,21 +507,22 @@ function DepotDispatchView({ depotId }: { depotId: string | null }) {
 function DepotHealthCard({
   name,
   summary,
-  maxValue,
   active,
   onSelect,
 }: {
   name: string;
   summary?: DepotSummary;
-  maxValue: number;
   active: boolean;
   onSelect: () => void;
 }) {
   const isKeg = /f[uû]ts/i.test(name);
   const value = summary?.total_value_ht ?? 0;
   const qty = summary?.total_qty ?? 0;
-  const refs = summary?.product_lines ?? 0;
-  const share = Math.min(100, Math.round((value / maxValue) * 100));
+  const stocked = summary?.product_lines ?? 0; // réf avec stock
+  const totalRefs = summary?.total_refs ?? 0; // réf de l'assortiment
+  // Remplissage = part de l'assortiment effectivement en stock (ruptures → jauge basse).
+  const fill = totalRefs > 0 ? Math.round((stocked / totalRefs) * 100) : 0;
+  const fillColor = fill >= 66 ? 'bg-pr-olive' : fill >= 33 ? 'bg-pr-gold' : 'bg-pr-rust';
   return (
     <button
       type="button"
@@ -553,13 +549,22 @@ function DepotHealthCard({
         )}
       </div>
       <div className="mt-0.5 text-xs text-pr-black-soft/55">
-        {refs} réf · {qty.toLocaleString('fr-FR')} u{isKeg ? '' : ' · valorisation HT'}
+        {qty.toLocaleString('fr-FR')} u{isKeg ? '' : ' · valorisation HT'}
       </div>
-      {!isKeg && (
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-pr-stone">
-          <div className="h-full rounded-full bg-pr-olive" style={{ width: `${share}%` }} />
+
+      {/* Jauge de remplissage : assortiment en stock */}
+      <div className="mt-3">
+        <div className="mb-1 flex items-center justify-between text-[11px] font-medium text-pr-black-soft/50">
+          <span>Remplissage</span>
+          <span className="tabular-nums">
+            {fill}% · {stocked}/{totalRefs} réf
+          </span>
         </div>
-      )}
+        <div className="h-1.5 overflow-hidden rounded-full bg-pr-stone">
+          <div className={cx('h-full rounded-full', fillColor)} style={{ width: `${fill}%` }} />
+        </div>
+      </div>
+
       <div className="mt-2 text-[11px] text-pr-black-soft/40">
         Dernière livraison : {frDate(summary?.last_delivery_date ?? null)}
       </div>
