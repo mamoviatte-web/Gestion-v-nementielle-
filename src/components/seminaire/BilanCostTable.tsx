@@ -34,6 +34,7 @@ interface StockSummaryRow {
   cost_ht: number | null;
   is_missing_cloture: boolean;
   is_missing_price: boolean;
+  source_name: string | null;
 }
 
 /** Ligne agrégée par produit (cumul des espaces). */
@@ -50,6 +51,8 @@ interface AggLine {
   cost_ht: number | null;
   is_missing_cloture: boolean;
   is_missing_price: boolean;
+  /** Source(s) de stockage distinctes (séminaire) — vide pour un match. */
+  sources: string[];
 }
 
 const CATEGORY_ORDER = ['Vins', 'Champagnes', 'Bières', 'Soft', 'Sirops', 'Spiritueux', 'Matériel'];
@@ -67,6 +70,7 @@ function aggregate(rows: StockSummaryRow[]): Map<string, AggLine[]> {
         r.cost_ht == null && existing.cost_ht == null ? null : (existing.cost_ht ?? 0) + (r.cost_ht ?? 0);
       existing.is_missing_cloture = existing.is_missing_cloture || r.is_missing_cloture;
       existing.is_missing_price = existing.is_missing_price || r.is_missing_price;
+      if (r.source_name && !existing.sources.includes(r.source_name)) existing.sources.push(r.source_name);
     } else {
       byProduct.set(r.product_id, {
         product_id: r.product_id,
@@ -81,6 +85,7 @@ function aggregate(rows: StockSummaryRow[]): Map<string, AggLine[]> {
         cost_ht: r.cost_ht,
         is_missing_cloture: r.is_missing_cloture,
         is_missing_price: r.is_missing_price,
+        sources: r.source_name ? [r.source_name] : [],
       });
     }
   }
@@ -137,7 +142,7 @@ export function BilanCostTable({ eventId }: { eventId: string }) {
       const { data, error } = await supabase
         .from('event_stock_summary')
         .select(
-          'space_id, space_name, product_id, product_name, category, unit, unit_price_ht, initial_qty, reassort_qty, final_qty, consumed_qty, cost_ht, is_missing_cloture, is_missing_price',
+          'space_id, space_name, product_id, product_name, category, unit, unit_price_ht, initial_qty, reassort_qty, final_qty, consumed_qty, cost_ht, is_missing_cloture, is_missing_price, source_name',
         )
         .eq('event_id', eventId)
         .or('initial_qty.gt.0,reassort_qty.gt.0');
@@ -158,6 +163,10 @@ export function BilanCostTable({ eventId }: { eventId: string }) {
   }, [byCategory]);
 
   const totalHT = useMemo(() => (data ?? []).reduce((s, l) => s + (l.cost_ht ?? 0), 0), [data]);
+
+  // Colonne « Source » affichée uniquement si au moins une conso est tracée
+  // depuis un emplacement (séminaire consommation-first).
+  const hasSources = useMemo(() => (data ?? []).some((r) => r.source_name), [data]);
 
   // Produits sans clôture (conso estimée) et sans prix (exclus du total).
   const missingClotures = useMemo(() => {
@@ -212,6 +221,7 @@ export function BilanCostTable({ eventId }: { eventId: string }) {
                 <thead>
                   <tr className="text-xs text-pr-black-soft/40">
                     <th className="pb-1 text-left font-medium">Produit</th>
+                    {hasSources && <th className="pb-1 text-left font-medium">Source</th>}
                     <th className="pb-1 text-right font-medium">Prix U HT</th>
                     <th className="pb-1 text-right font-medium">Initial</th>
                     <th className="pb-1 text-right font-medium">Réassort</th>
@@ -249,6 +259,24 @@ export function BilanCostTable({ eventId }: { eventId: string }) {
                           )}
                         </span>
                       </td>
+                      {hasSources && (
+                        <td className="py-1.5">
+                          {l.sources.length > 0 ? (
+                            <span className="flex flex-wrap gap-1">
+                              {l.sources.map((src) => (
+                                <span
+                                  key={src}
+                                  className="rounded border border-pr-stone bg-pr-cream/70 px-1.5 py-0.5 text-xs font-medium text-pr-black-soft/70"
+                                >
+                                  {src}
+                                </span>
+                              ))}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-pr-black-soft/30">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="py-1.5 text-right text-xs text-pr-black-soft/50">
                         {l.unit_price_ht != null ? (
                           `${l.unit_price_ht.toFixed(2)} €/${l.unit}`
