@@ -29,19 +29,21 @@ interface EventSpaceTiming {
   space_responsible_name?: string | null;
 }
 
+/** Ligne de la vue event_stock_summary (prix EFFECTIF = figé prioritaire). */
 interface StockLineRow {
   space_id: string;
   product_id: string;
+  product_name: string;
+  unit: string;
+  unit_price_ht: number | null;
   initial_qty: number;
   reassort_qty: number;
   final_qty: number | null;
+  consumed_qty: number | null;
+  cost_ht: number | null;
+  source_name: string | null;
   product_state: string | null;
   responsable_nom: string | null;
-  product: {
-    product_name: string;
-    unit: string;
-    unit_price_ht: number | null;
-  } | null;
 }
 
 interface DebriefRow {
@@ -72,16 +74,14 @@ function hm(time: string | null | undefined): string {
   return time ? time.slice(0, 5) : '—';
 }
 
-/** Consommation d'une ligne (RG : initial + réassort − final). */
+/** Consommation d'une ligne (fournie par la vue : initial + réassort − final). */
 function computeConsumed(l: StockLineRow): number {
-  return l.initial_qty + l.reassort_qty - (l.final_qty ?? 0);
+  return l.consumed_qty ?? l.initial_qty + l.reassort_qty - (l.final_qty ?? 0);
 }
 
-/** Coût HT d'une ligne (null si final ou prix manquant → RG-005). */
+/** Coût HT d'une ligne au prix EFFECTIF (figé prioritaire) — via la vue. */
 function computeLineCost(l: StockLineRow): number | null {
-  const price = l.product?.unit_price_ht;
-  if (l.final_qty === null || price === null || price === undefined) return null;
-  return computeConsumed(l) * price;
+  return l.cost_ht;
 }
 
 function formatDate(iso: string): string {
@@ -110,9 +110,9 @@ export function SeminaireBilanTab({
     queryFn: async (): Promise<BilanData> => {
       const [stockRes, debriefRes] = await Promise.all([
         supabase
-          .from('event_stock_lines')
+          .from('event_stock_summary')
           .select(
-            'space_id, product_id, initial_qty, reassort_qty, final_qty, product_state, responsable_nom, product:products(product_name, unit, unit_price_ht)',
+            'space_id, product_id, product_name, unit, unit_price_ht, initial_qty, reassort_qty, final_qty, consumed_qty, cost_ht, source_name, product_state, responsable_nom',
           )
           .eq('event_id', event.event_id),
         supabase
@@ -181,13 +181,14 @@ export function SeminaireBilanTab({
     const stockAoa: (string | number)[][] = [
       [`BILAN STOCKS — ${event.event_name} — ${formatDate(event.event_date)}`],
       [],
-      ['Produit', 'Espace', 'Initial', 'Final', 'Consommé', 'Coût HT (€)', 'Responsable'],
+      ['Produit', 'Espace', 'Source', 'Initial', 'Final', 'Consommé', 'Coût HT (€)', 'Responsable'],
     ];
     displayedLines.forEach((l) => {
       const cost = computeLineCost(l);
       stockAoa.push([
-        l.product?.product_name ?? l.product_id,
+        l.product_name ?? l.product_id,
         nameOf(l.space_id),
+        l.source_name ?? '',
         l.initial_qty,
         l.final_qty ?? '',
         computeConsumed(l),
@@ -196,7 +197,7 @@ export function SeminaireBilanTab({
       ]);
     });
     stockAoa.push([]);
-    stockAoa.push(['Coût total estimé', '', '', '', '', Number(totalCost.toFixed(2)), '']);
+    stockAoa.push(['Coût total estimé', '', '', '', '', '', Number(totalCost.toFixed(2)), '']);
 
     const planned = hm(event.start_time);
     const scheduleAoa: (string | number)[][] = [
@@ -240,7 +241,7 @@ export function SeminaireBilanTab({
 
     await downloadAoaWorkbook(
       [
-        { name: 'Stocks', aoa: stockAoa, widths: [26, 18, 9, 9, 11, 13, 18] },
+        { name: 'Stocks', aoa: stockAoa, widths: [26, 18, 12, 9, 9, 11, 13, 18] },
         { name: 'Horaires', aoa: scheduleAoa, widths: [18, 20, 10, 14, 14, 10] },
         { name: 'Débriefs', aoa: debriefAoa, widths: [18, 20, 12, 16, 40, 8] },
       ],
