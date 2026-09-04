@@ -32,7 +32,11 @@ interface ScheduleRow {
   spaces: { space_name: string } | null;
 }
 
-export function BilanRegisseur({ event }: { event: Event }) {
+/**
+ * @param variant  'full' (Bilan) affiche le total consolidé F&B + RH ;
+ *                 'rh' (onglet RH & Horaires) n'affiche que la charge régisseur.
+ */
+export function BilanRegisseur({ event, variant = 'full' }: { event: Event; variant?: 'full' | 'rh' }) {
   const queryClient = useQueryClient();
   const [rateTarget, setRateTarget] = useState<ScheduleRow | null>(null);
 
@@ -50,9 +54,10 @@ export function BilanRegisseur({ event }: { event: Event }) {
     },
   });
 
-  // Total F&B de l'événement (pour le total consolidé).
+  // Total F&B de l'événement (pour le total consolidé) — inutile en variante RH.
   const fbQuery = useQuery({
     queryKey: ['bilanRegisseurFB', event.event_id],
+    enabled: variant === 'full',
     queryFn: async (): Promise<number> => {
       const { data } = await supabase
         .from('event_cost_summary')
@@ -204,7 +209,8 @@ export function BilanRegisseur({ event }: { event: Event }) {
           </table>
         </div>
 
-        {/* Total consolidé F&B + RH */}
+        {/* Total consolidé F&B + RH — Bilan uniquement (masqué dans l'onglet RH) */}
+        {variant === 'full' && (
         <div className="rounded-xl border border-pr-stone bg-pr-cream/40 p-4">
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
@@ -227,6 +233,7 @@ export function BilanRegisseur({ event }: { event: Event }) {
             )}
           </div>
         </div>
+        )}
       </section>
 
       {rateTarget && (

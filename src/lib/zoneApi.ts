@@ -33,6 +33,15 @@ export interface ZoneStockLine {
   reassort_qty: number | null;
   final_qty: number | null;
   product_state: string | null;
+  /** Séminaire (consommation seule) : quantité consommée + source de stockage. */
+  consumed_qty?: number | null;
+  source_location_id?: string | null;
+}
+
+/** Emplacement de stockage proposé au régisseur (sur place + dépôts). */
+export interface ZoneStorageSource {
+  id: string;
+  label: string;
 }
 
 export interface ZoneDebrief {
@@ -65,12 +74,18 @@ export interface ZoneDebrief {
 export interface ZoneStatus {
   initial: boolean;
   final: boolean;
+  /** Séminaire : au moins une ligne de consommation saisie. */
+  consumption: boolean;
   schedule: boolean;
   debrief: boolean;
 }
 
 export interface ZoneState {
   valid: boolean;
+  /** Type d'événement — pilote le mode de saisie stock (séminaire = conso seule). */
+  event_type?: string | null;
+  /** Sources de stockage proposées (séminaire) : sur place + dépôts. */
+  storage_sources?: ZoneStorageSource[];
   products: ZoneProduct[];
   stock_lines: ZoneStockLine[];
   arrival: string | null;
@@ -189,6 +204,46 @@ export async function submitFinalStock(
     p_stock_lines: lines,
   });
   if (!r.success) throw new Error(r.error ?? 'Erreur lors de la saisie du stock final.');
+}
+
+/* ------------------------------------------------------------------ */
+/* Séminaire — saisie « consommation seule » avec source de stockage    */
+/* ------------------------------------------------------------------ */
+
+export interface SeminarConsoLineInput {
+  product_id: string;
+  consumed_qty: number;
+  /** Emplacement d'où la conso est prélevée ; null → espace sur place. */
+  source_location_id: string | null;
+}
+
+/**
+ * Enregistre la consommation d'un séminaire pour l'espace du token. Saisie
+ * « remplaçante » : la liste fournie remplace intégralement la consommation
+ * de cet espace (initial=conso, final=0 → consumed_qty = conso). Le retrait
+ * de stock s'effectuera automatiquement à la clôture, depuis la source choisie.
+ */
+export async function submitZoneSeminarConsumption(
+  token: string,
+  name: string,
+  lines: SeminarConsoLineInput[],
+): Promise<number> {
+  const r = await rpc<{ success: boolean; error?: string; lignes?: number }>(
+    'submit_zone_seminar_consumption',
+    { p_token: token, p_responsible_name: name, p_lines: lines },
+  );
+  if (!r.success) {
+    throw new Error(
+      r.error === 'event_closed'
+        ? 'Événement clôturé — modification impossible.'
+        : r.error === 'name_required'
+          ? 'Votre nom est obligatoire (min. 2 caractères).'
+          : r.error === 'token_invalid'
+            ? 'Session invalide — reconnectez-vous.'
+            : (r.error ?? 'Erreur lors de la saisie de la consommation.'),
+    );
+  }
+  return r.lignes ?? 0;
 }
 
 export async function submitSchedule(

@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -24,10 +25,13 @@ import {
   submitFinalStock,
   submitInitialStock,
   submitSchedule,
+  submitZoneSeminarConsumption,
   uploadZonePhoto,
   validateZoneToken,
   type DebriefPayload,
+  type SeminarConsoLineInput,
   type ZoneInfo,
+  type ZoneProduct,
   type ZoneState,
 } from '@/lib/zoneApi';
 
@@ -117,12 +121,20 @@ export default function ZoneDashboard() {
           </div>
         </div>
         <div className="mx-auto mt-2 flex max-w-2xl flex-wrap gap-2">
-          <Badge tone={state.status.initial ? 'success' : 'warning'}>
-            📦 Ouverture {state.status.initial ? '✅' : '⏳'}
-          </Badge>
-          <Badge tone={state.status.final ? 'success' : 'warning'}>
-            📦 Clôture {state.status.final ? '✅' : '⏳'}
-          </Badge>
+          {state.event_type === 'séminaire' ? (
+            <Badge tone={state.status.consumption ? 'success' : 'warning'}>
+              🍹 Consommation {state.status.consumption ? '✅' : '⏳'}
+            </Badge>
+          ) : (
+            <>
+              <Badge tone={state.status.initial ? 'success' : 'warning'}>
+                📦 Ouverture {state.status.initial ? '✅' : '⏳'}
+              </Badge>
+              <Badge tone={state.status.final ? 'success' : 'warning'}>
+                📦 Clôture {state.status.final ? '✅' : '⏳'}
+              </Badge>
+            </>
+          )}
           <Badge tone={state.status.debrief ? 'success' : 'warning'}>
             📋 Débrief {state.status.debrief ? '✅' : '⏳'}
           </Badge>
@@ -131,14 +143,24 @@ export default function ZoneDashboard() {
 
       <main className="mx-auto max-w-2xl space-y-4 p-4">
         <FeuilleRouteSection info={info} />
-        <StockSection
-          token={token!}
-          name={name}
-          state={state}
-          onDone={invalidate}
-          onStockPatched={patchStockLines}
-          showToast={showToast}
-        />
+        {state.event_type === 'séminaire' ? (
+          <SeminarConsumptionSection
+            token={token!}
+            name={name}
+            state={state}
+            onDone={invalidate}
+            showToast={showToast}
+          />
+        ) : (
+          <StockSection
+            token={token!}
+            name={name}
+            state={state}
+            onDone={invalidate}
+            onStockPatched={patchStockLines}
+            showToast={showToast}
+          />
+        )}
         <ScheduleSection
           token={token!}
           name={name}
@@ -578,6 +600,252 @@ function StockSection({ token, name, state, onDone, onStockPatched, showToast }:
         )}
       </div>
     </Section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 2bis. Consommation séminaire (conso seule + source de stockage)      */
+/* ------------------------------------------------------------------ */
+
+interface ConsoRow {
+  qty: string;
+  source: string;
+}
+
+const FAMILY_ORDER = ['Vins', 'Bières', 'Soft', 'Sirops', 'Spiritueux', 'Matériel'];
+const FAMILY_LABEL: Record<string, string> = {
+  Vins: '🍷 Vins & Champagnes',
+  Bières: '🍺 Bières & Fûts',
+  Soft: '🥤 Softs & Eaux',
+  Sirops: '🧃 Sirops',
+  Spiritueux: '🥃 Spiritueux',
+  Matériel: '📦 Matériel',
+};
+
+interface SeminarConsumptionSectionProps {
+  token: string;
+  name: string;
+  state: ZoneState;
+  onDone: () => void;
+  showToast: ShowToast;
+}
+
+/**
+ * Saisie « consommation seule » d'un séminaire : produits groupés par famille,
+ * le régisseur ne renseigne que ce qui a été consommé et choisit PAR LIGNE la
+ * source de stockage (sur place / AUC / Cave EST / Stockage Fûts). Aucun prix
+ * affiché (RG-003). Le retrait de stock est appliqué à la clôture (ROLE_STADE).
+ */
+function SeminarConsumptionSection({ token, name, state, onDone, showToast }: SeminarConsumptionSectionProps) {
+  const [open, setOpen] = useState(true);
+  const [search, setSearch] = useState('');
+  const [rows, setRows] = useState<Record<string, ConsoRow>>({});
+  const [saving, setSaving] = useState(false);
+
+  const sources = useMemo(() => state.storage_sources ?? [], [state.storage_sources]);
+  const defaultSource = sources[0]?.id ?? '';
+
+  // Source par défaut « intelligente » par famille (le régisseur peut changer).
+  const smartSource = useCallback(
+    (category: string, productName: string): string => {
+      const byLabel = (frag: string) =>
+        sources.find((s) => s.label.toLowerCase().includes(frag))?.id;
+      if (/^f[uû]t/i.test(productName)) return byLabel('fût') ?? defaultSource;
+      if (category === 'Vins' || category === 'Spiritueux')
+        return byLabel('est') ?? byLabel('cave') ?? defaultSource;
+      return defaultSource; // sur place
+    },
+    [sources, defaultSource],
+  );
+
+  const linesById = useMemo(() => {
+    const m: Record<string, ZoneState['stock_lines'][number]> = {};
+    for (const l of state.stock_lines) m[l.product_id] = l;
+    return m;
+  }, [state.stock_lines]);
+
+  // Pré-remplit depuis la consommation déjà saisie (persistance au rechargement).
+  useEffect(() => {
+    const next: Record<string, ConsoRow> = {};
+    for (const p of state.products) {
+      const l = linesById[p.product_id];
+      const consumed = l?.consumed_qty ?? 0;
+      if (consumed && consumed > 0) {
+        next[p.product_id] = {
+          qty: String(consumed),
+          source: l?.source_location_id ?? smartSource(p.category, p.product_name),
+        };
+      }
+    }
+    setRows(next);
+  }, [state.products, linesById, smartSource]);
+
+  const setQty = (id: string, category: string, productName: string, qty: string) =>
+    setRows((prev) => {
+      const cur = prev[id] ?? { qty: '', source: smartSource(category, productName) };
+      return { ...prev, [id]: { ...cur, qty } };
+    });
+  const setSource = (id: string, source: string) =>
+    setRows((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { qty: '', source }), source } }));
+
+  // Groupement par famille + filtre recherche.
+  const grouped = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const map = new Map<string, ZoneProduct[]>();
+    for (const p of state.products) {
+      if (q && !p.product_name.toLowerCase().includes(q)) continue;
+      const arr = map.get(p.category) ?? [];
+      arr.push(p);
+      map.set(p.category, arr);
+    }
+    const cats = [...map.keys()].sort((a, b) => {
+      const ia = FAMILY_ORDER.indexOf(a);
+      const ib = FAMILY_ORDER.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+    return cats.map((c) => [c, map.get(c)!] as const);
+  }, [state.products, search]);
+
+  const consumedCount = Object.values(rows).filter((r) => Number(r.qty) > 0).length;
+
+  async function save() {
+    const lines: SeminarConsoLineInput[] = state.products
+      .map((p) => {
+        const r = rows[p.product_id];
+        const qty = r ? Number(r.qty) : NaN;
+        return {
+          product_id: p.product_id,
+          consumed_qty: qty,
+          source_location_id: r?.source || null,
+        };
+      })
+      .filter((l) => Number.isFinite(l.consumed_qty) && l.consumed_qty > 0);
+    if (lines.length === 0) {
+      showToast('Renseignez au moins une consommation.', 'warning');
+      return;
+    }
+    setSaving(true);
+    try {
+      const n = await submitZoneSeminarConsumption(token, name, lines);
+      showToast(`Consommation enregistrée (${n} produit${n > 1 ? 's' : ''}).`, 'success');
+      onDone();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Erreur à l’enregistrement.', 'warning');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Section title="🍹 Consommation" open={open} onToggle={() => setOpen((v) => !v)}>
+      <p className="text-sm text-pr-black-soft">
+        Renseignez <b>uniquement ce qui a été consommé</b>, puis indiquez pour chaque boisson
+        d’où elle a été prélevée.
+      </p>
+      <Input
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="🔎 Rechercher un produit…"
+        className="min-h-[44px]"
+      />
+      {grouped.length === 0 ? (
+        <p className="text-sm text-pr-black-soft">Aucun produit ne correspond.</p>
+      ) : (
+        <div className="space-y-3">
+          {grouped.map(([cat, prods]) => (
+            <FamilyBlock
+              key={cat}
+              title={FAMILY_LABEL[cat] ?? cat}
+              count={prods.filter((p) => Number(rows[p.product_id]?.qty) > 0).length}
+            >
+              <div className="space-y-2">
+                {prods.map((p) => {
+                  const r = rows[p.product_id];
+                  const hasQty = Number(r?.qty) > 0;
+                  return (
+                    <div key={p.product_id} className="rounded-lg bg-pr-cream/60 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 text-sm font-medium text-pr-black">
+                          {p.product_name}
+                          <span className="ml-1 text-xs text-pr-black-soft">({p.unit})</span>
+                        </div>
+                        <Input
+                          type="number"
+                          min={0}
+                          inputMode="numeric"
+                          value={r?.qty ?? ''}
+                          onChange={(e) => setQty(p.product_id, p.category, p.product_name, e.target.value)}
+                          placeholder="Qté"
+                          className="min-h-[44px] w-24 shrink-0"
+                        />
+                      </div>
+                      {hasQty && sources.length > 0 && (
+                        <label className="mt-2 flex items-center gap-2 text-xs text-pr-black-soft">
+                          <span className="shrink-0">Prélevé depuis</span>
+                          <select
+                            value={r?.source ?? defaultSource}
+                            onChange={(e) => setSource(p.product_id, e.target.value)}
+                            className="min-h-[40px] w-full rounded-lg border border-pr-stone bg-white px-2 text-sm text-pr-black"
+                          >
+                            {sources.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </FamilyBlock>
+          ))}
+        </div>
+      )}
+      <div className="pt-1 text-xs text-pr-black-soft">
+        {consumedCount} produit(s) consommé(s)
+      </div>
+      <Button variant="primary" fullWidth loading={saving} onClick={save} className="min-h-[44px]">
+        Valider la consommation ✓
+      </Button>
+      <p className="text-xs text-pr-black-soft">
+        Le retrait de stock (depuis la source choisie) est appliqué automatiquement à la clôture
+        par l’équipe stade.
+      </p>
+    </Section>
+  );
+}
+
+function FamilyBlock({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count: number;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="overflow-hidden rounded-lg border border-pr-stone">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex min-h-[44px] w-full items-center justify-between px-3 py-2 text-left text-sm font-semibold text-pr-black"
+      >
+        <span className="flex items-center gap-2">
+          {title}
+          {count > 0 && (
+            <span className="rounded-full bg-pr-olive px-2 py-0.5 text-xs font-bold text-white">
+              {count}
+            </span>
+          )}
+        </span>
+        <span className="text-pr-black-soft">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && <div className="border-t border-pr-stone px-3 py-3">{children}</div>}
+    </div>
   );
 }
 

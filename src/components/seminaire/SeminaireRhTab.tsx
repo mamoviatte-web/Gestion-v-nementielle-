@@ -18,6 +18,7 @@ import { EmptyState } from '@/components/ui';
 import { OccasionalHoursPanel } from '@/components/rh/OccasionalHoursPanel';
 import { SeminaireStaffHoursPanel } from './SeminaireStaffHoursPanel';
 import { SeminaireRhKpiCard } from './SeminaireRhKpiCard';
+import { BilanRegisseur } from './BilanRegisseur';
 
 export function SeminaireRhTab({ event, spaces }: { event: Event; spaces: EventSpaceWithSpace[] }) {
   const active = spaces.filter((s) => s.spaces);
@@ -39,6 +40,10 @@ export function SeminaireRhTab({ event, spaces }: { event: Event; spaces: EventS
       </div>
 
       <SeminaireRhKpiCard eventId={event.event_id} reloadKey={reloadKey} />
+
+      {/* Charge régisseur — horaires déclarés par le régisseur (table schedules),
+          intégrés ici et dans la synthèse RH mensuelle. */}
+      <BilanRegisseur event={event} variant="rh" />
 
       {active.length === 0 ? (
         <EmptyState icon={MapPin} title="Aucun espace activé" message="Activez au moins un espace (onglet « Espaces & codes ») pour saisir le staff par espace." />
