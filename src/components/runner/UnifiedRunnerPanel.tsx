@@ -111,6 +111,35 @@ export function UnifiedRunnerPanel({
 
   useEffect(() => { void load(); }, [load]);
 
+  // Édition de la quantité « À acheminer » (persistée dans runner_auto_planning).
+  const saveQty = useCallback(
+    async (spaceId: string, productId: string, oldQty: number, newQty: number) => {
+      if (newQty === oldQty) return;
+      // Mise à jour optimiste : ligne + total de la carte.
+      setBoard((prev) =>
+        prev.map((l) =>
+          l.space_id === spaceId && l.product_id === productId ? { ...l, qty_to_move: newQty } : l,
+        ),
+      );
+      setCards((prev) =>
+        prev.map((c) =>
+          c.space_id === spaceId ? { ...c, total_to_move: num(c.total_to_move) + (newQty - oldQty) } : c,
+        ),
+      );
+      const { data, error } = await supabase.rpc('set_runner_qty_to_move', {
+        p_event_id: eventId, p_space_id: spaceId, p_product_id: productId, p_qty: newQty,
+      });
+      const res = data as { success: boolean; error?: string } | null;
+      if (error || !res?.success) {
+        showToast('Échec de l’enregistrement de la quantité à acheminer.', 'warning');
+        void load(); // resynchronise depuis la base
+      } else {
+        showToast('Quantité à acheminer enregistrée.', 'success');
+      }
+    },
+    [eventId, load, showToast],
+  );
+
   const linesBySpace = useMemo(() => {
     const m = new Map<string, Line[]>();
     for (const l of board) {
@@ -294,7 +323,11 @@ export function UnifiedRunnerPanel({
                     </button>
                     {open && (
                       <div className="bg-white p-3">
-                        <SpaceLines lines={linesBySpace.get(c.space_id) ?? []} onShortageClick={() => navigate('/admin/stock')} />
+                        <SpaceLines
+                          lines={linesBySpace.get(c.space_id) ?? []}
+                          onShortageClick={() => navigate('/admin/stock')}
+                          onEditQty={(line, v) => void saveQty(line.space_id, line.product_id, num(line.qty_to_move), v)}
+                        />
                         <div className="mt-2 flex justify-end">
                           <Button size="sm" variant="secondary" loading={pdfBusy} onClick={() => void toPdf(buildHtml([c.space_id]), `Fiche_${c.space_name.replace(/\s+/g, '_')}_${slug}.pdf`)}>
                             <Download size={13} /> Télécharger cette fiche
@@ -313,7 +346,41 @@ export function UnifiedRunnerPanel({
   );
 }
 
-function SpaceLines({ lines, onShortageClick }: { lines: Line[]; onShortageClick: () => void }) {
+/** Cellule éditable « À acheminer » : commit au blur / Entrée, entier ≥ 0. */
+function EditableQty({ value, onSave }: { value: number; onSave: (v: number) => void }) {
+  const [v, setV] = useState(String(value));
+  useEffect(() => { setV(String(value)); }, [value]);
+  const commit = () => {
+    const n = Math.max(0, Math.round(Number(v)));
+    if (!Number.isFinite(n)) { setV(String(value)); return; }
+    setV(String(n));
+    if (n !== value) onSave(n);
+  };
+  return (
+    <input
+      type="number"
+      min={0}
+      inputMode="numeric"
+      value={v}
+      onChange={(e) => setV(e.target.value)}
+      onFocus={(e) => e.target.select()}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+      className="w-16 rounded-md border border-stone-200 bg-white px-1.5 py-1 text-right text-sm font-semibold tabular-nums text-stone-800 focus:border-pr-olive focus:outline-none focus:ring-1 focus:ring-pr-olive"
+      title="Modifier la quantité à acheminer (enregistrée automatiquement)"
+    />
+  );
+}
+
+function SpaceLines({
+  lines,
+  onShortageClick,
+  onEditQty,
+}: {
+  lines: Line[];
+  onShortageClick: () => void;
+  onEditQty: (line: Line, value: number) => void;
+}) {
   const totMove = lines.reduce((s, l) => s + num(l.qty_to_move), 0);
   const totCost = lines.reduce((s, l) => s + num(l.cost_ht), 0);
   return (
@@ -323,7 +390,7 @@ function SpaceLines({ lines, onShortageClick }: { lines: Line[]; onShortageClick
           <tr className="border-b border-stone-100 text-left text-[11px] uppercase tracking-wide text-stone-400">
             <th className="px-2 py-1.5">Produit</th>
             <th className="px-2 py-1.5 text-right">Besoin</th>
-            <th className="px-2 py-1.5 text-right">À acheminer</th>
+            <th className="px-2 py-1.5 text-right">À acheminer <span className="normal-case text-stone-300" title="Modifiable">✎</span></th>
             <th className="px-2 py-1.5 text-right">Espace</th>
             <th className="px-2 py-1.5 text-right">Réserve</th>
             <th className="px-2 py-1.5 text-center">Statut</th>
@@ -349,7 +416,9 @@ function SpaceLines({ lines, onShortageClick }: { lines: Line[]; onShortageClick
                     )}
                   </td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{num(l.needed_qty)}</td>
-                  <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{num(l.qty_to_move)}</td>
+                  <td className="px-2 py-1.5 text-right">
+                    <EditableQty value={num(l.qty_to_move)} onSave={(v) => onEditQty(l, v)} />
+                  </td>
                   <td className="px-2 py-1.5 text-right tabular-nums text-stone-500">{num(l.area_stock)}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums text-stone-500">{num(l.reserve_qty)}</td>
                   <td className="px-2 py-1.5 text-center">
