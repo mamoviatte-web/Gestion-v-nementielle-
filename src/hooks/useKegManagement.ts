@@ -250,7 +250,9 @@ export interface DispatchInput {
 export function useKegMutations() {
   const queryClient = useQueryClient();
   const invalidate = () => {
-    ['kegSummary', 'emptyKegs', 'kegReturnHistory', 'depotBalances', 'stockBalances', 'stockMovementsJournal'].forEach(
+    // depotsSummary = carte cockpit des 3 stockages : à rafraîchir aussi après
+    // réception / dispatch / retour de fûts (sinon le total reste figé).
+    ['kegSummary', 'emptyKegs', 'kegReturnHistory', 'depotBalances', 'depotsSummary', 'stockBalances', 'stockMovementsJournal'].forEach(
       (k) => void queryClient.invalidateQueries({ queryKey: [k] }),
     );
   };

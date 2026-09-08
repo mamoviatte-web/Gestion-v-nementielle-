@@ -187,17 +187,28 @@ export default function DepotsTab() {
       )}
 
       {montanerOpen && (
-        <MontanerReceptionModal onClose={() => setMontanerOpen(false)} onDone={() => setMontanerOpen(false)} />
+        <MontanerReceptionModal
+          onClose={() => setMontanerOpen(false)}
+          onDone={() => {
+            // Réception Montaner = fûts + softs → rafraîchir vue fûts, soldes ET
+            // la carte cockpit (synthèse des 3 stockages).
+            ['kegSummary', 'depotBalances', 'depotsSummary', 'depotDeliveries', 'invoiceRegistry'].forEach(
+              (k) => void queryClient.invalidateQueries({ queryKey: [k] }),
+            );
+            setMontanerOpen(false);
+          }}
+        />
       )}
 
       {kegReceptionOpen && (
         <KegReceptionModal
           onClose={() => setKegReceptionOpen(false)}
           onDone={() => {
-            void queryClient.invalidateQueries({ queryKey: ['kegSummary'] });
-            void queryClient.invalidateQueries({ queryKey: ['invoiceRegistry'] });
-            void queryClient.invalidateQueries({ queryKey: ['depotDeliveries'] });
-            void queryClient.invalidateQueries({ queryKey: ['depotBalances'] });
+            // depotsSummary = carte cockpit « Stockage Fûts » : sans invalidation
+            // elle restait figée (ex. 214) après une réception jusqu'au refetch.
+            ['kegSummary', 'invoiceRegistry', 'depotDeliveries', 'depotBalances', 'depotsSummary'].forEach(
+              (k) => void queryClient.invalidateQueries({ queryKey: [k] }),
+            );
             setKegReceptionOpen(false);
           }}
         />
