@@ -180,7 +180,7 @@ export function DeliveryModal({
             <h2 className="flex items-center gap-2 font-display text-lg font-black text-pr-black">
               <Truck className="h-5 w-5 text-pr-olive-dark" /> Enregistrer une livraison
             </h2>
-            <p className="mt-0.5 text-xs text-pr-black-soft/60">Dépôt : {depotName}</p>
+            <p className="mt-0.5 text-xs text-pr-black-soft/60">Réception : {depotName}</p>
           </div>
           <button onClick={onClose} aria-label="Fermer" className="text-pr-black-soft/40 hover:text-pr-black">
             <X className="h-5 w-5" />
@@ -192,6 +192,16 @@ export function DeliveryModal({
             {error}
           </Alert>
         )}
+
+        {/* Dispatch automatique vers les 3 points de stockage (routage base). */}
+        <div className="mb-3 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-xs text-sky-800">
+          <Truck className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <b>Dispatch automatique</b> — chaque produit est rangé dans son stockage unique :
+            {' '}<b>fûts → Stockage Fûts</b>, <b>vins &amp; spiritueux → Stock EST</b>, le reste → <b>AUC</b>.
+            Peu importe le dépôt de saisie.
+          </span>
+        </div>
 
         {showScanner ? (
           <InvoiceScanner
