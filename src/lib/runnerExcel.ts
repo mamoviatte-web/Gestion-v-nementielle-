@@ -9,7 +9,7 @@
  * reflètent le board runner (source unique stock_balances).
  */
 
-import { downloadAoaWorkbook, type AoaCell } from './xlsxAoa';
+import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from './xlsxAoa';
 import { INT, type ColumnStyle } from './excelTheme';
 
 export interface RunnerExcelLine {
@@ -73,7 +73,7 @@ export async function downloadRunnerWorkbook(opts: {
 }): Promise<void> {
   const { matchNom, matchDate, cards, linesBySpace, allLines, filename } = opts;
   const used = new Set<string>();
-  const sheets = [];
+  const sheets: AoaSheetOut[] = [];
 
   /* Feuille 1 — Liste de courses (synthèse par produit vs réserve). */
   {
