@@ -10,12 +10,13 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, RefreshCw, ShoppingCart, Crown, CupSoda } from 'lucide-react';
+import { Download, FileSpreadsheet, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, RefreshCw, ShoppingCart, Crown, CupSoda } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/context/ToastContext';
 import { Button, Spinner } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import { loadModule } from '@/lib/lazyModule';
+import { downloadRunnerWorkbook } from '@/lib/runnerExcel';
 
 interface Card {
   space_id: string; space_name: string; family: string; service_type: string | null;
@@ -84,6 +85,7 @@ export function UnifiedRunnerPanel({
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [xlsBusy, setXlsBusy] = useState(false);
   const [logeSheets, setLogeSheets] = useState<Record<string, LogeBlock[]>>({});
 
   const load = useCallback(async () => {
@@ -255,6 +257,25 @@ export function UnifiedRunnerPanel({
     }
   }
 
+  async function toExcel() {
+    if (xlsBusy) return;
+    setXlsBusy(true);
+    try {
+      await downloadRunnerWorkbook({
+        matchNom, matchDate,
+        cards: cards.map((c) => ({ space_id: c.space_id, space_name: c.space_name, family: c.family })),
+        linesBySpace,
+        allLines: board,
+        filename: `Fiches_Runner_${slug}.xlsx`,
+      });
+      showToast('Export Excel téléchargé.', 'success');
+    } catch (e) {
+      showToast('Échec de l’export Excel : ' + (e instanceof Error ? e.message : String(e)), 'warning');
+    } finally {
+      setXlsBusy(false);
+    }
+  }
+
   if (loading) return <Spinner />;
   if (cards.length === 0) {
     return <p className="rounded-xl bg-stone-50 px-4 py-6 text-center text-sm text-stone-400">Aucune fiche runner — générez les dotations depuis l'en-tête du match.</p>;
@@ -281,8 +302,11 @@ export function UnifiedRunnerPanel({
           <Button size="sm" variant="secondary" loading={pdfBusy} onClick={() => void toPdf(buildShoppingHtml(), `Liste_courses_${slug}.pdf`)}>
             <ShoppingCart size={14} /> Liste de courses
           </Button>
+          <Button size="sm" variant="secondary" loading={xlsBusy} onClick={() => void toExcel()}>
+            <FileSpreadsheet size={14} /> Excel
+          </Button>
           <Button size="sm" loading={pdfBusy} onClick={() => void toPdf(buildHtml(cards.map((c) => c.space_id)), `Fiches_Runner_${slug}.pdf`)}>
-            <Download size={14} /> Tout télécharger
+            <Download size={14} /> Tout télécharger (PDF)
           </Button>
         </div>
       </div>
