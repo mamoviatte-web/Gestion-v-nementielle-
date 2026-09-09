@@ -117,6 +117,15 @@ export default function DashboardPage() {
 
   return (
     <div className="dash mx-auto min-h-screen max-w-6xl space-y-5 p-6" style={{ background: 'var(--bg)' }}>
+      {/* ── PLANNING HEBDOMADAIRE (1er visuel — mis en avant) ── */}
+      <div>
+        <div className="mb-4 flex items-center gap-2">
+          <div className="h-6 w-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
+          <h2 className="text-lg font-black" style={{ color: 'var(--ink)' }}>Planning hebdomadaire</h2>
+        </div>
+        <WeeklyPlanner />
+      </div>
+
       {/* ── À TRAITER (inbox unifiée) ── */}
       <InboxPanel />
 
@@ -285,14 +294,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── PLANNING HEBDOMADAIRE ── */}
-      <div>
-        <div className="mb-4 flex items-center gap-2">
-          <div className="h-6 w-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
-          <h2 className="text-lg font-black" style={{ color: 'var(--ink)' }}>Planning hebdomadaire</h2>
-        </div>
-        <WeeklyPlanner />
-      </div>
     </div>
   );
 }
