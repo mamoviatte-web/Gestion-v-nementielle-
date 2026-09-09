@@ -263,6 +263,63 @@ export async function submitSchedule(
   if (!r.success) throw new Error(r.error ?? 'Erreur lors de la saisie des horaires.');
 }
 
+/* ------------------------------------------------------------------ */
+/* Équipe & prestataires externes (mêmes RPC que les matchs)           */
+/* ------------------------------------------------------------------ */
+
+export interface ZoneStaffMember {
+  id: string;
+  staff_name: string;
+  role: string;
+  arrival_time: string | null;
+  departure_time: string | null;
+  break_minutes: number;
+  hours_worked: number | null;
+  rh_cost: number | null;
+  confirmed_by_staff: boolean;
+  confirmed_by_manager: boolean;
+  is_external: boolean;
+  notes: string | null;
+}
+
+export async function getZoneStaff(token: string): Promise<ZoneStaffMember[]> {
+  const r = await rpc<{ success: boolean; staff?: ZoneStaffMember[] }>('get_zone_staff_hours', { p_token: token });
+  return r.staff ?? [];
+}
+
+export async function upsertZoneStaff(
+  token: string,
+  m: {
+    id?: string | null;
+    staffName: string;
+    role: string;
+    arrival: string | null;
+    departure: string | null;
+    breakMinutes?: number;
+    isExternal?: boolean;
+  },
+): Promise<void> {
+  const r = await rpc<{ success: boolean; error?: string }>('upsert_zone_staff_member', {
+    p_token: token,
+    p_staff_id: m.id ?? null,
+    p_staff_name: m.staffName,
+    p_role: m.role,
+    p_arrival_time: m.arrival,
+    p_departure_time: m.departure,
+    p_break_minutes: m.breakMinutes ?? 0,
+    p_is_external: m.isExternal ?? false,
+  });
+  if (!r.success) throw new Error(r.error ?? "Erreur lors de l'enregistrement du membre.");
+}
+
+export async function deleteZoneStaff(token: string, staffId: string): Promise<void> {
+  const r = await rpc<{ success: boolean; error?: string }>('delete_zone_staff_member', {
+    p_token: token,
+    p_staff_id: staffId,
+  });
+  if (!r.success) throw new Error(r.error ?? 'Erreur lors de la suppression.');
+}
+
 export async function submitDebrief(
   token: string,
   name: string,

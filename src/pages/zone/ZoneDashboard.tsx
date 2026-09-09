@@ -21,6 +21,9 @@ import { useToast } from '@/context/ToastContext';
 import {
   editInitialStock,
   getZoneState,
+  getZoneStaff,
+  upsertZoneStaff,
+  deleteZoneStaff,
   submitDebrief,
   submitFinalStock,
   submitInitialStock,
@@ -32,6 +35,7 @@ import {
   type SeminarConsoLineInput,
   type ZoneInfo,
   type ZoneProduct,
+  type ZoneStaffMember,
   type ZoneState,
 } from '@/lib/zoneApi';
 
@@ -168,6 +172,7 @@ export default function ZoneDashboard() {
           onDone={invalidate}
           showToast={showToast}
         />
+        <StaffTeamSection token={token!} showToast={showToast} />
         <DebriefSection
           token={token!}
           name={name}
@@ -943,6 +948,140 @@ function ScheduleSection({ token, name, state, onDone, showToast }: ScheduleSect
       >
         Valider
       </Button>
+    </Section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 3bis. Équipe & prestataires externes (mêmes charges RH que matchs)  */
+/* ------------------------------------------------------------------ */
+
+const TEAM_ROLES = ['Serveur', 'Chef de rang', 'Barman', 'Agent de sécurité', 'Runner', 'Hôte / Hôtesse', 'Traiteur', 'Technique', 'Responsable espace', 'Autre'];
+
+function teamHours(arrival?: string | null, departure?: string | null, breakMin = 0): number | null {
+  if (!arrival || !departure) return null;
+  const toMin = (t: string) => { const [h, m] = t.slice(0, 5).split(':').map(Number); return h * 60 + m; };
+  let diff = toMin(departure) - toMin(arrival);
+  if (diff < 0) diff += 1440;
+  return Math.round(((diff - breakMin) / 60) * 100) / 100;
+}
+function fmtH(h: number | null): string {
+  if (h === null || h <= 0) return '—';
+  const hrs = Math.floor(h); const min = Math.round((h - hrs) * 60);
+  return min > 0 ? `${hrs}h${String(min).padStart(2, '0')}` : `${hrs}h`;
+}
+
+function StaffTeamSection({ token, showToast }: { token: string; showToast: ShowToast }) {
+  const [open, setOpen] = useState(false);
+  const [team, setTeam] = useState<ZoneStaffMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [f, setF] = useState({ name: '', role: 'Serveur', arrival: '', departure: '', breakMin: 0, external: false });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setTeam(await getZoneStaff(token)); } catch { /* ignore */ }
+    setLoading(false);
+  }, [token]);
+  useEffect(() => { void load(); }, [load]);
+
+  async function add() {
+    if (f.name.trim().length < 2 || !f.arrival) return;
+    setBusy(true);
+    try {
+      await upsertZoneStaff(token, { staffName: f.name.trim(), role: f.role, arrival: f.arrival, departure: f.departure || null, breakMinutes: f.breakMin, isExternal: f.external });
+      setF({ name: '', role: 'Serveur', arrival: '', departure: '', breakMin: 0, external: false });
+      setAdding(false);
+      await load();
+      showToast('Membre ajouté.', 'success');
+    } catch (e) { showToast(e instanceof Error ? e.message : 'Échec', 'warning'); }
+    finally { setBusy(false); }
+  }
+  async function setDeparture(m: ZoneStaffMember, dep: string) {
+    setBusy(true);
+    try {
+      await upsertZoneStaff(token, { id: m.id, staffName: m.staff_name, role: m.role, arrival: m.arrival_time, departure: dep || null, breakMinutes: m.break_minutes, isExternal: m.is_external });
+      await load();
+    } catch (e) { showToast(e instanceof Error ? e.message : 'Échec', 'warning'); }
+    finally { setBusy(false); }
+  }
+  async function remove(m: ZoneStaffMember) {
+    if (!window.confirm(`Retirer ${m.staff_name} de l'équipe ?`)) return;
+    setBusy(true);
+    try { await deleteZoneStaff(token, m.id); await load(); }
+    catch (e) { showToast(e instanceof Error ? e.message : 'Échec', 'warning'); }
+    finally { setBusy(false); }
+  }
+
+  const title = `👥 Équipe & prestataires externes${team.length ? ` (${team.length})` : ''}`;
+  return (
+    <Section title={title} open={open} onToggle={() => setOpen((v) => !v)}>
+      <p className="text-xs text-pr-black-soft">
+        Ajoutez toute l'équipe présente et les <b>prestataires externes</b> (traiteur, sécurité, technique…). Les heures alimentent les charges RH de l'événement — comme sur les matchs.
+      </p>
+
+      {loading ? (
+        <p className="text-sm text-pr-black-soft">Chargement…</p>
+      ) : team.length === 0 ? (
+        <p className="rounded-lg bg-pr-cream/50 px-3 py-3 text-center text-sm text-pr-black-soft">Aucun membre pour l'instant.</p>
+      ) : (
+        <div className="space-y-2">
+          {team.map((m) => {
+            const h = teamHours(m.arrival_time, m.departure_time, m.break_minutes);
+            return (
+              <div key={m.id} className="rounded-xl border border-pr-stone bg-white p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-pr-black">
+                      {m.staff_name}
+                      {m.is_external && <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 align-middle">EXTERNE</span>}
+                    </p>
+                    <p className="text-xs text-pr-black-soft">{m.role} · arrivée {m.arrival_time?.slice(0, 5) ?? '—'} · {fmtH(h)}</p>
+                  </div>
+                  <button onClick={() => void remove(m)} disabled={busy} className="shrink-0 rounded-lg p-1 text-pr-black-soft/40 hover:text-pr-rust">✕</button>
+                </div>
+                {!m.departure_time && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="text-xs text-pr-black-soft">Départ</label>
+                    <input type="time" onChange={(e) => void setDeparture(m, e.target.value)} className="min-h-[40px] rounded-lg border border-pr-stone px-2 py-1.5 text-sm" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {adding ? (
+        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <Input placeholder="Nom Prénom *" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+          <div className="grid grid-cols-2 gap-2">
+            <select value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })} className="min-h-[44px] rounded-lg border border-pr-stone bg-white px-2 text-sm">
+              {TEAM_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <label className="flex items-center gap-2 text-sm text-pr-black">
+              <input type="checkbox" checked={f.external} onChange={(e) => setF({ ...f, external: e.target.checked })} /> Prestataire externe
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className="mb-1 block text-xs text-pr-black-soft">Arrivée *</label><input type="time" value={f.arrival} onChange={(e) => setF({ ...f, arrival: e.target.value })} className="min-h-[44px] w-full rounded-lg border border-pr-stone px-2" /></div>
+            <div><label className="mb-1 block text-xs text-pr-black-soft">Départ</label><input type="time" value={f.departure} onChange={(e) => setF({ ...f, departure: e.target.value })} className="min-h-[44px] w-full rounded-lg border border-pr-stone px-2" /></div>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-pr-black-soft">Pause (min)</label>
+            <input type="number" min={0} max={120} step={15} value={f.breakMin || ''} onChange={(e) => setF({ ...f, breakMin: parseInt(e.target.value) || 0 })} className="w-20 rounded-lg border border-pr-stone px-2 py-1.5 text-center" />
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" className="flex-1" onClick={() => setAdding(false)}>Annuler</Button>
+            <Button className="flex-1" loading={busy} disabled={f.name.trim().length < 2 || !f.arrival} onClick={() => void add()}>Ajouter</Button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-pr-stone py-3 text-sm font-medium text-pr-black-soft hover:border-amber-400 hover:text-amber-600">
+          + Ajouter un membre / prestataire
+        </button>
+      )}
     </Section>
   );
 }
