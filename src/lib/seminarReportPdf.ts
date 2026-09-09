@@ -273,7 +273,7 @@ async function addRhDetailPage(doc: jsPDF, eventId: string, totalRh: number | nu
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
   doc.setTextColor(OLIVE);
-  doc.text(`${rows.length} intervenant${rows.length > 1 ? 's' : ''} · ${namedHours.toFixed(1).replace('.', 'h')} · équipe régisseur & prestataires externes`, 20, 44);
+  doc.text(`${rows.length} intervenant${rows.length > 1 ? 's' : ''} · ${namedHours.toFixed(1)} h · équipe régisseur & prestataires externes`, 20, 44);
 
   // En-têtes de colonnes
   const cN = 24, cR = 120, cE = 186, cH = 222, cC = W - 24;
