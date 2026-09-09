@@ -246,6 +246,94 @@ async function addDebriefPhotoPages(doc: jsPDF, eventId: string, eventName: stri
   }
 }
 
+/**
+ * Page « Détail des charges RH » (Axe 3) : décompose la charge régisseur poste
+ * par poste (équipe + prestataires externes saisis côté zone), heures & coût,
+ * réconciliée avec le total RH du rapport. Omise si aucune donnée RH.
+ */
+async function addRhDetailPage(doc: jsPDF, eventId: string, totalRh: number | null) {
+  const { data } = await supabase
+    .from('zone_staff_hours')
+    .select('staff_name, role, hours_worked, rh_cost, is_external')
+    .eq('event_id', eventId)
+    .order('is_external', { ascending: true })
+    .order('role', { ascending: true })
+    .order('staff_name', { ascending: true });
+  const rows = (data ?? []) as { staff_name: string; role: string | null; hours_worked: number | null; rh_cost: number | null; is_external: boolean | null }[];
+  const total = Number(totalRh ?? 0);
+  if (rows.length === 0 && total <= 0) return;
+
+  const namedCost = rows.reduce((s, r) => s + (Number(r.rh_cost) || 0), 0);
+  const namedHours = rows.reduce((s, r) => s + (Number(r.hours_worked) || 0), 0);
+  const otherCost = total > namedCost + 0.01 ? total - namedCost : 0;
+
+  doc.addPage();
+  background(doc);
+  pageTitle(doc, 'Détail charges RH');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.setTextColor(OLIVE);
+  doc.text(`${rows.length} intervenant${rows.length > 1 ? 's' : ''} · ${namedHours.toFixed(1).replace('.', 'h')} · équipe régisseur & prestataires externes`, 20, 44);
+
+  // En-têtes de colonnes
+  const cN = 24, cR = 120, cE = 186, cH = 222, cC = W - 24;
+  let y = 56;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(BLACK);
+  doc.text('Intervenant', cN, y);
+  doc.text('Poste', cR, y);
+  doc.text('Externe', cE, y);
+  doc.text('Heures', cH, y, { align: 'right' });
+  doc.text('Coût HT', cC, y, { align: 'right' });
+  doc.setDrawColor(GOLD);
+  doc.setLineWidth(0.6);
+  doc.line(20, y + 2, W - 20, y + 2);
+  y += 9;
+
+  doc.setFontSize(9.5);
+  rows.forEach((r, i) => {
+    if (y > H - 22) {
+      footerBar(doc);
+      doc.addPage();
+      background(doc);
+      pageTitle(doc, 'Détail charges RH (suite)');
+      y = 52;
+    }
+    doc.setFillColor(i % 2 === 0 ? '#FFFFFF' : '#ECE8DC');
+    doc.rect(20, y - 5, W - 40, 9, 'F');
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(BLACK);
+    doc.text(doc.splitTextToSize(r.staff_name ?? '—', 92)[0] ?? '—', cN, y);
+    doc.text(doc.splitTextToSize(r.role ?? '—', 62)[0] ?? '—', cR, y);
+    doc.text(r.is_external ? 'Oui' : '—', cE, y);
+    doc.text(r.hours_worked != null ? `${Number(r.hours_worked).toFixed(1)} h` : '—', cH, y, { align: 'right' });
+    doc.text(r.rh_cost != null ? euro(r.rh_cost) : '—', cC, y, { align: 'right' });
+    y += 9;
+  });
+
+  if (otherCost > 0) {
+    doc.setFillColor('#ECE8DC');
+    doc.rect(20, y - 5, W - 40, 9, 'F');
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(BLACK);
+    doc.text('Personnel planning / autres', cN, y);
+    doc.text(euro(otherCost), cC, y, { align: 'right' });
+    y += 9;
+  }
+
+  // Total
+  y += 2;
+  doc.setDrawColor(GOLD);
+  doc.line(20, y - 5, W - 20, y - 5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(OLIVE);
+  doc.text('Total charges RH', cN, y + 2);
+  doc.text(euro(total), cC, y + 2, { align: 'right' });
+  footerBar(doc);
+}
+
 /** Génère et télécharge le PDF. Renvoie le nom de fichier. */
 export interface PdfExternalCharge {
   provider_name: string;
@@ -336,6 +424,9 @@ export async function exportSeminarReportPDF(
     }
   }
   footerBar(doc);
+
+  // ── PAGE — DÉTAIL DES CHARGES RH (Axe 3) ───────────────
+  await addRhDetailPage(doc, draft.event_id, draft.total_rh_cost);
 
   // ── PAGE 3 — MISE EN PLACE ─────────────────────────────
   if ((draft.setup_photo_urls ?? []).length > 0) {

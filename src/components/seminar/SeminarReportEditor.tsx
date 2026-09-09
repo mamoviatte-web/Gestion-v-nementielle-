@@ -5,7 +5,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, Download, Eye, Loader2, Trash2, Upload, X } from 'lucide-react';
+import { Download, Eye, Trash2, X } from 'lucide-react';
 import { Alert, Badge, Button, Spinner } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import { formatEuro } from '@/lib/calculations';
@@ -21,7 +21,7 @@ import { exportSeminarReportPDF } from '@/lib/seminarReportPdf';
 import { FullPnL } from '@/components/seminar/FullPnL';
 import { ExternalChargesManager } from '@/components/seminar/ExternalChargesManager';
 import { PhotoChecklist } from '@/components/debrief/PhotoChecklist';
-import { PhotoGallery } from '@/components/debrief/PhotoGallery';
+import { UnifiedPhotoManager } from '@/components/debrief/UnifiedPhotoManager';
 import { PdfPhotoSummary } from '@/components/debrief/PdfPhotoSummary';
 import { LogoUploader } from '@/components/seminar/LogoUploader';
 import { renderScoreCircles, formatScoreText } from '@/lib/scoreRenderer';
@@ -129,94 +129,6 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <span className="w-40 shrink-0 text-pr-black-soft/60">{label}</span>
       {children}
     </div>
-  );
-}
-
-/* ─────────────── Photos ─────────────── */
-
-type Field = 'setup_photo_urls' | 'fb_photo_urls';
-
-function PhotosSection({
-  title,
-  field,
-  photos,
-  onChange,
-  uploadPhoto,
-}: {
-  title: string;
-  field: Field;
-  photos: ReportPhoto[];
-  onChange: (field: Field, next: ReportPhoto[]) => void;
-  uploadPhoto: (f: File) => Promise<string>;
-}) {
-  const { showToast } = useToast();
-  const [busy, setBusy] = useState(false);
-
-  async function handleFiles(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    setBusy(true);
-    try {
-      const added: ReportPhoto[] = [];
-      let order = photos.length;
-      for (const f of Array.from(files)) {
-        const url = await uploadPhoto(f);
-        added.push({ url, caption: '', order: order++ });
-      }
-      onChange(field, [...photos, ...added]);
-    } catch {
-      showToast("Échec de l'upload d'une photo.", 'warning');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function move(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= photos.length) return;
-    const next = [...photos];
-    [next[i], next[j]] = [next[j], next[i]];
-    onChange(field, next.map((p, idx) => ({ ...p, order: idx })));
-  }
-
-  return (
-    <Card title={title} hint={`${photos.length} photo(s)`}>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {photos.map((p, i) => (
-          <div key={`${p.url}-${i}`} className="overflow-hidden rounded-lg border border-pr-stone">
-            <img src={p.url} alt={p.caption ?? ''} className="h-24 w-full object-cover" />
-            <div className="space-y-1 p-2">
-              <InlineEditable
-                value={p.caption}
-                placeholder="Légende…"
-                onSave={(v) => onChange(field, photos.map((x, idx) => (idx === i ? { ...x, caption: v } : x)))}
-              />
-              <div className="flex items-center justify-between">
-                <div className="flex gap-1">
-                  <button onClick={() => move(i, -1)} className="text-pr-black-soft/40 hover:text-pr-black" aria-label="Monter">
-                    <ChevronUp className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => move(i, 1)} className="text-pr-black-soft/40 hover:text-pr-black" aria-label="Descendre">
-                    <ChevronDown className="h-4 w-4" />
-                  </button>
-                </div>
-                <button
-                  onClick={() => onChange(field, photos.filter((_, idx) => idx !== i).map((x, idx) => ({ ...x, order: idx })))}
-                  className="text-pr-black-soft/40 hover:text-pr-rust"
-                  aria-label="Supprimer"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-        <label className="flex h-full min-h-[7rem] cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-pr-stone text-xs text-pr-black-soft/50 hover:border-pr-olive">
-          {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
-          Ajouter
-          <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => void handleFiles(e.target.files)} />
-        </label>
-      </div>
-    </Card>
   );
 }
 
@@ -386,7 +298,7 @@ export function SeminarReportEditor({ event }: { event: Event }) {
 }
 
 function SeminarReportEditorInner({ event }: { event: Event }) {
-  const { draft, updateDraft, flush, uploadPhoto, setStatus, loading, saving, savedAt, provisioned, externalCostHt, recomputeCosts } =
+  const { draft, updateDraft, flush, setStatus, loading, saving, savedAt, provisioned, externalCostHt, recomputeCosts } =
     useSeminarReportDraft(event);
   const reportRegisseur = draft.regisseur_name || draft.responsable_commercial || 'Régisseur';
   const { showToast } = useToast();
@@ -470,7 +382,20 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
         <Row label="PAX"><InlineEditable type="number" value={draft.pax} onSave={(v) => updateDraft({ pax: v ? Number(v) : null })} /></Row>
         <Row label="Responsable comm."><InlineEditable value={draft.responsable_commercial} onSave={(v) => updateDraft({ responsable_commercial: v })} /></Row>
         <Row label="CA HT (€)">
-          <InlineEditable type="number" value={draft.ca_ht} onSave={(v) => updateDraft({ ca_ht: Number(v) || 0 })} />
+          <InlineEditable
+            type="number"
+            value={draft.ca_ht}
+            onSave={(v) => {
+              const next = Number(v) || 0;
+              const current = Number(draft.ca_ht ?? 0);
+              // Garde-fou (Axe 4) : confirmer l'écrasement d'un CA déjà saisi.
+              if (current > 0 && next !== current &&
+                  !confirm(`Un chiffre d'affaires de ${formatEuro(current)} est déjà enregistré.\n\nLe remplacer par ${formatEuro(next)} ?`)) {
+                return;
+              }
+              updateDraft({ ca_ht: next });
+            }}
+          />
           {(!draft.ca_ht || Number(draft.ca_ht) === 0) && (
             <span className="text-xs text-pr-olive-dark">— {draft.ca_note || draft.ca_type || 'partenariat'}</span>
           )}
@@ -524,28 +449,21 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
         </div>
       </Card>
 
-      <PhotosSection title="📷 Photos mise en place" field="setup_photo_urls" photos={draft.setup_photo_urls ?? []} onChange={(f, next) => updateDraft({ [f]: next } as Partial<SeminarReportDraft>)} uploadPhoto={uploadPhoto} />
-      <PhotosSection title="📷 Photos F&B" field="fb_photo_urls" photos={draft.fb_photo_urls ?? []} onChange={(f, next) => updateDraft({ [f]: next } as Partial<SeminarReportDraft>)} uploadPhoto={uploadPhoto} />
-
-      {/* Rapport photo terrain — checklist + galeries 3 catégories (→ PDF dense) */}
-      <Card title="📸 Rapport photo terrain">
-        <div className="space-y-7">
+      {/* Rapport photo terrain — UNE SEULE VISU : toutes les photos, une grille,
+          choix des photos du PDF (Axe 2). Checklist + récap sélection. */}
+      <Card title="📸 Rapport photo — vue unique">
+        <div className="space-y-6">
+          <UnifiedPhotoManager eventId={event.event_id} responsableNom={reportRegisseur} />
+          <hr className="border-stone-100" />
+          <PdfPhotoSummary eventId={event.event_id} />
+          <hr className="border-stone-100" />
           <div>
             <p className="mb-3 text-sm font-bold text-stone-800">
               ☑️ Checklist photos terrain{' '}
-              <span className="text-xs font-normal text-stone-400">— cochez au fur et à mesure</span>
+              <span className="text-xs font-normal text-stone-400">— pour ne rien oublier</span>
             </p>
             <PhotoChecklist eventId={event.event_id} regisseurNom={reportRegisseur} />
           </div>
-          <hr className="border-stone-100" />
-          <PhotoGallery eventId={event.event_id} photoType="mise_en_place" label="📐 Mise en place — avant ouverture" responsableNom={reportRegisseur} showPdfSelector />
-          <hr className="border-stone-100" />
-          <PhotoGallery eventId={event.event_id} photoType="fb" label="🍽️ F&B — buffet, bar, service" responsableNom={reportRegisseur} showPdfSelector />
-          <hr className="border-stone-100" />
-          <PhotoGallery eventId={event.event_id} photoType="fin_evenement" label="🔚 Fin d'événement — rangement & état" responsableNom={reportRegisseur} showPdfSelector />
-          <p className="text-center text-xs text-stone-400">Sélection multiple · JPEG / PNG / HEIC · 20 Mo max · sans limite de nombre</p>
-          <hr className="border-stone-100" />
-          <PdfPhotoSummary eventId={event.event_id} />
         </div>
       </Card>
 
