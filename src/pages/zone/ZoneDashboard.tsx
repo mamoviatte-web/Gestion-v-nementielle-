@@ -18,6 +18,8 @@ import {
   Spinner,
 } from '@/components/ui';
 import { useToast } from '@/context/ToastContext';
+import { PhotoChecklist } from '@/components/debrief/PhotoChecklist';
+import { PhotoGallery } from '@/components/debrief/PhotoGallery';
 import {
   editInitialStock,
   getZoneState,
@@ -173,6 +175,9 @@ export default function ZoneDashboard() {
           showToast={showToast}
         />
         <StaffTeamSection token={token!} showToast={showToast} />
+        {state.event_type === 'séminaire' && state.event_id && (
+          <RegisseurPhotoSection eventId={state.event_id} regisseurNom={name || state.staff_name || 'Régisseur'} />
+        )}
         <DebriefSection
           token={token!}
           name={name}
@@ -213,6 +218,40 @@ function Section({ title, open, onToggle, children }: SectionProps) {
 }
 
 type ShowToast = (message: string, tone?: 'info' | 'success' | 'warning') => void;
+
+/* ------------------------------------------------------------------ */
+/* Rapport photo terrain (régisseur) — capture + checklist            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Section de capture photo terrain, réservée au régisseur (page zone séminaire).
+ * Il photographie lui-même chaque phase (mise en place / F&B / fin) et coche la
+ * checklist pour anticiper tous les rendus attendus. Les clichés alimentent
+ * directement le retour côté stade (StadeDebriefView) et l'export PDF séminaire
+ * (table debrief_photos, niveau événement). L'équipe stade choisit ensuite les
+ * photos retenues pour le PDF.
+ */
+function RegisseurPhotoSection({ eventId, regisseurNom }: { eventId: string; regisseurNom: string }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <Section title="📸 Rapport photo terrain" open={open} onToggle={() => setOpen((v) => !v)}>
+      <p className="text-sm text-pr-black-soft">
+        Photographiez chaque phase de l'événement. Ces photos remontent automatiquement à
+        l'équipe stade pour le rapport. Utilisez la checklist pour ne rien oublier.
+      </p>
+      <div className="rounded-xl bg-pr-cream/60 p-3">
+        <p className="mb-2 text-sm font-semibold text-pr-black">✅ Checklist des prises de vue</p>
+        <PhotoChecklist eventId={eventId} regisseurNom={regisseurNom} />
+      </div>
+      <PhotoGallery eventId={eventId} photoType="mise_en_place" label="📐 Mise en place — avant ouverture" responsableNom={regisseurNom} />
+      <PhotoGallery eventId={eventId} photoType="fb" label="🍽️ F&B — buffet, bar, service" responsableNom={regisseurNom} />
+      <PhotoGallery eventId={eventId} photoType="fin_evenement" label="🔚 Fin d'événement — rangement & état" responsableNom={regisseurNom} />
+      <p className="text-center text-xs text-pr-black-soft/60">
+        Sélection multiple · JPEG / PNG / HEIC · 20 Mo max · sans limite de nombre
+      </p>
+    </Section>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* 1. Feuille de route                                                 */

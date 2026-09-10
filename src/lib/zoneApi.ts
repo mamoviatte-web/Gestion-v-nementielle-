@@ -82,6 +82,9 @@ export interface ZoneStatus {
 
 export interface ZoneState {
   valid: boolean;
+  /** Identifiants de session (résolus depuis le jeton) — requis par la capture photo terrain. */
+  event_id?: string | null;
+  space_id?: string | null;
   /** Type d'événement — pilote le mode de saisie stock (séminaire = conso seule). */
   event_type?: string | null;
   /** Sources de stockage proposées (séminaire) : sur place + dépôts. */

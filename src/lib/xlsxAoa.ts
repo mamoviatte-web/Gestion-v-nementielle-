@@ -30,6 +30,9 @@ export interface AoaSheetOut {
   widths?: number[];
   /** Formats / alignements par colonne (index 0 = colonne A) — habillage. */
   columns?: (ColumnStyle | undefined)[];
+  /** Mise en page impression : ajuste la feuille à UNE page (largeur = 1 ;
+   *  hauteur = `fitToHeight`, défaut 1). Idéal pour un bilan « 1 seule page ». */
+  pageFit?: { landscape?: boolean; fitToHeight?: number };
 }
 
 const isFormula = (v: AoaCell): v is AoaFormula =>
