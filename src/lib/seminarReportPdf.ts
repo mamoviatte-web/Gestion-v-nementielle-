@@ -19,9 +19,9 @@ const DEBRIEF_PHOTO_SECTIONS: {
   cardColor: [number, number, number];
   cardLabel: string;
 }[] = [
-  { type: 'mise_en_place', title: '📐 MISE EN PLACE', header: [35, 55, 100], accent: [235, 240, 255], cardColor: [100, 130, 220], cardLabel: 'Mise en place' },
-  { type: 'fb', title: '🍽️ F&B — SERVICE', header: [100, 50, 20], accent: [255, 245, 235], cardColor: [200, 130, 60], cardLabel: 'F&B — Service' },
-  { type: 'fin_evenement', title: "🔚 FIN D'ÉVÉNEMENT", header: [30, 80, 45], accent: [235, 255, 240], cardColor: [80, 160, 100], cardLabel: "Fin d'événement" },
+  { type: 'mise_en_place', title: 'MISE EN PLACE', header: [35, 55, 100], accent: [235, 240, 255], cardColor: [100, 130, 220], cardLabel: 'Mise en place' },
+  { type: 'fb', title: 'F&B — SERVICE', header: [100, 50, 20], accent: [255, 245, 235], cardColor: [200, 130, 60], cardLabel: 'F&B — Service' },
+  { type: 'fin_evenement', title: "FIN D'ÉVÉNEMENT", header: [30, 80, 45], accent: [235, 255, 240], cardColor: [80, 160, 100], cardLabel: "Fin d'événement" },
 ];
 
 const W = 297;
@@ -181,10 +181,19 @@ async function addDebriefPhotoPages(doc: jsPDF, eventId: string, eventName: stri
   doc.setTextColor(100, 100, 120);
   doc.text('Provence Rugby · Stade Maurice-David', 105, 270, { align: 'center' });
 
-  // 3) Pages denses par section (3×4 = 12/page).
-  const COLS = 3, PER = 12, PW = 59, PH = 44, GX = 4, GY = 10, SX = 10, SY = 28;
+  // 3) Pages par section — mise en page adaptative : peu de photos → grandes
+  //    (2 colonnes, 6/page) ; beaucoup → grille dense (3 colonnes, 12/page).
   for (const { cfg, photos } of sections) {
     if (photos.length === 0) continue;
+    const twoCol = photos.length <= 6;
+    const COLS = twoCol ? 2 : 3;
+    const PER = twoCol ? 6 : 12;
+    const PW = twoCol ? 88 : 59;
+    const PH = twoCol ? 62 : 44;
+    const GX = 6;
+    const GY = twoCol ? 16 : 10;
+    const SX = twoCol ? 15 : 10;
+    const SY = 28;
     const pages = Math.ceil(photos.length / PER);
     const [hr, hg, hb] = cfg.header;
     const [ar, ag, ab] = cfg.accent;
@@ -227,7 +236,7 @@ async function addDebriefPhotoPages(doc: jsPDF, eventId: string, eventName: stri
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6.5);
         doc.setTextColor(80, 80, 80);
-        const meta = [ph.taken_at ? frTime(ph.taken_at) : '', ph.taken_by ? `📷 ${ph.taken_by}` : ''].filter(Boolean).join('  ');
+        const meta = [ph.taken_at ? frTime(ph.taken_at) : '', ph.taken_by ? `par ${ph.taken_by}` : ''].filter(Boolean).join('  ·  ');
         if (meta) doc.text(meta, x, y + PH + 4, { maxWidth: PW });
         if (ph.caption) {
           doc.setFontSize(6);
