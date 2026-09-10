@@ -195,8 +195,9 @@ export function SeminaireBilanTab({
     const blank = (n: number): AoaCell[] => Array<AoaCell>(n).fill('');
 
     // ── Feuille STOCKS : tableau piloté par formules + sous-totaux + synthèse ──
+    const partLabel = event.expected_attendees != null ? ` — ${event.expected_attendees} participants` : '';
     const stockAoa: AoaCell[][] = [
-      [`BILAN SÉMINAIRE — ${event.event_name} — ${formatDate(event.event_date)} — ${event.expected_attendees ?? '—'} participants`],
+      [`BILAN SÉMINAIRE — ${event.event_name} — ${formatDate(event.event_date)}${partLabel}`],
       [],
       ['Produit', 'Espace', 'Source', 'Initial', 'Réassort', 'Final', 'Consommé', 'PU HT (€)', 'Coût HT (€)', 'Responsable'],
     ];
