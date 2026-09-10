@@ -74,6 +74,17 @@ export async function downloadAoaWorkbook(sheets: AoaSheetOut[], filename: strin
       ncols: Math.max(s.widths?.length ?? 0, s.columns?.length ?? 0),
       columns: s.columns,
     });
+    if (s.pageFit) {
+      ws.pageSetup = {
+        ...ws.pageSetup,
+        orientation: s.pageFit.landscape ? 'landscape' : 'portrait',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: s.pageFit.fitToHeight ?? 1,
+        horizontalCentered: true,
+        margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
+      };
+    }
   }
   download(await wb.xlsx.writeBuffer(), filename);
 }

@@ -8,7 +8,8 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { downloadAoaWorkbook } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, type AoaCell } from '@/lib/xlsxAoa';
+import { EUR, INT } from '@/lib/excelTheme';
 import { BarChart3, Download, Image } from 'lucide-react';
 import { Alert, Badge, Button, EmptyState, Spinner } from '@/components/ui';
 import { useToast } from '@/context/ToastContext';
@@ -72,11 +73,6 @@ function toMinutes(hhmm: string): number {
 
 function hm(time: string | null | undefined): string {
   return time ? time.slice(0, 5) : '—';
-}
-
-/** Consommation d'une ligne (fournie par la vue : initial + réassort − final). */
-function computeConsumed(l: StockLineRow): number {
-  return l.consumed_qty ?? l.initial_qty + l.reassort_qty - (l.final_qty ?? 0);
 }
 
 /** Coût HT d'une ligne au prix EFFECTIF (figé prioritaire) — via la vue. */
@@ -178,29 +174,120 @@ export function SeminaireBilanTab({
   /* ------------------------------ Export ------------------------------ */
 
   async function handleExport(): Promise<void> {
-    const stockAoa: (string | number)[][] = [
-      [`BILAN STOCKS — ${event.event_name} — ${formatDate(event.event_date)}`],
-      [],
-      ['Produit', 'Espace', 'Source', 'Initial', 'Final', 'Consommé', 'Coût HT (€)', 'Responsable'],
-    ];
-    displayedLines.forEach((l) => {
-      const cost = computeLineCost(l);
-      stockAoa.push([
-        l.product_name ?? l.product_id,
-        nameOf(l.space_id),
-        l.source_name ?? '',
-        l.initial_qty,
-        l.final_qty ?? '',
-        computeConsumed(l),
-        cost !== null ? Number(cost.toFixed(2)) : '',
-        l.responsable_nom ?? '',
-      ]);
-    });
-    stockAoa.push([]);
-    stockAoa.push(['Coût total estimé', '', '', '', '', '', Number(totalCost.toFixed(2)), '']);
+    const part = event.expected_attendees || 1;
 
+    // Charge RH de l'événement (schedules + occasionnel + équipe régisseur zone).
+    let rhCost = 0;
+    try {
+      const { data: costs } = await supabase.rpc('get_event_costs', { p_event_id: event.event_id });
+      if (costs) rhCost = Number((costs as { rh_cost: number }).rh_cost) || 0;
+    } catch {
+      /* charge RH facultative — le bilan reste valable sans */
+    }
+
+    // Colonnes (1 = A) et lettre de colonne, pour des formules Excel VIVANTES.
+    const C = { PROD: 1, ESP: 2, SRC: 3, INI: 4, REA: 5, FIN: 6, CONS: 7, PU: 8, COUT: 9, RESP: 10 };
+    const L = (n: number): string => {
+      let s = '';
+      while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+      return s;
+    };
+    const blank = (n: number): AoaCell[] => Array<AoaCell>(n).fill('');
+
+    // ── Feuille STOCKS : tableau piloté par formules + sous-totaux + synthèse ──
+    const stockAoa: AoaCell[][] = [
+      [`BILAN SÉMINAIRE — ${event.event_name} — ${formatDate(event.event_date)} — ${event.expected_attendees ?? '—'} participants`],
+      [],
+      ['Produit', 'Espace', 'Source', 'Initial', 'Réassort', 'Final', 'Consommé', 'PU HT (€)', 'Coût HT (€)', 'Responsable'],
+    ];
+
+    // Regroupement par espace (sous-totaux) puis par produit.
+    const sorted = [...displayedLines].sort(
+      (a, b) => nameOf(a.space_id).localeCompare(nameOf(b.space_id), 'fr') || (a.product_name ?? '').localeCompare(b.product_name ?? '', 'fr'),
+    );
+    const byEspace = new Map<string, StockLineRow[]>();
+    for (const l of sorted) {
+      const k = nameOf(l.space_id);
+      if (!byEspace.has(k)) byEspace.set(k, []);
+      byEspace.get(k)!.push(l);
+    }
+
+    const subtotalRows: number[] = [];
+    for (const [espace, lines] of byEspace) {
+      let first = 0;
+      let last = 0;
+      for (const l of lines) {
+        const r = stockAoa.length + 1; // n° de ligne Excel (AOA 1:1)
+        if (!first) first = r;
+        last = r;
+        const pu = l.unit_price_ht;
+        // Consommé = Initial + Réassort − Final ; Coût = Consommé × PU (formules).
+        const consumedCell: AoaCell = { f: `=${L(C.INI)}${r}+${L(C.REA)}${r}-${L(C.FIN)}${r}` };
+        const coutCell: AoaCell = pu != null ? { f: `=${L(C.CONS)}${r}*${L(C.PU)}${r}` } : 'Prix manquant';
+        stockAoa.push([
+          l.product_name ?? l.product_id,
+          espace,
+          l.source_name ?? '',
+          l.initial_qty,
+          l.reassort_qty,
+          l.final_qty ?? 0,
+          consumedCell,
+          pu != null ? Number(pu.toFixed(2)) : '',
+          coutCell,
+          l.responsable_nom ?? '',
+        ]);
+      }
+      const sr = stockAoa.length + 1;
+      subtotalRows.push(sr);
+      const sub: AoaCell[] = blank(10);
+      sub[0] = `Sous-total ${espace}`;
+      sub[C.COUT - 1] = { f: `=SUM(${L(C.COUT)}${first}:${L(C.COUT)}${last})` };
+      stockAoa.push(sub);
+    }
+
+    // TOTAL F&B = somme des sous-totaux (formule).
+    stockAoa.push([]);
+    const totalRow = stockAoa.length + 1;
+    const totalCell: AoaCell = subtotalRows.length
+      ? { f: `=${subtotalRows.map((r) => `${L(C.COUT)}${r}`).join('+')}` }
+      : Number(totalCost.toFixed(2));
+    const totalLine: AoaCell[] = blank(10);
+    totalLine[0] = 'TOTAL F&B HT';
+    totalLine[C.COUT - 1] = totalCell;
+    stockAoa.push(totalLine);
+
+    // Synthèse : participants, coût/participant, charge RH, coût total (formules).
+    stockAoa.push([]);
+    const partLine: AoaCell[] = blank(10);
+    partLine[0] = 'Participants';
+    partLine[C.CONS - 1] = part; // colonne « Consommé » = format entier
+    stockAoa.push(partLine);
+
+    const perPartLine: AoaCell[] = blank(10);
+    perPartLine[0] = 'Coût F&B / participant';
+    perPartLine[C.COUT - 1] = { f: `=${L(C.COUT)}${totalRow}/${part}` };
+    stockAoa.push(perPartLine);
+
+    const rhRow = stockAoa.length + 1;
+    const rhLine: AoaCell[] = blank(10);
+    rhLine[0] = 'Charges RH (équipe + prestataires externes)';
+    rhLine[C.COUT - 1] = Number(rhCost.toFixed(2));
+    stockAoa.push(rhLine);
+
+    const grandLine: AoaCell[] = blank(10);
+    grandLine[0] = 'TOTAL général (F&B + RH)';
+    grandLine[C.COUT - 1] = { f: `=${L(C.COUT)}${totalRow}+${L(C.COUT)}${rhRow}` };
+    stockAoa.push(grandLine);
+
+    const stockCols = [
+      { align: 'left' as const }, { align: 'left' as const }, { align: 'center' as const },
+      { numFmt: INT }, { numFmt: INT }, { numFmt: INT }, { numFmt: INT },
+      { numFmt: EUR }, { numFmt: EUR }, { align: 'left' as const },
+    ];
+
+    // ── Feuille HORAIRES ──
     const planned = hm(event.start_time);
-    const scheduleAoa: (string | number)[][] = [
+    const scheduleAoa: AoaCell[][] = [
       [`HORAIRES TERRAIN — ${event.event_name}`],
       [],
       ['Espace', 'Responsable', 'Prévu', 'Arrivée réelle', 'Départ réel', 'Écart'],
@@ -209,9 +296,7 @@ export function SeminaireBilanTab({
       const t = s as EventSpaceWithSpace & EventSpaceTiming;
       const arrival = t.space_actual_arrival ?? null;
       const gap =
-        event.start_time && arrival
-          ? toMinutes(arrival.slice(0, 5)) - toMinutes(planned)
-          : null;
+        event.start_time && arrival ? toMinutes(arrival.slice(0, 5)) - toMinutes(planned) : null;
       scheduleAoa.push([
         nameOf(s.space_id),
         t.space_responsible_name ?? '',
@@ -222,7 +307,8 @@ export function SeminaireBilanTab({
       ]);
     });
 
-    const debriefAoa: (string | number)[][] = [
+    // ── Feuille DÉBRIEFS ──
+    const debriefAoa: AoaCell[][] = [
       [`DÉBRIEFS — ${event.event_name}`],
       [],
       ['Espace', 'Responsable', 'Efficacité', 'Stocks suffisants', 'Suggestions', 'Photos'],
@@ -241,9 +327,27 @@ export function SeminaireBilanTab({
 
     await downloadAoaWorkbook(
       [
-        { name: 'Stocks', aoa: stockAoa, widths: [26, 18, 12, 9, 9, 11, 13, 18] },
-        { name: 'Horaires', aoa: scheduleAoa, widths: [18, 20, 10, 14, 14, 10] },
-        { name: 'Débriefs', aoa: debriefAoa, widths: [18, 20, 12, 16, 40, 8] },
+        {
+          name: 'Bilan',
+          aoa: stockAoa,
+          widths: [26, 16, 13, 8, 9, 8, 10, 11, 13, 18],
+          columns: stockCols,
+          pageFit: { landscape: true },
+        },
+        {
+          name: 'Horaires',
+          aoa: scheduleAoa,
+          widths: [18, 20, 10, 14, 14, 10],
+          columns: [{ align: 'left' }, { align: 'left' }, { align: 'center' }, { align: 'center' }, { align: 'center' }, { align: 'center' }],
+          pageFit: { landscape: true },
+        },
+        {
+          name: 'Débriefs',
+          aoa: debriefAoa,
+          widths: [18, 20, 12, 16, 44, 8],
+          columns: [{ align: 'left' }, { align: 'left' }, { align: 'center' }, { align: 'center' }, { align: 'left' }, { align: 'center' }],
+          pageFit: { landscape: true },
+        },
       ],
       `Bilan_${event.event_name}_${new Date().toISOString().slice(0, 10)}.xlsx`,
     );
