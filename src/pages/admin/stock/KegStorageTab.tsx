@@ -20,7 +20,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -42,6 +42,35 @@ function frDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
 }
 
+/* ─── Réflexe post-match : alerte si le comptage fûts est plus vieux que le dernier match clôturé ── */
+
+function KegCountFreshnessBanner() {
+  const { data } = useQuery({
+    queryKey: ['kegCountFreshness'],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const [{ data: cnt }, { data: ev }] = await Promise.all([
+        supabase.from('keg_inventory_counts').select('counted_at').order('counted_at', { ascending: false }).limit(1),
+        supabase.from('events').select('event_name, event_date').eq('event_type', 'match').eq('status', 'clôturé').order('event_date', { ascending: false }).limit(1),
+      ]);
+      return {
+        lastCount: (cnt?.[0]?.counted_at as string | undefined) ?? null,
+        lastMatch: (ev?.[0] as { event_name: string; event_date: string } | undefined) ?? null,
+      };
+    },
+  });
+  if (!data?.lastMatch) return null;
+  const stale = !data.lastCount || new Date(data.lastCount) < new Date(data.lastMatch.event_date);
+  if (!stale) return null;
+  return (
+    <Alert variant="warning" title="Comptage fûts à refaire (réflexe post-match)">
+      Le dernier match clôturé (« {data.lastMatch.event_name} », {frDate(data.lastMatch.event_date)}) est postérieur au dernier
+      comptage {data.lastCount ? `(${frDate(data.lastCount)})` : '(jamais fait)'}. Faites le comptage physique du stockage
+      (bouton « Inventaire ») pour ré-ancrer les fûts sur le réel — sinon les chiffres dérivent.
+    </Alert>
+  );
+}
+
 /* ─────────────────────────── Onglet ─────────────────────────── */
 
 export default function KegStorageTab() {
@@ -56,6 +85,7 @@ export default function KegStorageTab() {
 
   return (
     <div className="space-y-5">
+      <KegCountFreshnessBanner />
       <div className="flex gap-1 overflow-x-auto border-b border-pr-stone">
         {views.map((v) => {
           const active = view === v.key;
@@ -739,6 +769,7 @@ function KegInventoryModal({ kegs, onClose }: { kegs: KegSummaryRow[]; onClose: 
   const [counts, setCounts] = useState<Record<string, KegCount>>({});
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState('');
+  const [savingAll, setSavingAll] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadCounts = useCallback(async () => {
@@ -769,6 +800,26 @@ function KegInventoryModal({ kegs, onClose }: { kegs: KegSummaryRow[]; onClose: 
     if (error || res?.success === false) { showToast(`Échec : ${error?.message ?? res?.error ?? 'erreur'}`, 'warning'); return; }
     showToast(`${k.product_name} : comptage ${n} enregistré — le stock s'aligne.`, 'success');
     setDraft((d) => ({ ...d, [k.product_id]: '' }));
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['kegSummary'] }),
+      queryClient.invalidateQueries({ queryKey: ['depotsSummary'] }),
+      loadCounts(),
+    ]);
+  }
+
+  // Protocole post-match : enregistrer TOUT le comptage en un appel (record_keg_inventory).
+  async function saveAll() {
+    const valid = Object.entries(draft)
+      .filter(([, raw]) => raw != null && raw.trim() !== '' && Number.isInteger(Number(raw)) && Number(raw) >= 0)
+      .map(([product_id, raw]) => ({ product_id, full: Number(raw) }));
+    if (valid.length === 0) { showToast('Aucun comptage saisi.', 'warning'); return; }
+    setSavingAll(true);
+    const { data, error } = await supabase.rpc('record_keg_inventory', { p_counts: valid, p_by: by, p_note: 'Comptage stockage (post-match)' });
+    setSavingAll(false);
+    const res = data as { success?: boolean; error?: string; comptes_enregistres?: number } | null;
+    if (error || res?.success === false) { showToast(`Échec : ${error?.message ?? res?.error ?? 'erreur'}`, 'warning'); return; }
+    showToast(`${res?.comptes_enregistres ?? valid.length} fût(s) comptés — le stockage s'aligne sur le réel.`, 'success');
+    setDraft({});
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['kegSummary'] }),
       queryClient.invalidateQueries({ queryKey: ['depotsSummary'] }),
@@ -832,8 +883,16 @@ function KegInventoryModal({ kegs, onClose }: { kegs: KegSummaryRow[]; onClose: 
           </table>
         </div>
 
-        <div className="mt-4 flex justify-end">
-          <Button onClick={onClose}>Fermer</Button>
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <p className="text-xs text-pr-black-soft/50">
+            💡 Réflexe post-match : comptez tout le stockage, puis « Tout enregistrer » — le stock s'aligne d'un coup.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onClose}>Fermer</Button>
+            <Button loading={savingAll} onClick={() => void saveAll()}>
+              <CheckCircle2 className="h-4 w-4" /> Tout enregistrer
+            </Button>
+          </div>
         </div>
       </div>
     </div>
