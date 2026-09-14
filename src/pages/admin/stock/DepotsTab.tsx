@@ -560,7 +560,16 @@ function DepotHealthCard({
         )}
       </div>
       <div className="mt-0.5 text-xs text-pr-black-soft/55">
-        {qty.toLocaleString('fr-FR')} u{isKeg ? '' : ' · valorisation HT'}
+        {isKeg ? (
+          <>
+            {qty.toLocaleString('fr-FR')} pleins en stockage
+            {(summary?.en_espace ?? 0) > 0 && (
+              <span className="text-pr-black-soft/45"> · {summary!.en_espace!.toLocaleString('fr-FR')} en espace</span>
+            )}
+          </>
+        ) : (
+          `${qty.toLocaleString('fr-FR')} u · valorisation HT`
+        )}
       </div>
 
       {/* Jauge de remplissage : assortiment en stock */}

@@ -293,6 +293,8 @@ export interface DepotSummary {
   product_lines: number; // références avec du stock (qty > 0)
   total_refs: number; // références de l'assortiment (toutes lignes de solde)
   last_delivery_date: string | null;
+  /** Fûts conservés dans les espaces (retains) — visible uniquement pour le dépôt fûts. */
+  en_espace?: number;
 }
 
 /** Synthèse légère des 2 dépôts pour le tableau de bord. */
@@ -311,13 +313,30 @@ export function useDepotsSummary() {
       if (depots.length === 0) return [];
       const ids = depots.map((d) => d.id);
 
-      const [{ data: balances }, { data: deliveries }] = await Promise.all([
+      const [{ data: balances }, { data: deliveries }, { data: kegRows }] = await Promise.all([
         supabase
           .from('stock_balances')
           .select('location_id, current_quantity, unit_value_ht')
           .in('location_id', ids),
         supabase.from('supplier_deliveries').select('location_id, delivery_date').in('location_id', ids),
+        // Dépôt fûts : source de vérité = keg_summary (cycle de vie fûts), pas stock_balances.
+        supabase.from('keg_summary').select('pleins, en_espace, unit_price_ht'),
       ]);
+
+      // Agrégat fûts depuis keg_summary (pleins en stockage + en_espace conservés).
+      const keg = (kegRows ?? []) as { pleins: number | null; en_espace: number | null; unit_price_ht: number | null }[];
+      const kegAgg = keg.reduce(
+        (a, r) => {
+          const p = Number(r.pleins ?? 0);
+          a.qty += p;
+          a.value += p * Number(r.unit_price_ht ?? 0);
+          a.refs += 1;
+          if (p > 0) a.lines += 1;
+          a.enEspace += Number(r.en_espace ?? 0);
+          return a;
+        },
+        { qty: 0, value: 0, lines: 0, refs: 0, enEspace: 0 },
+      );
 
       const byDepot = new Map<string, { qty: number; value: number; lines: number; refs: number }>();
       for (const b of (balances ?? []) as {
@@ -347,14 +366,18 @@ export function useDepotsSummary() {
       ];
       return ordered.map((d) => {
         const agg = byDepot.get(d.id) ?? { qty: 0, value: 0, lines: 0, refs: 0 };
+        const isKeg = /f[uû]ts/i.test(d.name);
+        // Dépôt fûts : on lit keg_summary (compte réel des pleins) au lieu de
+        // stock_balances (registre parallèle qui dérive) + on expose les en_espace.
         return {
           id: d.id,
           name: d.name,
-          total_qty: agg.qty,
-          total_value_ht: agg.value,
-          product_lines: agg.lines,
-          total_refs: agg.refs,
+          total_qty: isKeg ? kegAgg.qty : agg.qty,
+          total_value_ht: isKeg ? kegAgg.value : agg.value,
+          product_lines: isKeg ? kegAgg.lines : agg.lines,
+          total_refs: isKeg ? kegAgg.refs : agg.refs,
           last_delivery_date: lastDelivery.get(d.id) ?? null,
+          en_espace: isKeg ? kegAgg.enEspace : undefined,
         };
       });
     },
