@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, TrendingUp, Users, Clock, Wallet, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { downloadAoaWorkbook, type AoaSheetOut } from '@/lib/xlsxAoa';
-import { downloadPayrollWorkbook, type PayrollRow } from '@/lib/payrollExport';
+import { downloadPayrollWorkbook, type PayrollRow, type PayrollDetailRow } from '@/lib/payrollExport';
 
 interface MonthlyRow {
   staff_name: string;
@@ -144,7 +144,26 @@ export default function RhAnalytiquePage() {
 
   async function exportPaie() {
     setExporting(true);
-    try { await downloadPayrollWorkbook(payMonth, payRows); }
+    try {
+      // Détail par événement (justification des charges) — même mois, réservé RG-003.
+      const { data: det } = await supabase
+        .from('rh_monthly_event_detail')
+        .select('staff_name, mois, categorie, event_name, event_date, nature, espace, payment_type, heures, cout_ht')
+        .eq('mois', payMonth)
+        .order('staff_name').order('event_date');
+      const detailRows: PayrollDetailRow[] = (det ?? []).map((r) => ({
+        staff_name: String((r as PayrollDetailRow).staff_name ?? ''),
+        categorie: String((r as PayrollDetailRow).categorie ?? 'Autre'),
+        event_name: String((r as PayrollDetailRow).event_name ?? ''),
+        event_date: String((r as PayrollDetailRow).event_date ?? ''),
+        nature: String((r as PayrollDetailRow).nature ?? ''),
+        espace: String((r as PayrollDetailRow).espace ?? ''),
+        payment_type: String((r as PayrollDetailRow).payment_type ?? 'non défini'),
+        heures: num((r as PayrollDetailRow).heures),
+        cout_ht: num((r as PayrollDetailRow).cout_ht),
+      }));
+      await downloadPayrollWorkbook(payMonth, payRows, detailRows);
+    }
     finally { setExporting(false); }
   }
 
