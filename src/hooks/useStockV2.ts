@@ -427,21 +427,18 @@ export function useSaveInventory() {
       const { error } = await supabase.from('inventory_counts').insert(rows);
       if (error) throw error;
 
-      // Aligner les soldes physiques sur le réel compté.
-      for (const l of vars.lines) {
-        await supabase
-          .from('stock_balances')
-          .upsert(
-            {
-              product_id: l.productId,
-              location_id: vars.locationId,
-              current_quantity: l.realQty,
-              last_movement_at: new Date().toISOString(),
-              updated_by: vars.responsibleName,
-            },
-            { onConflict: 'product_id,location_id' },
-          );
-      }
+      // Ré-ancrer le SOCLE DE PRÉCISION : un comptage physique absolu pose
+      // l'ancre (stock_inventory_counts) ET aligne le compteur (stock_balances).
+      // → le solde dérivé (ancre + Σ flux) repart juste pour cet emplacement.
+      // (Remplace l'ancien upsert manuel ; apply_inventory_count aligne aussi le
+      //  compteur, l'ensemble est idempotent.)
+      const { error: anchorError } = await supabase.rpc('record_stock_inventory_batch', {
+        p_location: vars.locationId,
+        p_counts: vars.lines.map((l) => ({ product_id: l.productId, qty: l.realQty })),
+        p_by: vars.responsibleName,
+        p_note: 'Inventaire physique (écran comptage)',
+      });
+      if (anchorError) throw anchorError;
       return sessionId;
     },
     onSuccess: () => {
@@ -454,6 +451,8 @@ export function useSaveInventory() {
       void queryClient.invalidateQueries({ queryKey: ['stockAlerts'] });
       void queryClient.invalidateQueries({ queryKey: ['depotsSummary'] });
       void queryClient.invalidateQueries({ queryKey: ['criticalStatus'] });
+      // Socle de précision : l'ancre a bougé → rafraîchir les audits.
+      void queryClient.invalidateQueries({ queryKey: ['dataHealthLedger'] });
     },
   });
   return {

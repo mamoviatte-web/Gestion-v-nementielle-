@@ -98,8 +98,19 @@ export default function StockInventory() {
   const [responsible, setResponsible] = useState(user?.name ?? '');
   const [lines, setLines] = useState<CountLine[]>([]);
 
+  // Dépôts d'abord, puis espaces ; libellé préfixé du type pour s'y retrouver.
   const locationOptions = useMemo(
-    () => (locations ?? []).map((l) => ({ value: l.id, label: l.name })),
+    () =>
+      [...(locations ?? [])]
+        .sort((a, b) => {
+          const rank = (t: string) => (t === 'reserve_centrale' ? 0 : 1);
+          const r = rank(a.location_type) - rank(b.location_type);
+          return r !== 0 ? r : a.name.localeCompare(b.name, 'fr');
+        })
+        .map((l) => ({
+          value: l.id,
+          label: `${l.location_type === 'reserve_centrale' ? '🏭 Dépôt' : '📍 Espace'} · ${l.name}`,
+        })),
     [locations],
   );
 
@@ -321,9 +332,11 @@ export default function StockInventory() {
         <h2 className="font-display text-xl text-pr-black">
           Démarrer un inventaire
         </h2>
-        <Alert variant="info" title="Comptage physique">
-          Sélectionnez l'emplacement à inventorier. Les quantités théoriques
-          seront pré-remplies depuis le stock courant.
+        <Alert variant="info" title="Comptage physique — ré-ancrage">
+          Sélectionnez l'emplacement (dépôt ou espace) à inventorier. Les
+          quantités théoriques sont pré-remplies depuis le stock courant. À la
+          validation, le comptage <b>ré-ancre le solde de précision</b> : le
+          solde dérivé (ancre + Σ flux) repart juste pour cet emplacement.
         </Alert>
 
         <div className="max-w-sm">
