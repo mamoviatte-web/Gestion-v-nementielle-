@@ -130,6 +130,35 @@ function download(buf: ExcelJS.Buffer, name: string): void {
   URL.revokeObjectURL(u);
 }
 
+/**
+ * Mise en page d'impression HOMOGÈNE pour toutes les feuilles du bilan, alignée
+ * sur l'export paie RH → rendu clair et identique écran / papier / PDF :
+ *  • paysage, ajusté à 1 page en largeur (aucune colonne ne déborde),
+ *  • centré horizontalement, marges resserrées,
+ *  • pied de page « page X / N »,
+ *  • la feuille Produits (jusqu'à ~57 lignes) répète son en-tête (ligne 1) en
+ *    haut de chaque page imprimée.
+ * fitToHeight:0 = la liste coule sur autant de pages que nécessaire sans jamais
+ * se couper en largeur.
+ */
+function appliquerImpression(wb: WB): void {
+  wb.eachSheet((ws) => {
+    const lastCol = colLetter(Math.max(1, ws.columnCount));
+    ws.pageSetup = {
+      ...ws.pageSetup,
+      orientation: 'landscape',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      horizontalCentered: true,
+      margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.55, header: 0.2, footer: 0.3 },
+      printArea: `A1:${lastCol}${Math.max(1, ws.rowCount)}`,
+    };
+    if (ws.name === 'Produits') ws.pageSetup.printTitlesRow = '1:1';
+    ws.headerFooter = { oddFooter: '&C&P / &N', evenFooter: '&C&P / &N' };
+  });
+}
+
 function band(ws: WS, title: string, sub: string, ncols: number): void {
   ws.mergeCells(1, 1, 1, ncols);
   const t = ws.getCell(1, 1);
@@ -631,6 +660,7 @@ export async function genererRapportMatch(eventId: string): Promise<void> {
     ],
   ]);
 
+  appliquerImpression(wb);
   download(await wb.xlsx.writeBuffer(), `Rapport_Match_${rep.match.name}.xlsx`);
 }
 
@@ -728,5 +758,6 @@ export async function genererRapportSeminaire(eventId: string): Promise<void> {
     ],
   ]);
 
+  appliquerImpression(wb);
   download(await wb.xlsx.writeBuffer(), `Rapport_Seminaire_${rep.seminaire.name}.xlsx`);
 }
