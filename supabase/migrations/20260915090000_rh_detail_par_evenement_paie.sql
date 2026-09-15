@@ -86,13 +86,23 @@ canon as (
   from lignes
   group by rh_person_key(staff_name)
 )
+-- Libellé de catégorie — couvre TOUS les event_type autorisés par le schéma
+-- (match, séminaire, cocktail, réception_vip, événement_partenaire, réunion,
+-- autre). Le besoin OPÉRATIONNEL (montage/livraison) prime sur le type d'évt.
+-- Ainsi un futur cocktail/réception ne tombe plus silencieusement dans « Autre ».
 select
   cn.display_name                                            as staff_name,
   to_char(coalesce(e.event_date, current_date)::timestamptz, 'YYYY-MM') as mois,
   case
-    when l.operationnel                     then 'Opérationnel'
-    when e.event_type = 'match'             then 'Match'
-    when e.event_type = 'séminaire'         then 'Séminaire'
+    when l.operationnel                          then 'Opérationnel'
+    when e.event_type = 'match'                  then 'Match'
+    when e.event_type = 'séminaire'              then 'Séminaire'
+    when e.event_type = 'cocktail'               then 'Cocktail'
+    when e.event_type = 'réception_vip'          then 'Réception VIP'
+    when e.event_type = 'événement_partenaire'   then 'Événement partenaire'
+    when e.event_type = 'réunion'                then 'Réunion'
+    when e.event_type = 'autre'                  then 'Autre'
+    when e.event_type is not null                then initcap(e.event_type)
     else 'Autre'
   end                                                        as categorie,
   l.event_id,
@@ -109,9 +119,15 @@ from lignes l
 group by cn.display_name,
   to_char(coalesce(e.event_date, current_date)::timestamptz, 'YYYY-MM'),
   (case
-    when l.operationnel                     then 'Opérationnel'
-    when e.event_type = 'match'             then 'Match'
-    when e.event_type = 'séminaire'         then 'Séminaire'
+    when l.operationnel                          then 'Opérationnel'
+    when e.event_type = 'match'                  then 'Match'
+    when e.event_type = 'séminaire'              then 'Séminaire'
+    when e.event_type = 'cocktail'               then 'Cocktail'
+    when e.event_type = 'réception_vip'          then 'Réception VIP'
+    when e.event_type = 'événement_partenaire'   then 'Événement partenaire'
+    when e.event_type = 'réunion'                then 'Réunion'
+    when e.event_type = 'autre'                  then 'Autre'
+    when e.event_type is not null                then initcap(e.event_type)
     else 'Autre'
   end),
   l.event_id, e.event_name, e.event_date, l.nature, l.espace

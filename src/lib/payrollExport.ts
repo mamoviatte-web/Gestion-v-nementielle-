@@ -44,14 +44,23 @@ const GREEN = 'FF1E7A34';
 const GREY = 'FF6B7280';
 const LIGHT = 'FFF3F4F6';
 
-// Couleurs par catégorie de charge (onglet détail)
+// Couleurs par catégorie de charge (onglet détail). Couvre TOUS les event_type
+// du schéma pour qu'aucune catégorie future ne s'affiche sans couleur dédiée.
 const CAT_COLORS: Record<string, string> = {
-  Match: 'FF1D4ED8',        // bleu
-  Séminaire: 'FF7C3AED',    // violet
-  Opérationnel: 'FF9A6700',  // ambre
+  Match: 'FF1D4ED8',                    // bleu
+  Séminaire: 'FF7C3AED',                // violet
+  Cocktail: 'FF0F766E',                 // teal
+  'Réception VIP': 'FFBE185D',          // magenta
+  'Événement partenaire': 'FF0369A1',   // sky
+  Réunion: 'FF52525B',                  // zinc
+  Opérationnel: 'FF9A6700',             // ambre
   Autre: GREY,
 };
 const catColor = (c: string): string => CAT_COLORS[c] ?? GREY;
+
+// Ordre d'affichage des sous-totaux par catégorie (le reste passe après, alpha).
+const CAT_ORDER = ['Match', 'Séminaire', 'Cocktail', 'Réception VIP',
+  'Événement partenaire', 'Réunion', 'Opérationnel', 'Autre'];
 
 const EUR_FMT = '#,##0 €';
 const H_FMT = '0.0';
@@ -358,23 +367,30 @@ function buildDetailSheet(
 
   // ── Sous-totaux par CATÉGORIE (SUMIF sur la colonne Type = C, uniquement
   //    renseignée sur les lignes de détail → pas de double compte).
-  const cats: Array<{ label: string; key: string }> = [
-    { label: 'Total MATCH', key: 'Match' },
-    { label: 'Total SÉMINAIRE', key: 'Séminaire' },
-    { label: 'Total OPÉRATIONNEL (montage, livraison)', key: 'Opérationnel' },
-  ];
-  cats.forEach((cat, i) => {
+  //    Dynamique : une ligne par catégorie RÉELLEMENT présente ce mois-ci, dans
+  //    l'ordre métier (Match, Séminaire, …, Opérationnel), le reste alphabétique.
+  //    → une nouvelle catégorie (cocktail, réception…) obtient son sous-total
+  //      automatiquement, sans retoucher ce code.
+  const present = Array.from(new Set(detail.map((d) => d.categorie)));
+  present.sort((a, b) => {
+    const ia = CAT_ORDER.indexOf(a); const ib = CAT_ORDER.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+  });
+  present.forEach((cat, i) => {
     const rowN = totalRow + 2 + i;
     const cr = ws.getRow(rowN);
-    cr.getCell(1).value = cat.label;
-    cr.getCell(1).font = arial({ bold: true, color: { argb: catColor(cat.key) } });
-    cr.getCell(6).value = { formula: `SUMIF($C:$C,"${cat.key}",$F:$F)` };
+    const suffix = cat === 'Opérationnel' ? ' (montage, livraison)' : '';
+    cr.getCell(1).value = `Total ${cat.toUpperCase()}${suffix}`;
+    cr.getCell(1).font = arial({ bold: true, color: { argb: catColor(cat) } });
+    // Échappe les guillemets pour rester robuste dans la formule SUMIF.
+    const key = cat.replace(/"/g, '""');
+    cr.getCell(6).value = { formula: `SUMIF($C:$C,"${key}",$F:$F)` };
     cr.getCell(6).numFmt = H_FMT;
-    cr.getCell(6).font = arial({ bold: true, color: { argb: catColor(cat.key) } });
+    cr.getCell(6).font = arial({ bold: true, color: { argb: catColor(cat) } });
     cr.getCell(6).alignment = { horizontal: 'right' };
-    cr.getCell(7).value = { formula: `SUMIF($C:$C,"${cat.key}",$G:$G)` };
+    cr.getCell(7).value = { formula: `SUMIF($C:$C,"${key}",$G:$G)` };
     cr.getCell(7).numFmt = EUR_FMT;
-    cr.getCell(7).font = arial({ bold: true, color: { argb: catColor(cat.key) } });
+    cr.getCell(7).font = arial({ bold: true, color: { argb: catColor(cat) } });
     cr.getCell(7).alignment = { horizontal: 'right' };
   });
 }
