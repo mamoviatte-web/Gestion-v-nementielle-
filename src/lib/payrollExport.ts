@@ -72,6 +72,30 @@ function nameColor(type: string): string {
   return GREY; // non défini / mixte
 }
 
+/**
+ * Mise en page d'impression commune aux deux feuilles → rendu clair et
+ * IDENTIQUE à l'écran comme au papier/PDF :
+ *  • paysage, ajusté à 1 page en largeur (aucune colonne ne déborde),
+ *  • centré horizontalement, marges resserrées,
+ *  • bandeaux + en-tête (lignes 1→5) répétés en haut de CHAQUE page imprimée,
+ *  • pied de page « page X / N ».
+ * fitToHeight:0 = on garde toutes les personnes, la liste coule sur autant de
+ * pages que nécessaire, mais toujours nette et cadrée.
+ */
+function applyPrintLayout(ws: ExcelJS.Worksheet, lastCol: string, lastRow: number): void {
+  ws.pageSetup = {
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    horizontalCentered: true,
+    margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.55, header: 0.2, footer: 0.3 },
+    printTitlesRow: '1:5',
+    printArea: `A1:${lastCol}${lastRow}`,
+  };
+  ws.headerFooter = { oddFooter: '&C&P / &N', evenFooter: '&C&P / &N' };
+}
+
 function download(buf: ExcelJS.Buffer, name: string): void {
   const b = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const u = URL.createObjectURL(b);
@@ -211,6 +235,9 @@ export async function downloadPayrollWorkbook(
   co.getCell(8).value = { formula: `SUMIF($B:$B,"contrat",$H:$H)` };
   co.getCell(8).numFmt = EUR_FMT;
   co.getCell(8).font = arial({ bold: true, color: { argb: GREEN } });
+
+  // Impression : paysage, 1 page de large, en-tête répété (feuille récap = 8 col.)
+  applyPrintLayout(ws, 'H', contratRow);
 
   // ═══════════════════════════════════════════════════════════════════════
   // FEUILLE 2 — DÉTAIL PAR ÉVÉNEMENT (justification des charges de paie)
@@ -393,4 +420,8 @@ function buildDetailSheet(
     cr.getCell(7).font = arial({ bold: true, color: { argb: catColor(cat) } });
     cr.getCell(7).alignment = { horizontal: 'right' };
   });
+
+  // Impression : paysage, 1 page de large, en-tête répété (feuille détail = 7 col.)
+  const lastRow = totalRow + 1 + present.length;
+  applyPrintLayout(ws, 'G', lastRow);
 }
