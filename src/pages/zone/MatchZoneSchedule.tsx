@@ -5,7 +5,7 @@
  * Route : /zone/match/:sessionToken/schedules
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useMatchSession } from '@/hooks/useMatchSession';
@@ -30,8 +30,11 @@ export default function MatchZoneSchedule() {
   const { token, session, loading } = useMatchSession();
   const [rows, setRows] = useState<Sched[]>([]);
   const [ready, setReady] = useState<boolean | null>(null);
-  const [savingId, setSavingId] = useState<string | null>(null);
+  const [status, setStatus] = useState<Record<string, 'saving' | 'saved' | 'error'>>({});
   const [error, setError] = useState('');
+  const rowsRef = useRef(rows); rowsRef.current = rows;
+  const tokenRef = useRef(token); tokenRef.current = token;
+  const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     if (!token || !session?.success) return;
@@ -43,26 +46,44 @@ export default function MatchZoneSchedule() {
     });
   }, [token, session]);
 
+  // Flush des timers à la sortie de page (ne rien perdre).
+  useEffect(() => () => { for (const t of timers.current.values()) clearTimeout(t); }, []);
+
   if (loading) return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Chargement…</div>;
   if (!session?.success) return <div className="p-8 text-center text-slate-500">Session expirée.</div>;
 
-  const patch = (id: string, upd: Partial<Sched>) =>
-    setRows((prev) => prev.map((s) => (s.schedule_id === id ? { ...s, ...upd } : s)));
-
-  async function save(s: Sched) {
-    setError('');
-    setSavingId(s.schedule_id);
+  // Enregistrement d'une ligne (auto, débouncé).
+  async function persistRow(id: string) {
+    const s = rowsRef.current.find((x) => x.schedule_id === id);
+    if (!s) return;
+    setStatus((p) => ({ ...p, [id]: 'saving' }));
     const { data, error: err } = await supabase.rpc('save_zone_schedule', {
-      p_token: token,
+      p_token: tokenRef.current,
       p_schedule_id: s.schedule_id,
       p_actual_departure: s.actual_departure || null,
       p_staff: s.confirmed_by_staff,
       p_manager: s.confirmed_by_manager,
     });
-    setSavingId(null);
     const r = data as { success?: boolean; error?: string } | null;
-    if (err || !r?.success) setError(r?.error ?? 'Enregistrement indisponible (applique zone_rpcs.sql).');
+    if (err || !r?.success) {
+      setStatus((p) => ({ ...p, [id]: 'error' }));
+      setError(r?.error ?? 'Enregistrement indisponible.');
+    } else {
+      setStatus((p) => ({ ...p, [id]: 'saved' }));
+    }
   }
+  function scheduleRow(id: string) {
+    setError('');
+    setStatus((p) => ({ ...p, [id]: 'saving' }));
+    const t = timers.current.get(id);
+    if (t) clearTimeout(t);
+    timers.current.set(id, setTimeout(() => { void persistRow(id); }, 600));
+  }
+
+  const patch = (id: string, upd: Partial<Sched>) => {
+    setRows((prev) => prev.map((s) => (s.schedule_id === id ? { ...s, ...upd } : s)));
+    scheduleRow(id);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 pb-12">
@@ -130,13 +151,17 @@ export default function MatchZoneSchedule() {
               })}
             </div>
 
-            <button
-              onClick={() => void save(s)}
-              disabled={savingId === s.schedule_id}
-              className="min-h-[48px] w-full rounded-lg bg-slate-900 py-3 text-sm font-bold text-white disabled:opacity-40"
-            >
-              {savingId === s.schedule_id ? 'Enregistrement…' : 'Enregistrer'}
-            </button>
+            <p className="text-center text-xs font-medium">
+              {status[s.schedule_id] === 'saving' ? (
+                <span className="text-slate-500">💾 Enregistrement…</span>
+              ) : status[s.schedule_id] === 'error' ? (
+                <span className="text-red-600">⚠️ Échec — réessayez</span>
+              ) : status[s.schedule_id] === 'saved' ? (
+                <span className="text-green-700">✓ Enregistré automatiquement</span>
+              ) : (
+                <span className="text-slate-400">Enregistrement automatique à chaque saisie</span>
+              )}
+            </p>
           </div>
         ))}
       </div>

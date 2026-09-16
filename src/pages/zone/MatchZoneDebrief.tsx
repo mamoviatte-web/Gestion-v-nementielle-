@@ -6,6 +6,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
+import { usePersistentDraft } from '@/hooks/usePersistentDraft';
 import { useMatchSession } from '@/hooks/useMatchSession';
 import { MatchZoneHeader } from '@/components/zone/MatchZoneHeader';
 import { PhotoGallery } from '@/components/debrief/PhotoGallery';
@@ -110,13 +111,20 @@ function Area({ label, value, onChange, placeholder }: { label: string; value: s
 
 export default function MatchZoneDebrief() {
   const { token, session, loading } = useMatchSession();
-  const [nom, setNom] = useState('');
-  const [form, setForm] = useState(EMPTY);
+  // Brouillon persistant (localStorage) : le débrief ne disparaît plus au
+  // rafraîchissement / changement de page ; effacé à l'envoi.
+  const [draft, setDraft, clearDraft] = usePersistentDraft<{ nom: string; form: typeof EMPTY }>(
+    `zonedebrief:${token}`, { nom: '', form: EMPTY },
+  );
+  const nom = draft.nom;
+  const form = draft.form;
+  const setNom = (v: string) => setDraft((d) => ({ ...d, nom: v }));
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
 
-  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const set = <K extends keyof typeof EMPTY>(k: K, v: (typeof EMPTY)[K]) =>
+    setDraft((d) => ({ ...d, form: { ...d.form, [k]: v } }));
 
   if (loading) return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Chargement…</div>;
   if (!session?.success) return <div className="p-8 text-center text-slate-500">Session expirée.</div>;
@@ -135,6 +143,7 @@ export default function MatchZoneDebrief() {
     setSaving(false);
     const r = data as { success?: boolean; error?: string } | null;
     if (err || !r?.success) return setError(r?.error ?? "Enregistrement indisponible (applique zone_rpcs.sql).");
+    clearDraft();
     setSubmitted(true);
   }
 
@@ -235,10 +244,13 @@ export default function MatchZoneDebrief() {
         </Section>
 
         {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}
+        <p className="text-center text-xs text-slate-400">
+          💾 Brouillon enregistré automatiquement sur cet appareil — rien ne se perd si vous rafraîchissez ou changez de page. Soumettez quand tout est complet.
+        </p>
         <button
           onClick={() => void submit()}
           disabled={saving || nom.trim().length < 2}
-          className="mt-2 min-h-[56px] w-full rounded-xl bg-slate-900 py-4 text-base font-bold text-white disabled:opacity-40"
+          className="mt-1 min-h-[56px] w-full rounded-xl bg-slate-900 py-4 text-base font-bold text-white disabled:opacity-40"
         >
           {saving ? 'Envoi…' : '✅ Soumettre le débrief'}
         </button>
