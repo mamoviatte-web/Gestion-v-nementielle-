@@ -60,7 +60,8 @@ export interface DepotBalanceRow {
   unit_value_ht: number | null;
 }
 
-/** Soldes courants d'un dépôt, enrichis du produit, triés par famille. */
+/** Soldes DÉRIVÉS d'un dépôt (ancre + Σ flux = vérité ledger), enrichis du
+ *  produit, triés par famille. Source : v_depot_balance_derived. */
 export function useDepotBalances(depotId: string | undefined) {
   return useQuery({
     queryKey: ['depotBalances', depotId ?? 'none'],
@@ -68,23 +69,20 @@ export function useDepotBalances(depotId: string | undefined) {
     staleTime: 15_000,
     queryFn: async (): Promise<DepotBalanceRow[]> => {
       const { data, error } = await supabase
-        .from('stock_balances')
-        .select('product_id, current_quantity, unit_value_ht, product:products(product_name, category, unit, active)')
+        .from('v_depot_balance_derived')
+        .select('product_id, product_name, category, unit, current_quantity, unit_value_ht')
         .eq('location_id', depotId as string);
       if (error) throw error;
       type Row = {
-        product_id: string;
-        current_quantity: number;
-        unit_value_ht: number | null;
-        product: { product_name: string; category: string; unit: string; active: boolean } | null;
+        product_id: string; product_name: string; category: string; unit: string;
+        current_quantity: number; unit_value_ht: number | null;
       };
       return ((data ?? []) as unknown as Row[])
-        .filter((r) => r.product?.active)
         .map((r) => ({
           product_id: r.product_id,
-          product_name: r.product?.product_name ?? '—',
-          category: r.product?.category ?? '—',
-          unit: r.product?.unit ?? '',
+          product_name: r.product_name ?? '—',
+          category: r.category ?? '—',
+          unit: r.unit ?? '',
           current_quantity: Number(r.current_quantity),
           unit_value_ht: r.unit_value_ht == null ? null : Number(r.unit_value_ht),
         }))
@@ -314,8 +312,9 @@ export function useDepotsSummary() {
       const ids = depots.map((d) => d.id);
 
       const [{ data: balances }, { data: deliveries }, { data: kegRows }] = await Promise.all([
+        // Soldes DÉRIVÉS (ledger) par dépôt, pas le compteur mutable.
         supabase
-          .from('stock_balances')
+          .from('v_depot_balance_derived')
           .select('location_id, current_quantity, unit_value_ht')
           .in('location_id', ids),
         supabase.from('supplier_deliveries').select('location_id, delivery_date').in('location_id', ids),
