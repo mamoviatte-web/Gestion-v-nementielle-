@@ -77,6 +77,22 @@ export default function DataHealthPage() {
   const ledgerEcartsTot = ledger.synth.reduce((s, r) => s + num(r.refs_en_ecart), 0);
   const ledgerNegTot = ledger.synth.reduce((s, r) => s + num(r.refs_negatives), 0);
 
+  // Bascule post-clôture (A) + manques constatés (B).
+  const bascQ = useQuery({
+    queryKey: ['dataHealthBascule'],
+    queryFn: async () => {
+      const [b, m] = await Promise.all([
+        supabase.from('v_event_bascule_audit').select('event_id, event_name, event_date, status, space_name, finals_saisis, soumises').eq('anomalie_non_bascule', true).order('event_date', { ascending: false }),
+        supabase.from('v_stock_audit_manques').select('movement_id, event_name, product_name, space_name, manque, created_at').limit(20),
+      ]);
+      return {
+        bascule: (b.data as { event_id: string; event_name: string; event_date: string; status: string; space_name: string; finals_saisis: number; soumises: number }[] | null) ?? [],
+        manques: (m.data as { movement_id: string; event_name: string; product_name: string; space_name: string; manque: number; created_at: string }[] | null) ?? [],
+      };
+    },
+  });
+  const basc = bascQ.data ?? { bascule: [], manques: [] };
+
   const stock = stockQ.data ?? [];
   const stockIncoherences = useMemo(
     () => stock.filter((r) => Math.round(num(r.qty_total_depot)) !== Math.round(num(r.qty_auc) + num(r.qty_est) + num(r.qty_futs))),
@@ -198,6 +214,50 @@ export default function DataHealthPage() {
               </div>
             )}
             <p className="mt-2 text-xs text-stone-400">Principe : <b>solde = dernière ancre physique + Σ flux depuis</b>. Un écart ≠ 0 se résout par un <b>comptage physique</b> (ré-ancrage), jamais par un recalcul aveugle.</p>
+          </>
+        )}
+      </section>
+
+      {/* 0.ter Bascule post-clôture + manques constatés */}
+      <section className="mb-8">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-stone-800"><ClipboardCheck size={16} className="text-pr-olive" /> Bascule post-clôture & manques</h2>
+        {bascQ.isLoading ? <Spinner /> : (
+          <>
+            <div className={`mb-3 flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${basc.bascule.length === 0 && basc.manques.length === 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+              {basc.bascule.length === 0 && basc.manques.length === 0
+                ? <><CheckCircle2 size={16} /> Toutes les clôtures ont basculé (mouvements tracés) · aucun manque dépôt constaté.</>
+                : <><AlertTriangle size={16} /> {basc.bascule.length} espace(s) clôturé(s) sans bascule · {basc.manques.length} manque(s) dépôt constaté(s).</>}
+            </div>
+            {basc.bascule.length > 0 && (
+              <div className="mb-3 overflow-x-auto rounded-xl border border-amber-200">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-amber-100 bg-amber-50 text-left text-[11px] uppercase tracking-wide text-amber-700">
+                      <th className="px-3 py-2">Événement</th><th className="px-3 py-2">Espace</th>
+                      <th className="px-2 py-2 text-right">Finals saisis</th><th className="px-2 py-2 text-right">Soumis</th><th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-50">
+                    {basc.bascule.map((r) => (
+                      <tr key={`${r.event_id}_${r.space_name}`} className="text-stone-800">
+                        <td className="px-3 py-2 font-medium"><Link to={`/admin/events/${r.event_id}`} className="hover:underline">{r.event_name}</Link> <span className="text-xs text-stone-400">· {r.status}</span></td>
+                        <td className="px-3 py-2 text-stone-500">{r.space_name}</td>
+                        <td className="px-2 py-2 text-right tabular-nums">{num(r.finals_saisis)}</td>
+                        <td className="px-2 py-2 text-right font-bold tabular-nums text-rose-600">{num(r.soumises)}</td>
+                        <td className="px-3 py-2 text-xs text-amber-700">clôture à valider dans l'appli</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {basc.manques.length > 0 && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50/40 px-4 py-3">
+                <p className="text-xs font-semibold text-rose-700">{basc.manques.length} manque(s) dépôt constaté(s) (acheminé &gt; stock disponible) :</p>
+                <p className="mt-1 text-xs text-stone-600">{basc.manques.map((m) => `${m.product_name} −${num(m.manque)} (${m.space_name}, ${m.event_name})`).join(' · ')}</p>
+              </div>
+            )}
+            <p className="mt-2 text-xs text-stone-400">Non-bascule = des finals saisis mais aucun soumis → les triggers n'ont pas tourné (à valider). Manque = une sortie a dépassé le stock dépôt (à recompter).</p>
           </>
         )}
       </section>
