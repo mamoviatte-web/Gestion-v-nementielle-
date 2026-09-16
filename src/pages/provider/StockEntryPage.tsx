@@ -8,7 +8,7 @@
  * RG-004 (anomalie obligatoire si consommation < 0).
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Boxes, PackageCheck, PlusCircle, ClipboardCheck } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -42,6 +42,29 @@ import {
   Textarea,
 } from '@/components/ui';
 import type { Product, ProductState } from '@/lib/types';
+
+/**
+ * Brouillon persistant (localStorage) : la saisie ne disparaît plus si le
+ * responsable rafraîchit ou change de page avant de valider. Effacé à la
+ * validation. Clé stable par événement × espace × phase.
+ */
+function usePersistentDraft<T>(key: string, initial: T): [T, (v: T | ((p: T) => T)) => void, () => void] {
+  const [state, setState] = useState<T>(() => {
+    try { const raw = localStorage.getItem(key); if (raw) return JSON.parse(raw) as T; } catch { /* stockage indispo */ }
+    return initial;
+  });
+  const set = useCallback((v: T | ((p: T) => T)) => {
+    setState((prev) => {
+      const next = typeof v === 'function' ? (v as (p: T) => T)(prev) : v;
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* stockage indispo */ }
+      return next;
+    });
+  }, [key]);
+  const clear = useCallback(() => {
+    try { localStorage.removeItem(key); } catch { /* stockage indispo */ }
+  }, [key]);
+  return [state, set, clear];
+}
 
 /** Récupère le libellé produit depuis la map (fallback sur l'id). */
 function productName(map: Map<string, Product>, id: string): string {
@@ -139,16 +162,17 @@ function StockEntryContent({
         <OpeningForm
           stock={stock}
           responsableNom={responsableNom}
+          draftKey={`stockdraft:open:${event.event_id}:${spaceId}`}
         />
       )}
       {stock.phase === 'reassort' && mode === 'view' && (
         <EnCoursView stock={stock} onReassort={() => setMode('reassort')} onClose={() => setMode('closing')} />
       )}
       {stock.phase === 'reassort' && mode === 'reassort' && (
-        <ReassortForm stock={stock} responsableNom={responsableNom} onDone={() => setMode('view')} />
+        <ReassortForm stock={stock} responsableNom={responsableNom} onDone={() => setMode('view')} draftKey={`stockdraft:reassort:${event.event_id}:${spaceId}`} />
       )}
       {stock.phase === 'reassort' && mode === 'closing' && (
-        <ClosingForm stock={stock} responsableNom={responsableNom} onCancel={() => setMode('view')} />
+        <ClosingForm stock={stock} responsableNom={responsableNom} onCancel={() => setMode('view')} draftKey={`stockdraft:closing:${event.event_id}:${spaceId}`} />
       )}
       {stock.phase === 'cloture' && <RecapView stock={stock} />}
     </div>
@@ -162,14 +186,24 @@ function StockEntryContent({
 function OpeningForm({
   stock,
   responsableNom,
+  draftKey,
 }: {
   stock: ReturnType<typeof useStock>;
   responsableNom: string;
+  draftKey: string;
 }) {
   const dotations = stock.dotations.data ?? [];
-  const [qty, setQty] = useState<Record<string, string>>(() =>
-    Object.fromEntries(dotations.map((d) => [d.product_id, String(d.planned_qty)])),
-  );
+  const [qty, setQty, clearQty] = usePersistentDraft<Record<string, string>>(draftKey, {});
+  // Pré-remplir depuis la dotation prévue quand aucune valeur n'est encore saisie/brouillonnée.
+  useEffect(() => {
+    if (dotations.length === 0) return;
+    setQty((prev) => {
+      const next = { ...prev };
+      for (const d of dotations) if (next[d.product_id] == null) next[d.product_id] = String(d.planned_qty);
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dotations.length]);
   const [error, setError] = useState<string | null>(null);
 
   if (dotations.length === 0) {
@@ -190,6 +224,7 @@ function OpeningForm({
     }));
     try {
       await stock.submitOpening(lines, responsableNom);
+      clearQty();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de la validation.');
     }
@@ -301,13 +336,15 @@ function ReassortForm({
   stock,
   responsableNom,
   onDone,
+  draftKey,
 }: {
   stock: ReturnType<typeof useStock>;
   responsableNom: string;
   onDone: () => void;
+  draftKey: string;
 }) {
   const lines = stock.stockLines.data ?? [];
-  const [delta, setDelta] = useState<Record<string, string>>({});
+  const [delta, setDelta, clearDelta] = usePersistentDraft<Record<string, string>>(draftKey, {});
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit() {
@@ -324,6 +361,7 @@ function ReassortForm({
     }
     try {
       await stock.submitReassort(inputs, responsableNom);
+      clearDelta();
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors du réassort.');
@@ -394,27 +432,37 @@ function ClosingForm({
   stock,
   responsableNom,
   onCancel,
+  draftKey,
 }: {
   stock: ReturnType<typeof useStock>;
   responsableNom: string;
   onCancel: () => void;
+  draftKey: string;
 }) {
   const lines = stock.stockLines.data ?? [];
-  const [form, setForm] = useState<Record<string, ClosingState>>(() =>
-    Object.fromEntries(
-      lines.map((l) => [l.product_id, { final: '', state: 'fermé' as ProductState, anomaly: '' }]),
-    ),
-  );
+  const [form, setForm, clearForm] = usePersistentDraft<Record<string, ClosingState>>(draftKey, {});
+  // Initialiser les lignes non encore brouillonnées (état par défaut « fermé »).
+  useEffect(() => {
+    if (lines.length === 0) return;
+    setForm((prev) => {
+      const next = { ...prev };
+      for (const l of lines) if (next[l.product_id] == null) next[l.product_id] = { final: '', state: 'fermé', anomaly: '' };
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines.length]);
   const [error, setError] = useState<string | null>(null);
 
   function update(productId: string, patch: Partial<ClosingState>) {
     setForm((prev) => ({ ...prev, [productId]: { ...prev[productId], ...patch } }));
   }
 
+  const DEFAULT_CLOSING: ClosingState = { final: '', state: 'fermé', anomaly: '' };
+
   async function handleSubmit() {
     setError(null);
     const inputs: ClosingLineInput[] = lines.map((l) => {
-      const f = form[l.product_id];
+      const f = form[l.product_id] ?? DEFAULT_CLOSING;
       return {
         product_id: l.product_id,
         final_qty: Math.max(0, Number(f.final ?? 0) || 0),
@@ -424,6 +472,7 @@ function ClosingForm({
     });
     try {
       await stock.submitClosing(inputs, responsableNom);
+      clearForm();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de la clôture.');
     }
@@ -439,7 +488,7 @@ function ClosingForm({
 
       <div className="space-y-3">
         {lines.map((l) => {
-          const f = form[l.product_id];
+          const f = form[l.product_id] ?? DEFAULT_CLOSING;
           const available = l.initial_qty + l.reassort_qty;
           const consumed = computeConsumed(l.initial_qty, l.reassort_qty, Number(f.final ?? 0) || 0);
           const negative = f.final !== '' && consumed < 0;
