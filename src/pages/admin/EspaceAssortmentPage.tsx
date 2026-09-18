@@ -17,13 +17,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Boxes, Plus, Trash2, Info, Building2, CalendarCheck, X } from 'lucide-react';
+import { Boxes, Plus, Trash2, Info, Building2, CalendarCheck, X, Pencil, Power, RotateCcw, Check } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/context/ToastContext';
 import { Button, Spinner, Select, Input } from '@/components/ui';
 
 type ServiceType = 'vip' | 'bar' | 'buvette' | 'bodega';
-interface Space { space_id: string; space_name: string; service_type: ServiceType | null }
+interface Space { space_id: string; space_name: string; service_type: ServiceType | null; user_created?: boolean }
+interface InactiveSpace { space_id: string; space_name: string; service_type: ServiceType | null }
 interface Product { product_id: string; product_name: string; category: string }
 interface SocleRow { id: string; area_name: string; product_id: string; product_name: string; category: string }
 interface AlignMatch { event_id: string; event_name: string; event_date: string; linked: boolean }
@@ -63,15 +64,21 @@ export default function EspaceAssortmentPage() {
   const [cPax, setCPax] = useState('');
   const [cRetains, setCRetains] = useState(true);
   const [creating, setCreating] = useState(false);
+  // Renommage / désactivation
+  const [renaming, setRenaming] = useState(false);
+  const [renameVal, setRenameVal] = useState('');
+  const [inactive, setInactive] = useState<InactiveSpace[]>([]);
 
   const load = useCallback(async () => {
-    const [sp, pr, apr, ev] = await Promise.all([
-      supabase.from('spaces').select('space_id, space_name, service_type').eq('active', true),
+    const [sp, pr, apr, ev, inact] = await Promise.all([
+      supabase.from('spaces').select('space_id, space_name, service_type, user_created').eq('active', true),
       supabase.from('products').select('product_id, product_name, category').eq('active', true).order('product_name'),
       supabase.from('area_product_reference').select('id, area_name, product_id, product_name').eq('association_level', 'S').not('product_id', 'is', null),
       supabase.from('events').select('event_id').eq('event_type', 'match').in('status', ['brouillon', 'préparé', 'en_cours']),
+      supabase.from('spaces').select('space_id, space_name, service_type').eq('active', false).eq('user_created', true),
     ]);
     setUpcomingCount(((ev.data as unknown[] | null) ?? []).length);
+    setInactive((inact.data as InactiveSpace[] | null) ?? []);
     // Tous les espaces éditables : hors Loges (dotation dédiée) et superviseurs Buvette 1/2.
     const list = ((sp.data as Space[] | null) ?? [])
       .filter((s) => !LOGE_IDS.has(s.space_id) && !['Buvette 1', 'Buvette 2'].includes(s.space_name))
@@ -191,6 +198,34 @@ export default function EspaceAssortmentPage() {
     );
   }
 
+  async function renameSpace() {
+    if (!selectedSpace) return;
+    const name = renameVal.trim();
+    if (name.length < 2) return showToast('Nom trop court (2 caractères minimum).', 'warning');
+    if (name === selectedSpace.space_name) { setRenaming(false); return; }
+    setBusy(true);
+    const { data, error } = await supabase.rpc('rename_service_space', { p_space_id: selectedSpace.space_id, p_new_name: name });
+    const r = data as { success?: boolean; error?: string } | null;
+    setBusy(false);
+    if (error || !r?.success) return showToast(`Échec : ${r?.error ?? error?.message ?? 'renommage impossible'}`, 'warning');
+    setRenaming(false);
+    await load();
+    setSelected(name);
+    showToast(`Espace renommé en « ${name} ».`, 'success');
+  }
+
+  async function setActive(spaceId: string, active: boolean, name: string) {
+    if (!active && !window.confirm(`Désactiver « ${name} » ?\n\nIl disparaîtra des matchs et des saisies. Son historique est conservé et il reste réactivable.`)) return;
+    setBusy(true);
+    const { data, error } = await supabase.rpc('set_service_space_active', { p_space_id: spaceId, p_active: active });
+    const r = data as { success?: boolean; error?: string } | null;
+    setBusy(false);
+    if (error || !r?.success) return showToast(`Échec : ${r?.error ?? error?.message ?? 'action impossible'}`, 'warning');
+    if (!active && selected.toUpperCase() === name.toUpperCase()) setSelected('');
+    await load();
+    showToast(active ? `« ${name} » réactivé.` : `« ${name} » désactivé (réactivable à tout moment).`, 'success');
+  }
+
   if (loading) return <div className="p-6"><Spinner label="Chargement de l'assortiment…" /></div>;
 
   return (
@@ -299,18 +334,55 @@ export default function EspaceAssortmentPage() {
         <div className="rounded-2xl border border-stone-200 bg-white p-4">
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-sm font-bold text-stone-800">Socle de {selected || '—'} {svc && <span className="ml-1 text-xs font-normal text-stone-400">· {TYPE_LABEL[svc]}</span>}</p>
-              <p className="text-xs text-stone-400">{socleOfSelected.length} produit{socleOfSelected.length > 1 ? 's' : ''}</p>
-              {selectedSpace && upcomingCount > 0 && (
-                <button
-                  onClick={() => void alignOnMatches()}
-                  disabled={aligning}
-                  className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                  title="Ajoute cet espace aux matchs à venir et régénère leurs dotations"
-                >
-                  <CalendarCheck size={13} /> {aligning ? 'Alignement…' : `Aligner sur les ${upcomingCount} match${upcomingCount > 1 ? 's' : ''} à venir`}
-                </button>
+              {renaming && selectedSpace ? (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={renameVal}
+                    onChange={(e) => setRenameVal(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void renameSpace(); if (e.key === 'Escape') setRenaming(false); }}
+                    className="!py-1 text-sm"
+                    autoFocus
+                  />
+                  <button disabled={busy} onClick={() => void renameSpace()} title="Enregistrer" className="rounded-lg bg-emerald-600 p-1.5 text-white hover:bg-emerald-700"><Check size={15} /></button>
+                  <button onClick={() => setRenaming(false)} title="Annuler" className="rounded-lg bg-stone-100 p-1.5 text-stone-500 hover:bg-stone-200"><X size={15} /></button>
+                </div>
+              ) : (
+                <p className="flex items-center gap-1.5 text-sm font-bold text-stone-800">
+                  Socle de {selected || '—'} {svc && <span className="text-xs font-normal text-stone-400">· {TYPE_LABEL[svc]}</span>}
+                  {selectedSpace?.user_created && (
+                    <button
+                      onClick={() => { setRenameVal(selectedSpace.space_name); setRenaming(true); }}
+                      title="Renommer cet espace"
+                      className="rounded p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                </p>
               )}
+              <p className="text-xs text-stone-400">{socleOfSelected.length} produit{socleOfSelected.length > 1 ? 's' : ''}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {selectedSpace && upcomingCount > 0 && (
+                  <button
+                    onClick={() => void alignOnMatches()}
+                    disabled={aligning}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                    title="Ajoute cet espace aux matchs à venir et régénère leurs dotations"
+                  >
+                    <CalendarCheck size={13} /> {aligning ? 'Alignement…' : `Aligner sur les ${upcomingCount} match${upcomingCount > 1 ? 's' : ''} à venir`}
+                  </button>
+                )}
+                {selectedSpace?.user_created && (
+                  <button
+                    onClick={() => void setActive(selectedSpace.space_id, false, selectedSpace.space_name)}
+                    disabled={busy}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                    title="Désactiver cet espace (réversible)"
+                  >
+                    <Power size={13} /> Désactiver
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex items-end gap-2">
               <div className="min-w-[220px]">
@@ -355,6 +427,28 @@ export default function EspaceAssortmentPage() {
           )}
         </div>
       </div>
+
+      {/* Espaces créés désactivés — réactivables */}
+      {inactive.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-stone-400">Espaces désactivés ({inactive.length})</p>
+          <div className="flex flex-wrap gap-2">
+            {inactive.map((s) => (
+              <div key={s.space_id} className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-sm">
+                <span className="font-medium text-stone-600">{s.space_name}</span>
+                <span className="text-xs text-stone-400">{s.service_type ? TYPE_LABEL[s.service_type] : ''}</span>
+                <button
+                  disabled={busy}
+                  onClick={() => void setActive(s.space_id, true, s.space_name)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                >
+                  <RotateCcw size={12} /> Réactiver
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
