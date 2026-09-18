@@ -17,15 +17,16 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Boxes, Plus, Trash2, Info } from 'lucide-react';
+import { Boxes, Plus, Trash2, Info, Building2, CalendarCheck, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/context/ToastContext';
-import { Button, Spinner, Select } from '@/components/ui';
+import { Button, Spinner, Select, Input } from '@/components/ui';
 
 type ServiceType = 'vip' | 'bar' | 'buvette' | 'bodega';
 interface Space { space_id: string; space_name: string; service_type: ServiceType | null }
 interface Product { product_id: string; product_name: string; category: string }
 interface SocleRow { id: string; area_name: string; product_id: string; product_name: string; category: string }
+interface AlignMatch { event_id: string; event_name: string; event_date: string; linked: boolean }
 
 // Loges : dotation dédiée (loge_dotations), non éditable ici.
 const LOGE_IDS = new Set([
@@ -53,13 +54,24 @@ export default function EspaceAssortmentPage() {
   const [toAdd, setToAdd] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [upcomingCount, setUpcomingCount] = useState(0);
+  const [aligning, setAligning] = useState(false);
+  // Création d'espace
+  const [showCreate, setShowCreate] = useState(false);
+  const [cName, setCName] = useState('');
+  const [cSvc, setCSvc] = useState<'bar' | 'buvette'>('bar');
+  const [cPax, setCPax] = useState('');
+  const [cRetains, setCRetains] = useState(true);
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
-    const [sp, pr, apr] = await Promise.all([
+    const [sp, pr, apr, ev] = await Promise.all([
       supabase.from('spaces').select('space_id, space_name, service_type').eq('active', true),
       supabase.from('products').select('product_id, product_name, category').eq('active', true).order('product_name'),
       supabase.from('area_product_reference').select('id, area_name, product_id, product_name').eq('association_level', 'S').not('product_id', 'is', null),
+      supabase.from('events').select('event_id').eq('event_type', 'match').in('status', ['brouillon', 'préparé', 'en_cours']),
     ]);
+    setUpcomingCount(((ev.data as unknown[] | null) ?? []).length);
     // Tous les espaces éditables : hors Loges (dotation dédiée) et superviseurs Buvette 1/2.
     const list = ((sp.data as Space[] | null) ?? [])
       .filter((s) => !LOGE_IDS.has(s.space_id) && !['Buvette 1', 'Buvette 2'].includes(s.space_name))
@@ -139,6 +151,46 @@ export default function EspaceAssortmentPage() {
     showToast(`${row.product_name} retiré du socle de ${row.area_name} — régénérez les fiches runner.`, 'success');
   }
 
+  async function createSpace() {
+    const name = cName.trim();
+    if (name.length < 2) return showToast('Nom d’espace trop court (2 caractères minimum).', 'warning');
+    setCreating(true);
+    const { data, error } = await supabase.rpc('create_service_space', {
+      p_name: name,
+      p_service_type: cSvc,
+      p_max_pax: cPax ? Number(cPax) : null,
+      p_retains_stock: cRetains,
+    });
+    const r = data as { success?: boolean; error?: string; space_name?: string; access_code?: string } | null;
+    setCreating(false);
+    if (error || !r?.success) return showToast(`Échec : ${r?.error ?? error?.message ?? 'création impossible'}`, 'warning');
+    setCName(''); setCPax(''); setShowCreate(false);
+    await load();
+    setSelected(name);
+    showToast(`Espace « ${r.space_name} » créé (code ${r.access_code}). Ajoutez son assortiment puis alignez-le sur les matchs.`, 'success');
+  }
+
+  async function alignOnMatches() {
+    if (!selectedSpace) return;
+    if (!window.confirm(`Aligner « ${selectedSpace.space_name} » sur les ${upcomingCount} match(s) à venir ?\n\nL’espace sera ajouté à ces matchs et leurs dotations runner seront régénérées depuis son assortiment.`)) return;
+    setAligning(true);
+    const { data, error } = await supabase.rpc('align_space_on_upcoming_matches', {
+      p_space_id: selectedSpace.space_id,
+      p_regenerate: true,
+    });
+    const r = data as { success?: boolean; error?: string; matches_added?: number; matches?: AlignMatch[] } | null;
+    setAligning(false);
+    if (error || !r?.success) return showToast(`Échec : ${r?.error ?? error?.message ?? 'alignement impossible'}`, 'warning');
+    const added = r.matches_added ?? 0;
+    const total = r.matches?.length ?? 0;
+    showToast(
+      added > 0
+        ? `${selectedSpace.space_name} ajouté à ${added} match(s) — dotations régénérées. Déjà présent sur ${total - added} autre(s).`
+        : `${selectedSpace.space_name} était déjà présent sur les ${total} match(s) à venir.`,
+      'success',
+    );
+  }
+
   if (loading) return <div className="p-6"><Spinner label="Chargement de l'assortiment…" /></div>;
 
   return (
@@ -155,6 +207,65 @@ export default function EspaceAssortmentPage() {
       <div className="mb-4 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
         <Info size={16} className="mt-0.5 shrink-0" />
         <span>Modulez chaque espace par ses produits : <b>tous les produits sont disponibles pour tous les espaces</b> (un produit buvette peut être mis en VIP et inversement). Le socle est global (par espace, pas par match) et s'applique dès la prochaine régénération des dotations. Les <b>Loges</b> gardent leur dotation par loge dédiée.</span>
+      </div>
+
+      {/* Créer un espace souhaité (bar / buvette) */}
+      <div className="mb-4 rounded-2xl border border-stone-200 bg-white">
+        <button
+          onClick={() => setShowCreate((v) => !v)}
+          className="flex w-full items-center justify-between px-4 py-3 text-left"
+        >
+          <span className="flex items-center gap-2 text-sm font-bold text-stone-800">
+            <Building2 size={16} className="text-amber-600" /> Créer un espace souhaité (bar / buvette)
+          </span>
+          {showCreate ? <X size={16} className="text-stone-400" /> : <Plus size={16} className="text-stone-400" />}
+        </button>
+        {showCreate && (
+          <div className="border-t border-stone-100 p-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Input
+                label="Nom de l'espace"
+                value={cName}
+                onChange={(e) => setCName(e.target.value)}
+                placeholder="Ex : Bar Tribune Nord"
+              />
+              <Select
+                label="Type"
+                value={cSvc}
+                onChange={(e) => {
+                  const v = e.target.value as 'bar' | 'buvette';
+                  setCSvc(v);
+                  setCRetains(v === 'bar'); // défaut : bar garde son stock, buvette non
+                }}
+                options={[{ value: 'bar', label: 'Bar' }, { value: 'buvette', label: 'Buvette' }]}
+              />
+              <Input
+                label="Capacité (pax, optionnel)"
+                type="number"
+                min={0}
+                value={cPax}
+                onChange={(e) => setCPax(e.target.value)}
+                placeholder="—"
+              />
+              <div className="flex flex-col justify-end">
+                <label className="mb-1 block text-sm font-medium text-slate-700">Stock</label>
+                <label className="flex min-h-[38px] cursor-pointer items-center gap-2 rounded-lg px-1 text-sm text-stone-700">
+                  <input type="checkbox" checked={cRetains} onChange={(e) => setCRetains(e.target.checked)} className="h-4 w-4 rounded" />
+                  Conserve son stock entre les matchs
+                </label>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="text-xs text-stone-400">
+                Un code d'accès responsable est généré automatiquement. L'espace apparaît aussitôt ci-dessous —
+                ajoutez son assortiment puis alignez-le sur les matchs à venir.
+              </p>
+              <Button size="sm" disabled={creating || cName.trim().length < 2} onClick={() => void createSpace()}>
+                <Plus size={14} /> Créer l'espace
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[240px_1fr]">
@@ -190,6 +301,16 @@ export default function EspaceAssortmentPage() {
             <div>
               <p className="text-sm font-bold text-stone-800">Socle de {selected || '—'} {svc && <span className="ml-1 text-xs font-normal text-stone-400">· {TYPE_LABEL[svc]}</span>}</p>
               <p className="text-xs text-stone-400">{socleOfSelected.length} produit{socleOfSelected.length > 1 ? 's' : ''}</p>
+              {selectedSpace && upcomingCount > 0 && (
+                <button
+                  onClick={() => void alignOnMatches()}
+                  disabled={aligning}
+                  className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                  title="Ajoute cet espace aux matchs à venir et régénère leurs dotations"
+                >
+                  <CalendarCheck size={13} /> {aligning ? 'Alignement…' : `Aligner sur les ${upcomingCount} match${upcomingCount > 1 ? 's' : ''} à venir`}
+                </button>
+              )}
             </div>
             <div className="flex items-end gap-2">
               <div className="min-w-[220px]">
