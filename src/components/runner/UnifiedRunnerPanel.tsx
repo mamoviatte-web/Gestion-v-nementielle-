@@ -10,10 +10,10 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, FileSpreadsheet, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, RefreshCw, ShoppingCart, Crown, CupSoda } from 'lucide-react';
+import { Download, FileSpreadsheet, AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, RefreshCw, ShoppingCart, Crown, CupSoda, Zap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/context/ToastContext';
-import { Button, Spinner } from '@/components/ui';
+import { Button, Spinner, Select } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import { loadModule } from '@/lib/lazyModule';
 import { downloadRunnerWorkbook } from '@/lib/runnerExcel';
@@ -87,15 +87,26 @@ export function UnifiedRunnerPanel({
   const [pdfBusy, setPdfBusy] = useState(false);
   const [xlsBusy, setXlsBusy] = useState(false);
   const [logeSheets, setLogeSheets] = useState<Record<string, LogeBlock[]>>({});
+  // Activation d'une zone de dernière minute (ex. Club 70 Sud/Nord).
+  const [allSpaces, setAllSpaces] = useState<{ space_id: string; space_name: string; service_type: string | null }[]>([]);
+  const [zoneToActivate, setZoneToActivate] = useState('');
+  const [activating, setActivating] = useState(false);
 
   const load = useCallback(async () => {
-    const [c, b] = await Promise.all([
+    const [c, b, sp] = await Promise.all([
       supabase.from('event_runner_space_summary').select('*').eq('event_id', eventId).order('family').order('space_name'),
       supabase.from('event_runner_board').select('*').eq('event_id', eventId),
+      supabase.from('spaces').select('space_id, space_name, service_type, is_operational, is_supervisor_slot')
+        .eq('active', true).order('space_name'),
     ]);
     const cardList = (c.data as Card[] | null) ?? [];
     setCards(cardList);
     setBoard((b.data as Line[] | null) ?? []);
+    // Zones activables « dernière minute » : espaces de service pas encore sur la fiche.
+    const spRows = (sp.data as { space_id: string; space_name: string; service_type: string | null; is_operational: boolean | null; is_supervisor_slot: boolean | null }[] | null) ?? [];
+    setAllSpaces(spRows
+      .filter((s) => !s.is_operational && !s.is_supervisor_slot && !LOGE_IDS.has(s.space_id) && !['Buvette 1', 'Buvette 2'].includes(s.space_name))
+      .map((s) => ({ space_id: s.space_id, space_name: s.space_name, service_type: s.service_type })));
     // Détail loge par loge (pour le PDF) des espaces Loges présents.
     const logeIds = cardList.filter((x) => LOGE_IDS.has(x.space_id)).map((x) => x.space_id);
     const sheets: Record<string, LogeBlock[]> = {};
@@ -141,6 +152,26 @@ export function UnifiedRunnerPanel({
     },
     [eventId, load, showToast],
   );
+
+  // Zones pas encore présentes sur la fiche runner de ce match.
+  const activatable = useMemo(() => {
+    const onBoard = new Set(cards.map((c) => c.space_id));
+    return allSpaces.filter((s) => !onBoard.has(s.space_id));
+  }, [allSpaces, cards]);
+
+  const activateZone = useCallback(async () => {
+    const sp = activatable.find((s) => s.space_id === zoneToActivate);
+    if (!sp) return;
+    setActivating(true);
+    const { data, error } = await supabase.rpc('activate_zone_runner', { p_event_id: eventId, p_space_id: sp.space_id });
+    const r = data as { success?: boolean; error?: string; lines?: number; qty_to_move?: number } | null;
+    setActivating(false);
+    if (error || !r?.success) { showToast(`Échec : ${r?.error ?? error?.message ?? 'activation impossible'}`, 'warning'); return; }
+    setZoneToActivate('');
+    await load();
+    setExpanded(sp.space_id);
+    showToast(`${sp.space_name} activé : fiche runner générée (${r.lines ?? 0} produit(s), ${r.qty_to_move ?? 0} à acheminer). Les autres zones sont inchangées.`, 'success');
+  }, [activatable, zoneToActivate, eventId, load, showToast]);
 
   const linesBySpace = useMemo(() => {
     const m = new Map<string, Line[]>();
@@ -310,6 +341,26 @@ export function UnifiedRunnerPanel({
           </Button>
         </div>
       </div>
+
+      {/* Activer une zone de dernière minute (ex. Club 70 Sud/Nord) */}
+      {activatable.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
+            <Zap size={16} className="text-amber-600" /> Activer une zone de dernière minute
+          </div>
+          <div className="min-w-[220px] flex-1 sm:flex-none">
+            <Select
+              value={zoneToActivate}
+              onChange={(e) => setZoneToActivate(e.target.value)}
+              options={[{ value: '', label: '— Choisir une zone à activer —' }, ...activatable.map((s) => ({ value: s.space_id, label: s.space_name }))]}
+            />
+          </div>
+          <Button size="sm" disabled={!zoneToActivate || activating} loading={activating} onClick={() => void activateZone()}>
+            <Zap size={14} /> Activer + générer la fiche
+          </Button>
+          <span className="text-xs text-amber-700/80">Génère uniquement la fiche de cette zone — les quantités des autres restent intactes.</span>
+        </div>
+      )}
 
       {/* Sections par famille */}
       {families.map((fam) => {
