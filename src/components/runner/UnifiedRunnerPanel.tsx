@@ -90,6 +90,7 @@ export function UnifiedRunnerPanel({
   // Activation d'une zone de dernière minute (ex. Club 70 Sud/Nord).
   const [allSpaces, setAllSpaces] = useState<{ space_id: string; space_name: string; service_type: string | null }[]>([]);
   const [zoneToActivate, setZoneToActivate] = useState('');
+  const [asBuvette, setAsBuvette] = useState(false);
   const [activating, setActivating] = useState(false);
 
   const load = useCallback(async () => {
@@ -163,15 +164,15 @@ export function UnifiedRunnerPanel({
     const sp = activatable.find((s) => s.space_id === zoneToActivate);
     if (!sp) return;
     setActivating(true);
-    const { data, error } = await supabase.rpc('activate_zone_runner', { p_event_id: eventId, p_space_id: sp.space_id });
+    const { data, error } = await supabase.rpc('activate_zone_runner', { p_event_id: eventId, p_space_id: sp.space_id, p_as_buvette: asBuvette });
     const r = data as { success?: boolean; error?: string; lines?: number; qty_to_move?: number } | null;
     setActivating(false);
     if (error || !r?.success) { showToast(`Échec : ${r?.error ?? error?.message ?? 'activation impossible'}`, 'warning'); return; }
-    setZoneToActivate('');
+    setZoneToActivate(''); setAsBuvette(false);
     await load();
     setExpanded(sp.space_id);
-    showToast(`${sp.space_name} activé : fiche runner générée (${r.lines ?? 0} produit(s), ${r.qty_to_move ?? 0} à acheminer). Les autres zones sont inchangées.`, 'success');
-  }, [activatable, zoneToActivate, eventId, load, showToast]);
+    showToast(`${sp.space_name} activé${asBuvette ? ' en format buvette' : ''} : fiche runner générée (${r.lines ?? 0} produit(s), ${r.qty_to_move ?? 0} à acheminer). Les autres zones sont inchangées.`, 'success');
+  }, [activatable, zoneToActivate, asBuvette, eventId, load, showToast]);
 
   const linesBySpace = useMemo(() => {
     const m = new Map<string, Line[]>();
@@ -355,6 +356,10 @@ export function UnifiedRunnerPanel({
               options={[{ value: '', label: '— Choisir une zone à activer —' }, ...activatable.map((s) => ({ value: s.space_id, label: s.space_name }))]}
             />
           </div>
+          <label className="flex cursor-pointer items-center gap-1.5 text-sm font-medium text-amber-800" title="Doter comme une buvette (volume grand public) plutôt que sur la base pax du bar">
+            <input type="checkbox" checked={asBuvette} onChange={(e) => setAsBuvette(e.target.checked)} className="h-4 w-4 rounded" />
+            Format buvette (volume public)
+          </label>
           <Button size="sm" disabled={!zoneToActivate || activating} loading={activating} onClick={() => void activateZone()}>
             <Zap size={14} /> Activer + générer la fiche
           </Button>
