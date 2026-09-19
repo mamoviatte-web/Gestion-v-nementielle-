@@ -18,7 +18,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       {label && (
         <label
           htmlFor={inputId}
-          className="mb-1 block text-sm font-medium text-slate-700"
+          className="mb-1 block text-sm font-medium text-pr-black-soft/80"
         >
           {label}
         </label>
@@ -27,9 +27,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         ref={ref}
         id={inputId}
         className={clsx(
-          'block w-full rounded-lg border-0 px-3 py-2 text-slate-900 shadow-sm ring-1 ring-inset',
-          'placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-provence',
-          error ? 'ring-red-400' : 'ring-slate-300',
+          'block w-full rounded-lg border-0 px-3 py-2 text-pr-black shadow-sm ring-1 ring-inset',
+          'placeholder:text-pr-black-soft/45 focus:ring-2 focus:ring-inset focus:ring-provence',
+          error ? 'ring-red-400' : 'ring-pr-stone',
           className,
         )}
         aria-invalid={error ? true : undefined}
@@ -38,7 +38,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       {error ? (
         <p className="mt-1 text-sm text-red-600">{error}</p>
       ) : hint ? (
-        <p className="mt-1 text-sm text-slate-500">{hint}</p>
+        <p className="mt-1 text-sm text-pr-black-soft/50">{hint}</p>
       ) : null}
     </div>
   );

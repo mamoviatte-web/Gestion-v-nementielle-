@@ -121,24 +121,24 @@ export default function SpacesPage() {
 
       {/* Doublons détectés par motif (Buvette N ↔ BN) */}
       <section className="mb-8">
-        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-pr-black-soft/50">
           Doublons détectés (motif automatique)
         </h2>
         {dups.length === 0 ? (
           <Alert variant="success">Aucun doublon de motif « Buvette N » détecté.</Alert>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200">
+          <div className="overflow-hidden rounded-xl border border-pr-stone">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-400">
+                <tr className="border-b border-pr-stone bg-pr-cream text-left text-xs uppercase tracking-wide text-pr-black-soft/45">
                   <th className="px-4 py-2">Doublon</th>
                   <th className="px-4 py-2">→ Canonique</th>
                   <th className="px-4 py-2 text-right">État</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-pr-stone/60">
                 {dups.map((d) => (
-                  <tr key={d.ghost_space_id} className="text-slate-800">
+                  <tr key={d.ghost_space_id} className="text-pr-black-soft/90">
                     <td className="px-4 py-2 font-medium">{d.ghost_name}</td>
                     <td className="px-4 py-2">{d.canonical_name}</td>
                     <td className="px-4 py-2 text-right">
@@ -159,7 +159,7 @@ export default function SpacesPage() {
           </div>
         )}
         {unmapped.length > 0 && (
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-pr-black-soft/50">
             Les doublons « Auto (motif) » sont déjà résolus côté serveur ; les déclarer explicitement ci-dessous
             les fige durablement (utile si le nom devait changer).
           </p>
@@ -167,15 +167,15 @@ export default function SpacesPage() {
       </section>
 
       {/* Déclaration manuelle (noms libres) */}
-      <section className="mb-8 rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="mb-1 text-sm font-bold text-slate-800">Déclarer une correspondance</h2>
-        <p className="mb-4 text-xs text-slate-500">
+      <section className="mb-8 rounded-xl border border-pr-stone bg-white p-5">
+        <h2 className="mb-1 text-sm font-bold text-pr-black-soft/90">Déclarer une correspondance</h2>
+        <p className="mb-4 text-xs text-pr-black-soft/50">
           Pour tout doublon à nom libre (deux « Salon Nord », un « Wine bar Nord » dupliqué…), choisissez l'espace
           doublon puis son espace canonique. Prise en compte immédiate partout.
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[200px] flex-1">
-            <label className="mb-1 block text-xs font-medium text-slate-600">Espace doublon</label>
+            <label className="mb-1 block text-xs font-medium text-pr-black-soft/70">Espace doublon</label>
             <Select
               value={ghostId}
               onChange={(e) => setGhostId(e.target.value)}
@@ -183,7 +183,7 @@ export default function SpacesPage() {
             />
           </div>
           <div className="min-w-[200px] flex-1">
-            <label className="mb-1 block text-xs font-medium text-slate-600">Espace canonique</label>
+            <label className="mb-1 block text-xs font-medium text-pr-black-soft/70">Espace canonique</label>
             <Select
               value={canonId}
               onChange={(e) => setCanonId(e.target.value)}
@@ -198,24 +198,24 @@ export default function SpacesPage() {
 
       {/* Correspondances explicites existantes */}
       <section>
-        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-pr-black-soft/50">
           Correspondances explicites ({maps.length})
         </h2>
         {maps.length === 0 ? (
-          <p className="text-sm text-slate-400">Aucune correspondance déclarée manuellement.</p>
+          <p className="text-sm text-pr-black-soft/45">Aucune correspondance déclarée manuellement.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200">
+          <div className="overflow-hidden rounded-xl border border-pr-stone">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-400">
+                <tr className="border-b border-pr-stone bg-pr-cream text-left text-xs uppercase tracking-wide text-pr-black-soft/45">
                   <th className="px-4 py-2">Doublon</th>
                   <th className="px-4 py-2">→ Canonique</th>
                   <th className="px-4 py-2 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-pr-stone/60">
                 {maps.map((m) => (
-                  <tr key={m.ghost_space_id} className="text-slate-800">
+                  <tr key={m.ghost_space_id} className="text-pr-black-soft/90">
                     <td className="px-4 py-2 font-medium">{nameOf(m.ghost_space_id)}</td>
                     <td className="px-4 py-2">{nameOf(m.canonical_space_id)}</td>
                     <td className="px-4 py-2 text-right">

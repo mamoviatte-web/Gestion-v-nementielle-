@@ -95,7 +95,7 @@ export default function RunnerSpaceDetail() {
     <div>
       <Link
         to={`/admin/events/${id}`}
-        className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700"
+        className="mb-3 inline-flex items-center gap-1 text-sm text-pr-black-soft/50 hover:text-pr-black-soft/80"
       >
         <ArrowLeft className="h-4 w-4" /> Retour à l'événement
       </Link>
@@ -152,22 +152,22 @@ export default function RunnerSpaceDetail() {
               )}
             >
               <div>
-                <p className="font-display text-2xl font-black text-slate-800">{expectedPax ?? '—'}</p>
-                <p className="text-xs text-slate-500">Pax attendus</p>
+                <p className="font-display text-2xl font-black text-pr-black-soft/90">{expectedPax ?? '—'}</p>
+                <p className="text-xs text-pr-black-soft/50">Pax attendus</p>
               </div>
               <div>
-                <p className="font-display text-2xl font-black text-slate-800">{nbWithReco}</p>
-                <p className="text-xs text-slate-500">Produits recommandés</p>
+                <p className="font-display text-2xl font-black text-pr-black-soft/90">{nbWithReco}</p>
+                <p className="text-xs text-pr-black-soft/50">Produits recommandés</p>
               </div>
               <div>
-                <p className="font-display text-2xl font-black text-slate-900">{totalToMove}</p>
-                <p className="text-xs text-slate-500">Unités à monter</p>
+                <p className="font-display text-2xl font-black text-pr-black">{totalToMove}</p>
+                <p className="text-xs text-pr-black-soft/50">Unités à monter</p>
               </div>
               <div className="flex flex-col justify-center">
                 <p className={clsx('text-sm font-medium', depotIssue ? 'text-red-600' : 'text-emerald-700')}>
                   {depotIssue ? '⚠️ Stocks dépôt insuffisants' : '✅ Stock dépôt suffisant'}
                 </p>
-                <p className="text-xs text-slate-400">La transmission déduira les dépôts automatiquement</p>
+                <p className="text-xs text-pr-black-soft/45">La transmission déduira les dépôts automatiquement</p>
               </div>
             </div>
           );
@@ -188,7 +188,7 @@ export default function RunnerSpaceDetail() {
             warnings.length > 0 ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50',
           )}
         >
-          <h4 className="mb-1 text-sm font-medium text-slate-800">
+          <h4 className="mb-1 text-sm font-medium text-pr-black-soft/90">
             {warnings.length > 0
               ? `⚠️ ${warnings.length} produit(s) avec stock dépôt insuffisant`
               : '✅ Stock dépôt suffisant pour toutes les lignes'}
@@ -279,7 +279,7 @@ export default function RunnerSpaceDetail() {
               const toMove = Math.max(0, reco - (p.initial_area_stock ?? 0));
               return (
                 <TR key={p.id} className={RUNNER_ROW_CLASSES[color]}>
-                  <TD className="font-medium text-slate-900">{p.product?.product_name}</TD>
+                  <TD className="font-medium text-pr-black">{p.product?.product_name}</TD>
                   <TD>{p.product?.category}</TD>
                   <TD className="text-right">{p.initial_area_stock}</TD>
                   <TD className="text-right">
@@ -303,7 +303,7 @@ export default function RunnerSpaceDetail() {
                         )}
                       </span>
                     ) : (
-                      <span className="text-slate-300">0</span>
+                      <span className="text-pr-black-soft/30">0</span>
                     )}
                   </TD>
                   <TD className="text-right">
@@ -312,7 +312,7 @@ export default function RunnerSpaceDetail() {
                     ) : reco > 0 ? (
                       <span className="text-xs text-emerald-600">✓ Suffisant</span>
                     ) : (
-                      <span className="text-slate-200">—</span>
+                      <span className="text-pr-stone">—</span>
                     )}
                   </TD>
                   <TD className="text-right">
@@ -334,7 +334,7 @@ export default function RunnerSpaceDetail() {
                           >
                             {depotQty} en dépôt
                           </div>
-                          <div className="text-[11px] text-slate-400">{lb?.source_depot ?? '—'}</div>
+                          <div className="text-[11px] text-pr-black-soft/45">{lb?.source_depot ?? '—'}</div>
                         </div>
                       );
                     })()}

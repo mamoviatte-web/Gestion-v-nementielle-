@@ -18,7 +18,7 @@ export const CHARGE_TYPES = [
   { value: 'photo_video', label: '📸 Photo / Vidéo', color: 'bg-teal-100 text-teal-700' },
   { value: 'nettoyage', label: '🧹 Nettoyage', color: 'bg-green-100 text-green-700' },
   { value: 'location', label: '📦 Location', color: 'bg-stone-100 text-stone-700' },
-  { value: 'communication', label: '🖨️ Communication', color: 'bg-indigo-100 text-indigo-700' },
+  { value: 'communication', label: '🖨️ Communication', color: 'bg-pr-olive/10 text-pr-olive-dark' },
   { value: 'autre', label: '➕ Autre', color: 'bg-gray-100 text-gray-700' },
 ] as const;
 

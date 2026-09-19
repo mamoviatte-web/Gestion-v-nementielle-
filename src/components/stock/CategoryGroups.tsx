@@ -63,14 +63,14 @@ export function CategoryGroups<T>({
   return (
     <div className="space-y-2">
       {totalLabel && (
-        <p className="pb-1 text-sm text-slate-500">{totalLabel(totalFilled, items.length)}</p>
+        <p className="pb-1 text-sm text-pr-black-soft/50">{totalLabel(totalFilled, items.length)}</p>
       )}
       {categories.map((cat) => {
         const catItems = byCategory.get(cat) ?? [];
         const isOpen = open.has(cat);
         const filled = catItems.filter((i) => i.filled).length;
         return (
-          <div key={cat} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div key={cat} className="overflow-hidden rounded-xl border border-pr-stone bg-white">
             <button
               type="button"
               onClick={() =>
@@ -80,12 +80,12 @@ export function CategoryGroups<T>({
                   return next;
                 })
               }
-              className="flex w-full items-center justify-between px-4 py-3 transition-colors hover:bg-slate-50"
+              className="flex w-full items-center justify-between px-4 py-3 transition-colors hover:bg-pr-cream"
             >
               <span className="flex items-center gap-2">
                 <span className="text-xl">{CATEGORY_ICONS[cat] ?? '📋'}</span>
-                <span className="font-semibold text-slate-800">{cat}</span>
-                <span className="text-xs text-slate-400">
+                <span className="font-semibold text-pr-black-soft/90">{cat}</span>
+                <span className="text-xs text-pr-black-soft/45">
                   ({catItems.length} produit{catItems.length > 1 ? 's' : ''})
                 </span>
               </span>
@@ -96,14 +96,14 @@ export function CategoryGroups<T>({
                   </span>
                 )}
                 {isOpen ? (
-                  <ChevronDown className="h-4 w-4 text-slate-400" />
+                  <ChevronDown className="h-4 w-4 text-pr-black-soft/45" />
                 ) : (
-                  <ChevronRight className="h-4 w-4 text-slate-400" />
+                  <ChevronRight className="h-4 w-4 text-pr-black-soft/45" />
                 )}
               </span>
             </button>
             {isOpen && (
-              <div className="divide-y divide-slate-100 border-t border-slate-100">
+              <div className="divide-y divide-pr-stone/60 border-t border-pr-stone/60">
                 {catItems.map((it) => (
                   <div key={it.id}>{renderItem(it.data)}</div>
                 ))}

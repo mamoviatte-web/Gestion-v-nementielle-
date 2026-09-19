@@ -65,9 +65,9 @@ export function InvoiceRegistryView() {
       {/* Filtres */}
       <div className="flex flex-wrap items-end gap-2">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-pr-black-soft/45" />
           <select
-            className="rounded-lg border-0 py-2 pl-8 pr-3 text-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-provence"
+            className="rounded-lg border-0 py-2 pl-8 pr-3 text-sm ring-1 ring-inset ring-pr-stone focus:ring-2 focus:ring-provence"
             value={supplier}
             onChange={(e) => setSupplier(e.target.value)}
           >
@@ -77,7 +77,7 @@ export function InvoiceRegistryView() {
         </div>
         <input
           type="month"
-          className="rounded-lg border-0 px-3 py-2 text-sm ring-1 ring-inset ring-slate-300"
+          className="rounded-lg border-0 px-3 py-2 text-sm ring-1 ring-inset ring-pr-stone"
           value={month}
           onChange={(e) => setMonth(e.target.value)}
         />

@@ -75,9 +75,9 @@ export function RunnerPlanningTab({
   return (
     <div className="space-y-4">
       {/* Paramètres de génération */}
-      <div className="rounded-lg bg-slate-50 p-4 text-sm ring-1 ring-slate-200">
-        <p className="mb-2 font-semibold text-slate-700">📊 Paramètres de génération</p>
-        <ul className="grid grid-cols-1 gap-1 text-slate-600 sm:grid-cols-2">
+      <div className="rounded-lg bg-pr-cream p-4 text-sm ring-1 ring-pr-stone">
+        <p className="mb-2 font-semibold text-pr-black-soft/80">📊 Paramètres de génération</p>
+        <ul className="grid grid-cols-1 gap-1 text-pr-black-soft/70 sm:grid-cols-2">
           <li>Affluence : {event.expected_attendees ?? '—'} spect. (coeff ×{attendanceCoeff.toFixed(2)})</li>
           <li>Météo : {event.weather_type ? WEATHER_LABELS[event.weather_type] : '—'}</li>
           <li>Tendance : {event.consumption_trend ? TREND_LABELS[event.consumption_trend] : '—'}</li>
@@ -117,20 +117,20 @@ export function RunnerPlanningTab({
             const status = rows[0]?.validation_status ?? 'brouillon';
             const pct = rows.length ? Math.round((validated / rows.length) * 100) : 0;
             return (
-              <div key={s.space_id} className="rounded-lg bg-white p-4 ring-1 ring-slate-200">
+              <div key={s.space_id} className="rounded-lg bg-white p-4 ring-1 ring-pr-stone">
                 <div className="flex items-center justify-between">
-                  <p className="font-semibold text-slate-900">
+                  <p className="font-semibold text-pr-black">
                     {s.spaces?.space_name ?? s.space_id}
                   </p>
                   <Badge tone="info">{RUNNER_STATUS_LABELS[status]}</Badge>
                 </div>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-pr-black-soft/50">
                   {rows.length} produit(s) · Coût estimé {formatEuro(cost)}
                 </p>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-border-pr-stone">
                   <div className="h-full bg-provence" style={{ width: `${pct}%` }} />
                 </div>
-                <p className="mt-1 text-xs text-slate-400">{validated}/{rows.length} validées</p>
+                <p className="mt-1 text-xs text-pr-black-soft/45">{validated}/{rows.length} validées</p>
                 <div className="mt-3">
                   <Link
                     to={`/admin/events/${event.event_id}/runner/${s.space_id}`}
@@ -164,8 +164,8 @@ function Kpi({
   tone?: 'neutral' | 'danger';
 }) {
   return (
-    <div className="rounded-lg bg-white p-3 ring-1 ring-slate-200">
-      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+    <div className="rounded-lg bg-white p-3 ring-1 ring-pr-stone">
+      <p className="text-xs uppercase tracking-wide text-pr-black-soft/50">{label}</p>
       <p className={`mt-1 text-lg font-bold ${tone === 'danger' ? 'text-red-600' : 'text-provence'}`}>
         {value}
       </p>

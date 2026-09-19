@@ -45,13 +45,13 @@ export function ProviderCard({
       : null;
 
   return (
-    <div className="space-y-2 rounded-lg bg-white p-4 ring-1 ring-slate-200">
+    <div className="space-y-2 rounded-lg bg-white p-4 ring-1 ring-pr-stone">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-slate-900">
+          <p className="truncate font-semibold text-pr-black">
             {provider.provider_company}
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-pr-black-soft/50">
             {PROVIDER_TYPE_LABELS[provider.provider_type]} · {spaceName}
           </p>
         </div>
@@ -60,15 +60,15 @@ export function ProviderCard({
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
         <div className="flex justify-between">
-          <dt className="text-slate-500">Arr. prévue</dt>
+          <dt className="text-pr-black-soft/50">Arr. prévue</dt>
           <dd>{provider.planned_arrival_time?.slice(0, 5) ?? '—'}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-slate-500">Arr. réelle</dt>
+          <dt className="text-pr-black-soft/50">Arr. réelle</dt>
           <dd>{provider.actual_arrival_time?.slice(0, 5) ?? '—'}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-slate-500">Retard</dt>
+          <dt className="text-pr-black-soft/50">Retard</dt>
           <dd>
             {delay === null ? (
               '—'
@@ -81,7 +81,7 @@ export function ProviderCard({
           </dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-slate-500">Durée</dt>
+          <dt className="text-pr-black-soft/50">Durée</dt>
           <dd>{duration === null ? '—' : formatHours(duration)}</dd>
         </div>
       </dl>

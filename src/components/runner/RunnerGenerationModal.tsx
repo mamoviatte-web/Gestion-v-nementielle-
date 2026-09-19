@@ -148,7 +148,7 @@ export function RunnerGenerationModal({
           <h2 className="flex items-center gap-2 text-lg font-bold text-provence">
             <Zap className="h-5 w-5" /> Générer les dotations runner
           </h2>
-          <button onClick={onClose} aria-label="Fermer" className="text-slate-400 hover:text-slate-600">
+          <button onClick={onClose} aria-label="Fermer" className="text-pr-black-soft/45 hover:text-pr-black-soft/70">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -193,23 +193,23 @@ export function RunnerGenerationModal({
 
           {/* Split affluence VIP / Grand Public (calibrage des buvettes). */}
           {expectedPax != null ? (
-            <div className="rounded-lg bg-slate-50 p-3 text-sm ring-1 ring-slate-200">
+            <div className="rounded-lg bg-pr-cream p-3 text-sm ring-1 ring-pr-stone">
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div>
                   <p className="text-lg font-bold text-provence">{expectedPax}</p>
-                  <p className="text-xs text-slate-500">Affluence</p>
+                  <p className="text-xs text-pr-black-soft/50">Affluence</p>
                 </div>
                 <div>
                   <p className="text-lg font-bold text-provence">{vipPax}</p>
-                  <p className="text-xs text-slate-500">VIP &amp; Bars</p>
+                  <p className="text-xs text-pr-black-soft/50">VIP &amp; Bars</p>
                 </div>
                 <div>
                   <p className="text-lg font-bold text-provence">{gpPax}</p>
-                  <p className="text-xs text-slate-500">Grand Public</p>
+                  <p className="text-xs text-pr-black-soft/50">Grand Public</p>
                 </div>
               </div>
               {gpRef != null && (
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-pr-black-soft/50">
                   🍺 Buvettes calibrées pour ~{gpPax} spectateurs Grand Public (réf. Vannes {gpRef}).
                 </p>
               )}
@@ -222,13 +222,13 @@ export function RunnerGenerationModal({
           )}
 
           <div>
-            <p className="mb-1 text-sm font-medium text-slate-700">Espaces à inclure</p>
-            <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto rounded-lg ring-1 ring-slate-200 p-2 sm:grid-cols-2">
+            <p className="mb-1 text-sm font-medium text-pr-black-soft/80">Espaces à inclure</p>
+            <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto rounded-lg ring-1 ring-pr-stone p-2 sm:grid-cols-2">
               {spaces.map((s) => (
                 <label key={s.space_id} className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 text-provence focus:ring-provence"
+                    className="h-4 w-4 rounded border-pr-stone text-provence focus:ring-provence"
                     checked={selected.has(s.space_id)}
                     onChange={() => toggle(s.space_id)}
                   />
@@ -246,7 +246,7 @@ export function RunnerGenerationModal({
               checked={overwrite}
               onChange={(e) => setOverwrite(e.target.checked)}
             />
-            <span className="text-slate-700">
+            <span className="text-pr-black-soft/80">
               <span className="font-semibold text-amber-800">Écraser les fiches déjà validées</span>
               <br />
               Dévalide toutes les fiches de l'événement puis régénère, pour réinjecter les produits

@@ -77,7 +77,7 @@ export function PresenceTable({
 
           return (
             <TR key={p.provider_presence_id}>
-              <TD className="font-medium text-slate-900">{p.provider_company}</TD>
+              <TD className="font-medium text-pr-black">{p.provider_company}</TD>
               <TD>{PROVIDER_TYPE_LABELS[p.provider_type]}</TD>
               <TD>{spaceNameOf(p.space_id)}</TD>
               <TD>

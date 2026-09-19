@@ -101,7 +101,7 @@ export function ProvidersPanel({
 
       {/* Formulaire d'ajout */}
       {showForm && (
-        <div className="space-y-3 rounded-lg bg-white p-4 ring-1 ring-slate-200">
+        <div className="space-y-3 rounded-lg bg-white p-4 ring-1 ring-pr-stone">
           {error && <Alert variant="error">{error}</Alert>}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input

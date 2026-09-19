@@ -283,7 +283,7 @@ export default function EspaceAssortmentPage() {
                 placeholder="—"
               />
               <div className="flex flex-col justify-end">
-                <label className="mb-1 block text-sm font-medium text-slate-700">Stock</label>
+                <label className="mb-1 block text-sm font-medium text-pr-black-soft/80">Stock</label>
                 <label className="flex min-h-[38px] cursor-pointer items-center gap-2 rounded-lg px-1 text-sm text-stone-700">
                   <input type="checkbox" checked={cRetains} onChange={(e) => setCRetains(e.target.checked)} className="h-4 w-4 rounded" />
                   Conserve son stock entre les matchs

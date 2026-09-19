@@ -206,9 +206,9 @@ export function KegReceptionModal({ onClose, onDone }: { onClose: () => void; on
           {lines.map((l, i) => (
             <div key={i} className="grid grid-cols-12 items-end gap-2">
               <div className="col-span-5">
-                <label className="mb-1 block text-xs font-medium text-slate-600">Produit</label>
+                <label className="mb-1 block text-xs font-medium text-pr-black-soft/70">Produit</label>
                 <select
-                  className="block w-full rounded-lg border-0 px-2 py-2 text-sm ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-provence"
+                  className="block w-full rounded-lg border-0 px-2 py-2 text-sm ring-1 ring-inset ring-pr-stone focus:ring-2 focus:ring-provence"
                   value={l.product_id}
                   onChange={(e) => updateLine(i, 'product_id', e.target.value)}
                 >
@@ -244,8 +244,8 @@ export function KegReceptionModal({ onClose, onDone }: { onClose: () => void; on
         {/* Facture : PDF + montants */}
         <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-pr-cream/40 p-3 sm:grid-cols-3">
           <div className="col-span-2 sm:col-span-1">
-            <label className="mb-1 block text-xs font-medium text-slate-600">PDF de la facture</label>
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-inset ring-slate-300 hover:ring-provence">
+            <label className="mb-1 block text-xs font-medium text-pr-black-soft/70">PDF de la facture</label>
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-inset ring-pr-stone hover:ring-provence">
               <Paperclip className="h-4 w-4 text-pr-olive" />
               <span className="truncate">{pdfFile ? pdfFile.name : 'Joindre un PDF…'}</span>
               <input type="file" accept="application/pdf" className="hidden" onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)} />

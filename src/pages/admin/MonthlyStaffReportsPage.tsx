@@ -443,7 +443,7 @@ export default function MonthlyStaffReportsPage() {
     <div>
       <Link
         to="/admin/analytics/staff"
-        className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"
+        className="mb-3 inline-flex items-center gap-1 text-sm text-pr-black-soft/50 hover:text-pr-black-soft/90"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden />
         Staff &amp; Horaires
@@ -539,12 +539,12 @@ export default function MonthlyStaffReportsPage() {
                 return (
                   <Fragment key={r.id}>
                     <tr
-                      className="cursor-pointer hover:bg-slate-50"
+                      className="cursor-pointer hover:bg-pr-cream"
                       onClick={() =>
                         setExpandedId(isExpanded ? null : r.id)
                       }
                     >
-                      <TD className="font-medium text-slate-900">
+                      <TD className="font-medium text-pr-black">
                         {r.staff_name}
                       </TD>
                       <TD>{resolveSpaceName(r)}</TD>
@@ -561,7 +561,7 @@ export default function MonthlyStaffReportsPage() {
                           {isHigh && ' ⚠️'}
                         </Badge>
                       </TD>
-                      <TD className="text-right text-slate-500">
+                      <TD className="text-right text-pr-black-soft/50">
                         {rate != null ? `${rate.toFixed(2)} €/h` : '—'}
                       </TD>
                       <TD className="text-right font-medium">
@@ -569,10 +569,10 @@ export default function MonthlyStaffReportsPage() {
                       </TD>
                     </tr>
                     {isExpanded && (
-                      <tr className="bg-slate-50/60">
+                      <tr className="bg-pr-cream/60">
                         <td colSpan={8} className="px-3 py-3">
                           {detail.length === 0 ? (
-                            <p className="text-sm text-slate-500">
+                            <p className="text-sm text-pr-black-soft/50">
                               Aucun événement détaillé pour cet agent.
                             </p>
                           ) : (

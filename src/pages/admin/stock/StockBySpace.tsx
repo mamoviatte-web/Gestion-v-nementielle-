@@ -356,7 +356,7 @@ function InventoryModal({
                       type="number"
                       min={0}
                       inputMode="numeric"
-                      className="w-24 rounded-lg border-0 px-2 py-1 text-right tabular-nums ring-1 ring-inset ring-slate-300 focus:ring-2 focus:ring-provence"
+                      className="w-24 rounded-lg border-0 px-2 py-1 text-right tabular-nums ring-1 ring-inset ring-pr-stone focus:ring-2 focus:ring-provence"
                       value={counts[l.product.product_id] ?? ''}
                       onChange={(e) =>
                         setCounts((c) => ({ ...c, [l.product.product_id]: e.target.value }))

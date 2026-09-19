@@ -212,7 +212,7 @@ export default function StockMovements() {
           <TBody>
             {rows.map((row) => (
               <TR key={row.movement_id}>
-                <TD className="whitespace-nowrap text-slate-500">
+                <TD className="whitespace-nowrap text-pr-black-soft/50">
                   {new Date(row.created_at).toLocaleString('fr-FR', {
                     day: '2-digit',
                     month: '2-digit',

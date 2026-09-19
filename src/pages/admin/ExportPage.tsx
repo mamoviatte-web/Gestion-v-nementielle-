@@ -30,13 +30,13 @@ export default function ExportPage() {
         <div className="space-y-6">
           {/* Sélecteur d'événement (radio) */}
           <fieldset className="space-y-2">
-            <legend className="mb-1 text-sm font-medium text-slate-700">
+            <legend className="mb-1 text-sm font-medium text-pr-black-soft/80">
               Événement à exporter
             </legend>
             {list.map((e) => (
               <label
                 key={e.event_id}
-                className="flex cursor-pointer items-center gap-3 rounded-lg bg-white p-3 ring-1 ring-slate-200 hover:bg-slate-50"
+                className="flex cursor-pointer items-center gap-3 rounded-lg bg-white p-3 ring-1 ring-pr-stone hover:bg-pr-cream"
               >
                 <input
                   type="radio"
@@ -45,8 +45,8 @@ export default function ExportPage() {
                   checked={selectedId === e.event_id}
                   onChange={() => setSelectedId(e.event_id)}
                 />
-                <span className="font-medium text-slate-900">{e.event_name}</span>
-                <span className="text-sm text-slate-500">
+                <span className="font-medium text-pr-black">{e.event_name}</span>
+                <span className="text-sm text-pr-black-soft/50">
                   {new Date(e.event_date).toLocaleDateString('fr-FR')}
                 </span>
               </label>
@@ -101,13 +101,13 @@ function PreviewCard({
   extra?: string;
 }) {
   return (
-    <div className="rounded-lg bg-white p-4 ring-1 ring-slate-200">
+    <div className="rounded-lg bg-white p-4 ring-1 ring-pr-stone">
       <div className="flex items-center gap-2">
         <FileSpreadsheet className="h-5 w-5 text-provence" />
-        <p className="font-semibold text-slate-900">{title}</p>
+        <p className="font-semibold text-pr-black">{title}</p>
       </div>
-      <p className="mt-1 text-sm text-slate-500">{lines}</p>
-      {extra && <p className="text-sm font-medium text-slate-700">{extra}</p>}
+      <p className="mt-1 text-sm text-pr-black-soft/50">{lines}</p>
+      {extra && <p className="text-sm font-medium text-pr-black-soft/80">{extra}</p>}
     </div>
   );
 }
