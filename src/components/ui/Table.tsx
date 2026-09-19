@@ -5,12 +5,13 @@ interface TableProps extends TableHTMLAttributes<HTMLTableElement> {
   children: ReactNode;
 }
 
-/** Conteneur de table responsive (scroll horizontal sur mobile). */
+/** Conteneur de table responsive (scroll horizontal sur mobile).
+ *  Palette Provence homogène : anneau stone, en-tête crème, texte apaisé. */
 export function Table({ children, className, ...props }: TableProps) {
   return (
-    <div className="w-full overflow-x-auto rounded-lg ring-1 ring-slate-200">
+    <div className="w-full overflow-x-auto rounded-xl ring-1 ring-pr-stone">
       <table
-        className={clsx('w-full divide-y divide-slate-200 text-sm', className)}
+        className={clsx('w-full text-sm', className)}
         {...props}
       >
         {children}
@@ -20,16 +21,16 @@ export function Table({ children, className, ...props }: TableProps) {
 }
 
 export function THead({ children }: { children: ReactNode }) {
-  return <thead className="bg-slate-50">{children}</thead>;
+  return <thead className="bg-pr-cream">{children}</thead>;
 }
 
 export function TBody({ children }: { children: ReactNode }) {
-  return <tbody className="divide-y divide-slate-100 bg-white">{children}</tbody>;
+  return <tbody className="divide-y divide-pr-stone/60 bg-white">{children}</tbody>;
 }
 
 export function TFoot({ children }: { children: ReactNode }) {
   return (
-    <tfoot className="border-t-2 border-slate-200 bg-slate-50 font-medium">
+    <tfoot className="border-t-2 border-pr-stone bg-pr-cream font-semibold text-pr-black">
       {children}
     </tfoot>
   );
@@ -50,7 +51,7 @@ export function TH({
     <th
       scope="col"
       className={clsx(
-        'px-3 py-2.5 text-left font-semibold text-slate-600',
+        'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-pr-black-soft/45',
         className,
       )}
     >
@@ -66,5 +67,5 @@ export function TD({
   children?: ReactNode;
   className?: string;
 }) {
-  return <td className={clsx('px-3 py-2.5 text-slate-700', className)}>{children}</td>;
+  return <td className={clsx('px-3 py-2.5 text-pr-black-soft/80', className)}>{children}</td>;
 }
