@@ -27,16 +27,25 @@ const OLIVE = '#6B7548';
 const STONE = '#E8E4DA';
 const INK = '#1A1A1A';
 
+/** Format compact pour les graduations d'axe (évite les libellés tronqués). */
+function compact(v: number): string {
+  const a = Math.abs(v);
+  if (a >= 1000) return `${Math.round(v / 100) / 10}k`.replace('.', ',');
+  return String(Math.round(v));
+}
+
 export function TrendChart({
   data,
   height = 200,
   format = (v) => String(v),
+  yTickFormat = compact,
   valueLabel = 'Valeur',
   refLabel = 'Référence',
 }: {
   data: TrendPoint[];
   height?: number;
   format?: (v: number) => string;
+  yTickFormat?: (v: number) => string;
   valueLabel?: string;
   refLabel?: string;
 }) {
@@ -69,11 +78,11 @@ export function TrendChart({
           interval="preserveStartEnd"
         />
         <YAxis
-          width={44}
+          width={40}
           tick={{ fontSize: 11, fill: INK, fillOpacity: 0.45 }}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(v) => format(Number(v))}
+          tickFormatter={(v) => yTickFormat(Number(v))}
         />
         <Tooltip
           cursor={{ stroke: STONE, strokeWidth: 1 }}
