@@ -135,7 +135,7 @@ export default function CatalogPage() {
       />
 
       {showForm && (
-        <div className="mb-5 space-y-3 rounded-lg bg-white p-4 ring-1 ring-slate-200">
+        <div className="mb-5 space-y-3 rounded-lg bg-white p-4 ring-1 ring-pr-stone">
           {error && <Alert variant="error">{error}</Alert>}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
@@ -198,7 +198,7 @@ export default function CatalogPage() {
               onChange={(e) => setForm({ ...form, packaging_unit: e.target.value })}
             />
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex items-center gap-2 text-sm text-pr-black-soft/80">
             <input
               type="checkbox"
               className="h-4 w-4 rounded border-pr-stone text-pr-olive focus:ring-pr-olive"
@@ -224,7 +224,7 @@ export default function CatalogPage() {
           if (items.length === 0) return null;
           return (
             <section key={category}>
-              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-pr-black-soft/50">
                 {category} ({items.length})
               </h2>
               <ul className="space-y-2">
@@ -234,10 +234,10 @@ export default function CatalogPage() {
                   return (
                     <li
                       key={p.product_id}
-                      className="flex items-center justify-between gap-3 rounded-lg bg-white p-3 ring-1 ring-slate-200"
+                      className="flex items-center justify-between gap-3 rounded-lg bg-white p-3 ring-1 ring-pr-stone"
                     >
                       <div className="min-w-0">
-                        <p className="flex items-center gap-2 truncate font-medium text-slate-900">
+                        <p className="flex items-center gap-2 truncate font-medium text-pr-black">
                           {p.product_name}
                           {p.is_sensitive && (
                             <Badge tone="danger">
@@ -250,7 +250,7 @@ export default function CatalogPage() {
                             </Badge>
                           )}
                         </p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-pr-black-soft/50">
                           {p.unit}
                           {p.packaging ? ` · ${p.packaging}` : ''}
                           {` · Min: ${min}${p.max_stock != null ? ` | Max: ${p.max_stock}` : ''}`}
@@ -262,7 +262,7 @@ export default function CatalogPage() {
                         {p.unit_price_ht === null ? (
                           <Badge tone="warning">Prix manquant</Badge>
                         ) : (
-                          <span className="text-sm font-medium text-slate-700">
+                          <span className="text-sm font-medium text-pr-black-soft/80">
                             {formatEuro(p.unit_price_ht)}
                           </span>
                         )}
@@ -274,7 +274,7 @@ export default function CatalogPage() {
                             : 'Suivi central actif — cliquer pour exclure des alertes (produit livré par événement)'}
                           className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold disabled:opacity-40 ${
                             p.track_central_stock === false
-                              ? 'bg-slate-100 text-slate-400'
+                              ? 'bg-pr-stone/50 text-pr-black-soft/45'
                               : 'bg-emerald-100 text-emerald-700'
                           }`}
                         >
@@ -313,7 +313,7 @@ export default function CatalogPage() {
       {/* Produits désactivés */}
       {list.some((p) => !p.active) && (
         <section className="mt-8">
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-pr-black-soft/45">
             Produits désactivés
           </h2>
           <ul className="space-y-2">
@@ -322,9 +322,9 @@ export default function CatalogPage() {
               .map((p) => (
                 <li
                   key={p.product_id}
-                  className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200"
+                  className="flex items-center justify-between gap-3 rounded-lg bg-pr-cream p-3 ring-1 ring-pr-stone"
                 >
-                  <span className="text-sm text-slate-500 line-through">
+                  <span className="text-sm text-pr-black-soft/50 line-through">
                     {p.product_name}
                   </span>
                   <Button

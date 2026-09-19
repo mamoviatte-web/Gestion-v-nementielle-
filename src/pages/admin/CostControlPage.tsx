@@ -19,8 +19,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { AlertCircle, CheckCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { Card, SectionTitle } from '@/components/ui';
+import { TrendChart, type TrendPoint } from '@/components/ui/charts/TrendChart';
 
 type Tab = 'fb' | 'external' | 'traiteur';
 type EventType = 'tous' | 'match' | 'seminaire' | 'autre';
@@ -325,6 +327,15 @@ export default function CostControlPage() {
     [filtered],
   );
 
+  const fbTrend = useMemo<TrendPoint[]>(
+    () =>
+      [...filtered].reverse().slice(-12).map((e) => ({
+        label: e.event_name.length > 11 ? e.event_name.slice(0, 10) + '…' : e.event_name,
+        value: Math.round(e.total_fb_ht),
+      })),
+    [filtered],
+  );
+
   const extByType = useMemo(() => {
     const map: Record<string, number> = {};
     extCharges.forEach((c) => {
@@ -426,6 +437,15 @@ export default function CostControlPage() {
               </ResponsiveContainer>
             )}
           </div>
+
+          {fbTrend.length > 1 && (
+            <Card>
+              <SectionTitle icon={TrendingUp} right={<span className="text-xs text-pr-black-soft/40">€ HT · par événement</span>}>
+                Coût F&amp;B dans le temps
+              </SectionTitle>
+              <TrendChart data={fbTrend} height={200} format={(v) => `${fmt(v)} €`} valueLabel="Coût F&B HT" />
+            </Card>
+          )}
 
           <div className="rounded-xl border border-stone-200 bg-white p-5">
             <h3 className="mb-4 font-bold text-stone-800">Produits les plus coûteux</h3>

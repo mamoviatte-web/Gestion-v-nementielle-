@@ -18,11 +18,14 @@ import {
   AlertTriangle,
   RefreshCw,
   ArrowLeft,
+  LineChart,
 } from 'lucide-react';
 import {
   Button,
   Badge,
   Alert,
+  Card,
+  SectionTitle,
   Select,
   Table,
   THead,
@@ -33,6 +36,7 @@ import {
   EmptyState,
   Spinner,
 } from '@/components/ui';
+import { TrendChart, type TrendPoint } from '@/components/ui/charts/TrendChart';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useToast } from '@/context/ToastContext';
 import { supabase } from '@/lib/supabase';
@@ -198,6 +202,32 @@ export default function MonthlyStaffReportsPage() {
   });
 
   const rawReports = reportsQuery.data ?? [];
+
+  /* -------- Tendance : heures réelles vs prévues par mois (tous mois) -------- */
+  const trendQuery = useQuery({
+    queryKey: ['monthlyStaffTrend'],
+    queryFn: async (): Promise<TrendPoint[]> => {
+      const { data, error } = await supabase
+        .from('monthly_staff_reports')
+        .select('report_month, total_planned_h, total_actual_h');
+      if (error) throw error;
+      const m = new Map<string, { planned: number; actual: number }>();
+      for (const r of (data ?? []) as { report_month: string; total_planned_h: number | null; total_actual_h: number | null }[]) {
+        const c = m.get(r.report_month) ?? { planned: 0, actual: 0 };
+        c.planned += Number(r.total_planned_h ?? 0);
+        c.actual += Number(r.total_actual_h ?? 0);
+        m.set(r.report_month, c);
+      }
+      const monthShort = (ym: string) => {
+        const [y, mm] = ym.split('-');
+        return new Date(Number(y), Number(mm) - 1, 1).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+      };
+      return [...m.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-12)
+        .map(([mois, v]) => ({ label: monthShort(mois), value: Math.round(v.actual * 10) / 10, ref: Math.round(v.planned * 10) / 10 }));
+    },
+  });
 
   /* -------- Défense anti-orphelins --------
    * `monthly_staff_reports` est un snapshot SANS clé étrangère vers events :
@@ -457,6 +487,15 @@ export default function MonthlyStaffReportsPage() {
           Générer / Recalculer
         </Button>
       </div>
+
+      {(trendQuery.data?.length ?? 0) > 1 && (
+        <Card className="mb-4">
+          <SectionTitle icon={LineChart} right={<span className="text-xs text-pr-black-soft/40">heures · par mois</span>}>
+            Heures réelles vs prévues par mois
+          </SectionTitle>
+          <TrendChart data={trendQuery.data!} height={200} format={(v) => `${v} h`} valueLabel="Réelles" refLabel="Prévues" />
+        </Card>
+      )}
 
       {reportsQuery.isError && (
         <Alert variant="error" title="Impossible de charger les rapports">
