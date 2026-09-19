@@ -157,7 +157,6 @@ export function StockDotationsTable({
         <THead>
           <TR>
             <TH>Produit</TH>
-            <TH>Cat.</TH>
             <TH className="text-right">Dotation</TH>
             <TH>Runner</TH>
             <TH className="text-right">Initial</TH>
@@ -173,9 +172,11 @@ export function StockDotationsTable({
         <TBody>
           {rows.map((r) => (
             <TR key={r.product_id}>
-              <TD className="font-medium text-slate-900">{r.product_name}</TD>
-              <TD>{r.category}</TD>
-              <TD className="text-right">{r.planned_qty ?? '—'}</TD>
+              <TD>
+                <span className="font-medium text-pr-black">{r.product_name}</span>
+                <span className="ml-2 text-xs text-pr-black-soft/40">{r.category}</span>
+              </TD>
+              <TD className="text-right tabular-nums">{r.planned_qty ?? '—'}</TD>
               <TD>
                 {r.runner_status && r.dotation_id ? (
                   <RunnerStatusBadge
@@ -187,9 +188,9 @@ export function StockDotationsTable({
                   '—'
                 )}
               </TD>
-              <TD className="text-right">{r.initial_qty ?? '—'}</TD>
-              <TD className="text-right">{r.reassort_qty ?? '—'}</TD>
-              <TD className="text-right">{r.final_qty ?? '—'}</TD>
+              <TD className="text-right tabular-nums">{r.initial_qty ?? '—'}</TD>
+              <TD className="text-right tabular-nums">{r.reassort_qty ?? '—'}</TD>
+              <TD className="text-right tabular-nums">{r.final_qty ?? '—'}</TD>
               <TD>
                 {r.product_state ? (
                   <Badge tone={PRODUCT_STATE_META[r.product_state].tone}>
@@ -199,7 +200,7 @@ export function StockDotationsTable({
                   '—'
                 )}
               </TD>
-              <TD className="text-right">
+              <TD className="text-right tabular-nums">
                 {r.consumed === null ? (
                   '—'
                 ) : r.consumed < 0 ? (
@@ -208,23 +209,25 @@ export function StockDotationsTable({
                   r.consumed
                 )}
               </TD>
-              <TD className="text-right">
+              <TD className="text-right tabular-nums">
                 {r.unit_price_ht === null ? (
                   <Badge tone="warning">Prix manquant</Badge>
                 ) : (
                   formatEuro(r.unit_price_ht)
                 )}
               </TD>
-              <TD className="text-right">{formatEuro(r.cost)}</TD>
-              <TD>{r.responsable_nom ?? '—'}</TD>
+              <TD className="text-right font-medium tabular-nums text-pr-black">{formatEuro(r.cost)}</TD>
+              <TD>
+                <span className="text-xs font-medium uppercase tracking-wide text-pr-black-soft/50">{r.responsable_nom ?? '—'}</span>
+              </TD>
             </TR>
           ))}
         </TBody>
         <TFoot>
           <TR>
-            <TD className="font-semibold">Total coût HT</TD>
-            <TD /><TD /><TD /><TD /><TD /><TD /><TD /><TD /><TD />
-            <TD className="text-right font-semibold">
+            <TD className="font-semibold text-pr-black">Total coût HT</TD>
+            <TD /><TD /><TD /><TD /><TD /><TD /><TD /><TD />
+            <TD className="text-right font-semibold tabular-nums text-pr-black">
               {hasMissingCost ? `${formatEuro(totalCost)} *` : formatEuro(totalCost)}
             </TD>
             <TD />
@@ -232,7 +235,7 @@ export function StockDotationsTable({
         </TFoot>
       </Table>
       {hasMissingCost && (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-pr-black-soft/50">
           * Total partiel : des produits consommés n'ont pas de prix HT (RG-005).
         </p>
       )}

@@ -14,10 +14,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronRight, Activity, Calendar, Users, Trophy, Presentation,
-  BarChart3, CheckCircle2, Loader2, Circle, Star, Beer, Wine, Music,
+  BarChart3, CheckCircle2, Loader2, Circle, Star, Beer, Wine, Music, TrendingUp,
   type LucideIcon,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { TrendChart, type TrendPoint } from '@/components/ui/charts/TrendChart';
 import { isMatch } from '@/lib/eventUtils';
 import { WeeklyPlanner } from '@/components/dashboard/WeeklyPlanner';
 import { InboxPanel } from '@/components/dashboard/InboxPanel';
@@ -57,20 +58,31 @@ export default function DashboardPage() {
   const [next, setNext] = useState<EventRow | null>(null);
   const [spaces, setSpaces] = useState<VipSpaceRow[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
+  const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
     async function load() {
-      const [k, hlt, cons, evts, sp, hist] = await Promise.all([
+      const [k, hlt, cons, evts, sp, hist, trd] = await Promise.all([
         supabase.from('dashboard_kpis').select('*').maybeSingle(),
         supabase.from('audit_latest_run').select('global_score, critical_count, warning_count').maybeSingle(),
         supabase.from('consumption_general_by_space').select('family, valeur_ht'),
         supabase.from('events').select('event_id, event_name, event_type, status, event_date, start_time, expected_attendees').in('status', ['en_cours', 'préparé']).order('event_date').limit(5),
         supabase.from('dashboard_vip_spaces_status').select('*'),
         supabase.from('events').select('event_id, event_name, event_type, status, event_date, total_fb_cost_ht, expected_attendees').in('status', ['clôturé', 'archivé']).order('event_date', { ascending: false }).limit(5),
+        supabase.from('events').select('event_name, event_date, total_fb_cost_ht').eq('event_type', 'match').in('status', ['clôturé', 'archivé']).not('total_fb_cost_ht', 'is', null).order('event_date', { ascending: false }).limit(12),
       ]);
       if (!alive) return;
+
+      // Courbe : coût F&B HT des derniers matchs (ordre chronologique).
+      const trdRows = (trd.data as { event_name: string; event_date: string; total_fb_cost_ht: number }[] | null) ?? [];
+      setTrend(
+        [...trdRows].reverse().map((r) => ({
+          label: r.event_name.length > 11 ? r.event_name.slice(0, 10) + '…' : r.event_name,
+          value: num(r.total_fb_cost_ht),
+        })),
+      );
 
       const kData = (k.data as Record<string, unknown> | null) ?? null;
       setKpis(kData ? {
@@ -219,6 +231,18 @@ export default function DashboardPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ── COURBE : coût F&B par match ── */}
+      {trend.length > 1 && (
+        <div className="card p-5">
+          <div className="mb-2 flex items-center gap-2">
+            <TrendingUp size={16} style={{ color: 'var(--ink-2)' }} />
+            <p className="text-sm font-bold" style={{ color: 'var(--ink)' }}>Coût F&amp;B par match</p>
+            <span className="ml-auto text-xs" style={{ color: 'var(--muted)' }}>€ HT · {trend.length} derniers matchs</span>
+          </div>
+          <TrendChart data={trend} height={200} format={(v) => `${eur0(v)} €`} valueLabel="Coût F&B HT" />
         </div>
       )}
 
