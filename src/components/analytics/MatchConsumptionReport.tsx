@@ -5,7 +5,7 @@
  */
 
 import { useMemo } from 'react';
-import { Alert, Badge, EmptyState, Spinner, Table, TBody, TD, TH, THead, TR } from '@/components/ui';
+import { Alert, Badge, Card, EmptyState, Spinner, Table, TBody, TD, TH, THead, TR } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import { useMatchConsumptionReport, type MatchConsumptionLine } from '@/hooks/useMatchConsumptionReport';
 import { Beer, Star, TrendingUp } from 'lucide-react';
@@ -64,20 +64,20 @@ export function MatchConsumptionReport({ eventId }: { eventId: string }) {
     <div className="space-y-6">
       {/* KPIs séparés */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-l-4 border-pr-stone border-l-pr-gold bg-white p-4">
+        <Card accent="gold" pad="sm">
           <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-pr-black-soft/50">
             <Star className="h-3.5 w-3.5" /> VIP &amp; Bars
           </p>
           <p className="mt-1 font-display text-2xl font-black text-pr-black">{formatEuro(totalVipCost)}</p>
           <p className="mt-1 text-xs text-pr-black-soft/50">{vipClosed} ligne(s) clôturée(s)</p>
-        </div>
-        <div className="rounded-xl border border-l-4 border-pr-stone border-l-amber-500 bg-white p-4">
+        </Card>
+        <Card accent="olive" pad="sm">
           <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-pr-black-soft/50">
             <Beer className="h-3.5 w-3.5" /> Grand Public
           </p>
           <p className="mt-1 font-display text-2xl font-black text-pr-black">{formatEuro(totalGpCost)}</p>
           <p className="mt-1 text-xs text-pr-black-soft/50">Buvettes B1–B9</p>
-        </div>
+        </Card>
       </div>
 
       {/* Tableau VIP & Bars */}
@@ -127,7 +127,7 @@ export function MatchConsumptionReport({ eventId }: { eventId: string }) {
       {/* Tableau Grand Public — groupé par produit */}
       <section className="space-y-2">
         <h3 className="flex items-center gap-2 font-display text-base font-semibold text-pr-black">
-          <Beer className="h-4 w-4 text-amber-500" /> Grand Public — Buvettes
+          <Beer className="h-4 w-4 text-pr-olive" /> Grand Public — Buvettes
         </h3>
         {gpByProduct.length === 0 ? (
           <p className="text-sm text-pr-black-soft">Aucune consommation buvette saisie.</p>

@@ -9,8 +9,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, TrendingUp, Users, Clock, Wallet, AlertTriangle, FileSpreadsheet } from 'lucide-react';
+import { Download, AlertTriangle, FileSpreadsheet, LineChart } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { Card, SectionTitle, StatTile } from '@/components/ui';
+import { TrendChart } from '@/components/ui/charts/TrendChart';
 import { downloadAoaWorkbook, type AoaSheetOut } from '@/lib/xlsxAoa';
 import { downloadPayrollWorkbook, type PayrollRow, type PayrollDetailRow } from '@/lib/payrollExport';
 
@@ -60,34 +62,24 @@ const moisLabel = (ym: string): string => {
   return d.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
 };
 
-function Tile({ icon, label, value, sub, accent }: { icon: React.ReactNode; label: string; value: string; sub?: string; accent?: string }) {
-  return (
-    <div className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-2 text-stone-400">{icon}<span className="text-[11px] font-semibold uppercase tracking-wide">{label}</span></div>
-      <p className={`mt-1 text-2xl font-black tabular-nums ${accent ?? 'text-stone-900'}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-stone-400">{sub}</p>}
-    </div>
-  );
-}
-
 interface BreakItem { key: string; label: string; heures: number; cout: number }
 function Breakdown({ title, items }: { title: string; items: BreakItem[] }) {
   const max = Math.max(1, ...items.map((i) => i.cout));
   return (
-    <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white">
-      <div className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-sm font-bold text-stone-700">{title}</div>
-      <div className="divide-y divide-stone-50">
+    <div className="overflow-hidden rounded-2xl border border-pr-stone bg-white">
+      <div className="border-b border-pr-stone bg-pr-cream px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-pr-black-soft/50">{title}</div>
+      <div className="divide-y divide-pr-stone/50">
         {items.map((r) => (
           <div key={r.key} className="px-4 py-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-sm font-medium text-stone-800">{r.label}</span>
-              <span className="shrink-0 text-sm font-bold tabular-nums text-indigo-600">{eur(r.cout)}</span>
+              <span className="truncate text-sm font-medium text-pr-black-soft/80">{r.label}</span>
+              <span className="shrink-0 text-sm font-bold tabular-nums text-pr-olive-dark">{eur(r.cout)}</span>
             </div>
             <div className="mt-1 flex items-center gap-2">
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-100">
-                <div className="h-full rounded-full bg-indigo-500" style={{ width: `${(r.cout / max) * 100}%` }} />
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-pr-stone/50">
+                <div className="h-full rounded-full bg-pr-olive" style={{ width: `${(r.cout / max) * 100}%` }} />
               </div>
-              <span className="shrink-0 text-[11px] text-stone-400">{hrs(r.heures)} h</span>
+              <span className="shrink-0 text-[11px] text-pr-black-soft/40">{hrs(r.heures)} h</span>
             </div>
           </div>
         ))}
@@ -243,6 +235,15 @@ export default function RhAnalytiquePage() {
     return [...m.entries()].map(([statut, v]) => ({ statut, ...v })).sort((a, b) => b.cout - a.cout);
   }, [details]);
 
+  // Courbe : coût RH HT agrégé par mois (ordre chronologique).
+  const trendMois = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) m.set(r.mois, (m.get(r.mois) ?? 0) + r.cout_ht);
+    return [...m.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([mois, cout]) => ({ label: moisLabel(mois), value: cout }));
+  }, [rows]);
+
   function exportExcel() {
     const detail: AoaSheetOut = {
       name: 'Heures mensuelles',
@@ -285,10 +286,10 @@ export default function RhAnalytiquePage() {
     <div className="mx-auto max-w-6xl space-y-6 p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-1.5 rounded-full bg-indigo-500" />
+          <div className="h-8 w-1.5 rounded-full bg-pr-gold" />
           <div>
-            <h1 className="text-2xl font-black text-stone-900">RH Analytique</h1>
-            <p className="text-sm text-stone-400">Heures mensuelles par personne, coûts par mission — inter-matchs.</p>
+            <h1 className="font-display text-2xl font-black text-pr-black">RH Analytique</h1>
+            <p className="text-sm text-pr-black-soft/50">Heures mensuelles par personne, coûts par mission — inter-matchs.</p>
           </div>
         </div>
         <div className="flex flex-wrap items-end gap-2">
@@ -399,11 +400,21 @@ export default function RhAnalytiquePage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile icon={<Users size={14} />} label="Personnes" value={String(totals.personnes)} sub={`${totals.mois} mois`} />
-        <Tile icon={<Clock size={14} />} label="Heures" value={hrs(totals.heures)} sub="cumulées" />
-        <Tile icon={<Wallet size={14} />} label="Coût HT" value={eur(totals.cout)} accent="text-indigo-600" />
-        <Tile icon={<TrendingUp size={14} />} label="Coût moyen / h" value={totals.heures > 0 ? eur(totals.cout / totals.heures) : '—'} />
+        <StatTile label="Personnes" value={totals.personnes} sub={`${totals.mois} mois`} />
+        <StatTile label="Heures" value={hrs(totals.heures)} sub="cumulées" />
+        <StatTile label="Coût HT" value={eur(totals.cout)} tone="good" />
+        <StatTile label="Coût moyen / h" value={totals.heures > 0 ? eur(totals.cout / totals.heures) : '—'} />
       </div>
+
+      {/* ── Courbe : coût RH par mois ── */}
+      {trendMois.length > 1 && (
+        <Card>
+          <SectionTitle icon={LineChart} right={<span className="text-xs text-pr-black-soft/40">€ HT · par mois</span>}>
+            Coût RH par mois
+          </SectionTitle>
+          <TrendChart data={trendMois} height={210} format={(v) => eur(v)} valueLabel="Coût RH HT" />
+        </Card>
+      )}
 
       {/* Ventilations : mission / espace / statut */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
@@ -419,19 +430,19 @@ export default function RhAnalytiquePage() {
       </div>
 
       {/* Détail par personne × mois */}
-      <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white">
-        <div className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-sm font-bold text-stone-700">Détail par personne × mois</div>
+      <div className="overflow-hidden rounded-2xl border border-pr-stone bg-white">
+        <div className="border-b border-pr-stone bg-pr-cream px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-pr-black-soft/50">Détail par personne × mois</div>
         {loading ? (
-          <div className="h-40 animate-pulse bg-stone-50" />
+          <div className="h-40 animate-pulse bg-pr-cream" />
         ) : rows.length === 0 ? (
-          <p className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-stone-400">
-            <AlertTriangle size={16} className="text-stone-300" />Aucune heure enregistrée sur cette plage de mois.
+          <p className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-pr-black-soft/40">
+            <AlertTriangle size={16} className="text-pr-black-soft/30" />Aucune heure enregistrée sur cette plage de mois.
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-stone-100 text-left text-xs uppercase tracking-wide text-stone-400">
+                <tr className="border-b border-pr-stone text-left text-[11px] uppercase tracking-wider text-pr-black-soft/45">
                   <th className="px-4 py-2">Personne</th>
                   <th className="px-3 py-2">Mois</th>
                   <th className="px-3 py-2">Missions</th>
@@ -440,15 +451,15 @@ export default function RhAnalytiquePage() {
                   <th className="px-3 py-2 text-right">Événements</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-50">
+              <tbody className="divide-y divide-pr-stone/50">
                 {rows.map((r, i) => (
-                  <tr key={`${r.staff_name}-${r.mois}-${i}`} className="text-stone-800">
-                    <td className="px-4 py-2 font-medium">{r.staff_name}</td>
-                    <td className="px-3 py-2 text-stone-500">{moisLabel(r.mois)}</td>
-                    <td className="px-3 py-2 text-stone-500">{r.missions || '—'}</td>
+                  <tr key={`${r.staff_name}-${r.mois}-${i}`} className="text-pr-black-soft/80">
+                    <td className="px-4 py-2 font-medium text-pr-black">{r.staff_name}</td>
+                    <td className="px-3 py-2 text-pr-black-soft/50">{moisLabel(r.mois)}</td>
+                    <td className="px-3 py-2 text-pr-black-soft/50">{r.missions || '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{hrs(r.heures)}</td>
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums">{eur(r.cout_ht)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-stone-500">{r.nb_evenements}</td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-pr-black">{eur(r.cout_ht)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-pr-black-soft/50">{r.nb_evenements}</td>
                   </tr>
                 ))}
               </tbody>
