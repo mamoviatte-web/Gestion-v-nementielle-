@@ -40,7 +40,7 @@ import { RevenueMarginPanel } from '@/components/events/RevenueMarginPanel';
 import { EventResetButton } from '@/components/events/EventResetButton';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
 import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
-import { Zap, CalendarClock, Pencil, AlertTriangle } from 'lucide-react';
+import { Zap, CalendarClock, Pencil, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 
 type Tab =
@@ -165,6 +165,7 @@ export default function EventDetailPage() {
   const [showRunnerModal, setShowRunnerModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [showSpacesModal, setShowSpacesModal] = useState(false);
+  const [recaling, setRecaling] = useState(false);
   // R1 : blocage de clôture tant que les données ne sont pas fiables.
   const [closureIssues, setClosureIssues] = useState<ClosureCheck | null>(null);
 
@@ -190,6 +191,22 @@ export default function EventDetailPage() {
       console.error('Erreur clôture:', err);
       showToast(`Impossible de clôturer : ${err instanceof Error ? err.message : 'erreur inconnue'}`, 'warning');
     }
+  }
+
+  // Recale le solde des espaces « à stock conservé » sur le restant réel de la
+  // clôture (idempotent). Utile après correction d'un stock final : les fiches
+  // runner du match suivant reflètent alors le stock déjà sur place.
+  async function handleRecalerEspaces() {
+    if (!id) return;
+    setRecaling(true);
+    const { data, error } = await supabase.rpc('finalize_event_espace_stocks', { p_event_id: id });
+    const r = data as { success?: boolean; error?: string; espaces_recales?: number; lignes_recalees?: number } | null;
+    setRecaling(false);
+    if (error || !r?.success) {
+      showToast(`Échec du recalage : ${r?.error ?? error?.message ?? 'erreur inconnue'}`, 'warning');
+      return;
+    }
+    showToast(`Stocks espaces recalés : ${r.espaces_recales ?? 0} espace(s), ${r.lignes_recalees ?? 0} ligne(s). Les fiches runner reflètent le stock restant.`, 'success');
   }
 
   async function handleCloseEvent(eventName: string) {
@@ -369,6 +386,17 @@ export default function EventDetailPage() {
                   }
                 >
                   📊 Rapport Excel
+                </Button>
+              )}
+              {isClosed && isMatch && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  loading={recaling}
+                  onClick={() => void handleRecalerEspaces()}
+                  title="Recale le solde des espaces sur le stock restant de la clôture (à relancer après correction d'un stock final)"
+                >
+                  <RefreshCw className="h-4 w-4" /> Recaler les stocks espaces
                 </Button>
               )}
             </div>
