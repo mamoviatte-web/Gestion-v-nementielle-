@@ -173,33 +173,51 @@ export default function EventDetailPage() {
   // Clôture effective (une fois les données jugées fiables ou forcées).
   async function doClose(eventName: string) {
     try {
+      let kegNotice = '';
+      // ── Opérateur de contrôle des fûts — AVANT de figer la clôture ──
+      // Défauts bloquants → avertissement fort + « clôturer quand même ? ».
+      // Non bloquant / ancrage périmé → simple notice.
+      if (eventQuery.data?.event_type === 'match' && id) {
+        try {
+          const { data: aud } = await supabase.rpc('audit_keg_closure', { p_event_id: id });
+          const a = aud as { nb_defauts?: number; ancrage_perime?: boolean; dernier_comptage?: string | null; defauts?: { gravite: string; product_name: string; space_name: string; detail: string }[] } | null;
+          if (a) {
+            const bloquants = (a.defauts ?? []).filter((d) => d.gravite === 'bloquant');
+            if (bloquants.length > 0) {
+              const lignes = bloquants.slice(0, 12).map((d) => `•  ${d.product_name} — ${d.space_name}\n    ${d.detail}`).join('\n');
+              const forcer = window.confirm(
+                `⚠  CLÔTURE BLOQUÉE PAR LE CONTRÔLE DES FÛTS\n` +
+                `« ${eventName} » — ${bloquants.length} défaut(s) bloquant(s) :\n\n` +
+                `${lignes}\n\n` +
+                `Ces fûts partis ne sont PAS comptés : le stock fûts sera faux après clôture.\n\n` +
+                `→ « Annuler » pour corriger les stocks finaux d'abord (recommandé).\n` +
+                `→ « OK » pour clôturer QUAND MÊME (les défauts seront tracés).`,
+              );
+              if (!forcer) {
+                showToast(`Clôture annulée — corrigez les ${bloquants.length} défaut(s) fûts signalé(s), puis relancez.`, 'warning');
+                return;
+              }
+              kegNotice = ` — ${bloquants.length} défaut(s) fûts forcé(s)`;
+            } else if ((a.nb_defauts ?? 0) > 0 || a.ancrage_perime) {
+              const anc = a.ancrage_perime ? `\n\n⚠  Comptage physique des fûts requis (dernier comptage ${a.dernier_comptage ?? '—'} antérieur au match → le stock va dériver).` : '';
+              window.alert(`Contrôle des fûts — « ${eventName} »\n\n${a.nb_defauts ?? 0} point(s) de vigilance (non bloquant).${anc}\n\nDétail dans l'onglet « Stock final & fûts ».`);
+              kegNotice = a.ancrage_perime ? ' — comptage fûts à refaire' : '';
+            }
+          }
+        } catch (auditErr) {
+          console.error('Contrôle fûts:', auditErr);
+        }
+      }
+
       await setStatus('clôturé');
       // Match : réconciliation fûts (idempotente) — vides à rentrer + retours
       // stockage. Non bloquant : un échec n'empêche pas la clôture.
-      let kegNotice = '';
       if (eventQuery.data?.event_type === 'match' && id) {
         const by = user?.name ?? user?.email ?? 'Stade';
         try {
           await supabase.rpc('apply_keg_reconciliation', { p_event: id, p_by: by });
         } catch (kegErr) {
           console.error('Réconciliation fûts:', kegErr);
-        }
-        // Opérateur de contrôle des fûts : annonce les défauts au moment de la clôture.
-        try {
-          const { data: aud } = await supabase.rpc('audit_keg_closure', { p_event_id: id });
-          const a = aud as { nb_defauts?: number; nb_bloquants?: number; ancrage_perime?: boolean; defauts?: { gravite: string; product_name: string; space_name: string; detail: string }[] } | null;
-          if (a && ((a.nb_defauts ?? 0) > 0 || a.ancrage_perime)) {
-            const lignes = (a.defauts ?? []).slice(0, 8).map((d) => `• [${d.gravite}] ${d.product_name} — ${d.space_name}\n   ${d.detail}`).join('\n');
-            const anc = a.ancrage_perime ? '\n\n⚠ Comptage physique des fûts requis (dernier comptage antérieur au match → le stock va dériver).' : '';
-            window.alert(
-              `Contrôle des fûts — clôture de « ${eventName} »\n\n` +
-              `${a.nb_defauts ?? 0} défaut(s)${(a.nb_bloquants ?? 0) > 0 ? ` · ${a.nb_bloquants} bloquant(s)` : ''} :\n\n` +
-              `${lignes}${anc}\n\nDétail complet dans l'onglet « Saisie finale » du match.`,
-            );
-            kegNotice = ` — ${a.nb_defauts ?? 0} défaut(s) fûts signalé(s)`;
-          }
-        } catch (auditErr) {
-          console.error('Contrôle fûts:', auditErr);
         }
       }
       showToast(`Événement « ${eventName} » clôturé${kegNotice}.`, kegNotice ? 'warning' : 'success');
