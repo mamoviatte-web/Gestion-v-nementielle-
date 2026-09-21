@@ -104,7 +104,7 @@ export function BilanRegisseur({ event, variant = 'full' }: { event: Event; vari
     return (
       <section className="space-y-3">
         <SectionTitle icon={Clock}>Horaires régisseur</SectionTitle>
-        <p className="text-sm text-slate-500">Aucun horaire régisseur saisi pour cet événement.</p>
+        <p className="text-sm text-pr-black-soft/50">Aucun horaire régisseur saisi pour cet événement.</p>
       </section>
     );
   }
@@ -306,7 +306,7 @@ function RateModal({
 
 function SectionTitle({ children, icon: Icon }: { children: string; icon: typeof Clock }) {
   return (
-    <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-600">
+    <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-pr-black-soft/70">
       <Icon className="h-4 w-4" aria-hidden />
       {children}
     </h3>

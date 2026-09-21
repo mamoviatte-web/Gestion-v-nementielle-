@@ -76,7 +76,7 @@ export function ScheduleAdminPanel({
       </div>
 
       {showForm && (
-        <div className="space-y-3 rounded-lg bg-white p-4 ring-1 ring-slate-200">
+        <div className="space-y-3 rounded-lg bg-white p-4 ring-1 ring-pr-stone">
           {error && <Alert variant="error">{error}</Alert>}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
@@ -141,14 +141,14 @@ export function ScheduleAdminPanel({
                   : null;
               return (
                 <TR key={s.schedule_id}>
-                  <TD className="font-medium text-slate-900">{s.staff_name}</TD>
+                  <TD className="font-medium text-pr-black">{s.staff_name}</TD>
                   <TD>{s.role ?? '—'}</TD>
                   <TD>{s.planned_arrival?.slice(0, 5) ?? '—'}</TD>
                   <TD>{s.planned_departure?.slice(0, 5) ?? '—'}</TD>
                   <TD>{s.actual_departure?.slice(0, 5) ?? '—'}</TD>
                   <TD className="text-right">{hours === null ? '—' : formatHours(hours)}</TD>
-                  <TD>{s.confirmed_by_staff ? <Check className="h-4 w-4 text-emerald-600" /> : <X className="h-4 w-4 text-slate-300" />}</TD>
-                  <TD>{s.confirmed_by_manager ? <Check className="h-4 w-4 text-emerald-600" /> : <X className="h-4 w-4 text-slate-300" />}</TD>
+                  <TD>{s.confirmed_by_staff ? <Check className="h-4 w-4 text-emerald-600" /> : <X className="h-4 w-4 text-pr-black-soft/30" />}</TD>
+                  <TD>{s.confirmed_by_manager ? <Check className="h-4 w-4 text-emerald-600" /> : <X className="h-4 w-4 text-pr-black-soft/30" />}</TD>
                 </TR>
               );
             })}

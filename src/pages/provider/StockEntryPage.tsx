@@ -249,10 +249,10 @@ function OpeningForm({
         renderItem={(d) => (
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
-              <p className="truncate font-medium text-slate-900">
+              <p className="truncate font-medium text-pr-black">
                 {productName(stock.productMap, d.product_id)}
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-pr-black-soft/50">
                 Dotation prévue : {d.planned_qty} {productUnit(stock.productMap, d.product_id)}
               </p>
             </div>
@@ -379,13 +379,13 @@ function ReassortForm({
         {lines.map((l) => (
           <div
             key={l.line_id}
-            className="flex items-center justify-between gap-3 rounded-lg bg-white p-3 ring-1 ring-slate-200"
+            className="flex items-center justify-between gap-3 rounded-lg bg-white p-3 ring-1 ring-pr-stone"
           >
             <div className="min-w-0">
-              <p className="truncate font-medium text-slate-900">
+              <p className="truncate font-medium text-pr-black">
                 {productName(stock.productMap, l.product_id)}
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-pr-black-soft/50">
                 Disponible actuel : {l.initial_qty + l.reassort_qty}
               </p>
             </div>
@@ -495,13 +495,13 @@ function ClosingForm({
           return (
             <div
               key={l.line_id}
-              className="space-y-2 rounded-lg bg-white p-3 ring-1 ring-slate-200"
+              className="space-y-2 rounded-lg bg-white p-3 ring-1 ring-pr-stone"
             >
               <div className="flex items-center justify-between">
-                <p className="font-medium text-slate-900">
+                <p className="font-medium text-pr-black">
                   {productName(stock.productMap, l.product_id)}
                 </p>
-                <span className="text-xs text-slate-500">Disponible : {available}</span>
+                <span className="text-xs text-pr-black-soft/50">Disponible : {available}</span>
               </div>
               <Input
                 type="number"

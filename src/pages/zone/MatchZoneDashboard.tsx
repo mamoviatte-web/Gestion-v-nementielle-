@@ -18,7 +18,7 @@ function frDate(iso: string): string {
 }
 
 const STATUS_CFG: Record<Status, { border: string; badge: string | null }> = {
-  todo: { border: 'border-slate-200', badge: null },
+  todo: { border: 'border-pr-stone', badge: null },
   in_progress: { border: 'border-amber-300 bg-amber-50', badge: '🔄 En cours' },
   done: { border: 'border-green-300 bg-green-50', badge: '✅ Complété' },
 };
@@ -43,15 +43,15 @@ export default function MatchZoneDashboard() {
   }, [token, session]);
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Chargement…</div>;
+    return <div className="flex min-h-screen items-center justify-center bg-pr-cream text-pr-black-soft/50">Chargement…</div>;
   }
   if (!session?.success) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
-        <div className="max-w-sm rounded-2xl border border-slate-200 bg-white p-8 text-center">
+      <div className="flex min-h-screen items-center justify-center bg-pr-cream p-4">
+        <div className="max-w-sm rounded-2xl border border-pr-stone bg-white p-8 text-center">
           <p className="mb-2 text-3xl">⏳</p>
           <h2 className="text-lg font-medium">Session expirée</h2>
-          <p className="mt-1 text-sm text-slate-500">Demandez un nouveau lien à l'équipe stade.</p>
+          <p className="mt-1 text-sm text-pr-black-soft/50">Demandez un nouveau lien à l'équipe stade.</p>
         </div>
       </div>
     );
@@ -71,13 +71,13 @@ export default function MatchZoneDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-pr-cream">
       <MatchZoneHeader session={session} />
       <div className="mx-auto max-w-lg space-y-3 p-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-400">Votre poste</p>
-          <p className="mt-1 font-display text-xl font-black text-slate-900">{session.space_name}</p>
-          <p className="text-sm text-slate-500">
+        <div className="rounded-xl border border-pr-stone bg-white p-4">
+          <p className="text-xs uppercase tracking-wide text-pr-black-soft/45">Votre poste</p>
+          <p className="mt-1 font-display text-xl font-black text-pr-black">{session.space_name}</p>
+          <p className="text-sm text-pr-black-soft/50">
             {session.staff_name} · {frDate(session.event_date)}
           </p>
         </div>
@@ -93,16 +93,16 @@ export default function MatchZoneDashboard() {
             >
               <span className="text-3xl">{c.icon}</span>
               <div className="min-w-0 flex-1">
-                <p className="text-base font-semibold text-slate-900">{c.title}</p>
-                <p className="mt-0.5 text-sm text-slate-500">{c.subtitle}</p>
+                <p className="text-base font-semibold text-pr-black">{c.title}</p>
+                <p className="mt-0.5 text-sm text-pr-black-soft/50">{c.subtitle}</p>
               </div>
               {cfg.badge && <span className="whitespace-nowrap text-xs font-medium">{cfg.badge}</span>}
-              <span className="text-lg text-slate-300">›</span>
+              <span className="text-lg text-pr-black-soft/30">›</span>
             </button>
           );
         })}
 
-        <p className="pt-2 text-center text-xs text-slate-400">
+        <p className="pt-2 text-center text-xs text-pr-black-soft/45">
           Connecté en tant que {session.staff_name} — vos saisies sont transmises à l'équipe stade.
         </p>
       </div>

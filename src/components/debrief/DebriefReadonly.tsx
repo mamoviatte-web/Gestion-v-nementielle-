@@ -10,7 +10,7 @@ export function DebriefReadonly({ debrief }: { debrief: Debrief }) {
           <h3 className="mb-2 text-sm font-semibold text-provence">
             {section.title}
           </h3>
-          <dl className="space-y-1.5 rounded-lg bg-white p-3 ring-1 ring-slate-200">
+          <dl className="space-y-1.5 rounded-lg bg-white p-3 ring-1 ring-pr-stone">
             {section.fields.map((field) => {
               const raw = debrief[field.key];
               let value: string;
@@ -22,8 +22,8 @@ export function DebriefReadonly({ debrief }: { debrief: Debrief }) {
                   key={field.key}
                   className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4"
                 >
-                  <dt className="text-sm text-slate-500">{field.label}</dt>
-                  <dd className="text-sm font-medium text-slate-900 sm:text-right">
+                  <dt className="text-sm text-pr-black-soft/50">{field.label}</dt>
+                  <dd className="text-sm font-medium text-pr-black sm:text-right">
                     {value}
                   </dd>
                 </div>

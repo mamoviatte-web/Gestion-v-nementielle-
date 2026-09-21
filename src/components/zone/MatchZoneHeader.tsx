@@ -16,7 +16,7 @@ import type { MatchSession } from '@/hooks/useMatchSession';
 
 const SPACE_BADGE: Record<string, string> = {
   vip: 'bg-amber-500 text-black',
-  bar: 'bg-slate-800 text-white',
+  bar: 'bg-pr-black-soft text-white',
   buvette: 'bg-sky-600 text-white',
 };
 
@@ -101,7 +101,7 @@ export function MatchZoneHeader({ session, back }: { session: MatchSession; back
           </span>
         )}
         {st && (
-          <span className={`rounded px-2 py-1 text-xs font-bold ${SPACE_BADGE[st] ?? 'bg-slate-600 text-white'}`}>
+          <span className={`rounded px-2 py-1 text-xs font-bold ${SPACE_BADGE[st] ?? 'bg-pr-black-soft/80 text-white'}`}>
             {st.toUpperCase()}
           </span>
         )}

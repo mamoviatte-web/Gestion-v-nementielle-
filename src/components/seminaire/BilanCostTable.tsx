@@ -181,7 +181,7 @@ export function BilanCostTable({ eventId }: { eventId: string }) {
     return [...seen.values()].sort((a, b) => a.localeCompare(b, 'fr'));
   }, [data]);
 
-  if (isLoading) return <p className="text-sm text-slate-500">Chargement des coûts…</p>;
+  if (isLoading) return <p className="text-sm text-pr-black-soft/50">Chargement des coûts…</p>;
   if ((data ?? []).length === 0) {
     return (
       <EmptyState

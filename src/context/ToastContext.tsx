@@ -51,7 +51,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 'pointer-events-auto flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white shadow-lg',
                 t.tone === 'success' && 'bg-emerald-600',
                 t.tone === 'warning' && 'bg-amber-600',
-                t.tone === 'info' && 'bg-slate-800',
+                t.tone === 'info' && 'bg-pr-black-soft',
               )}
             >
               <Icon className="h-4 w-4" />

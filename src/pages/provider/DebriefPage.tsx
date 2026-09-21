@@ -153,13 +153,13 @@ function DebriefContent({
 
       {/* Barre de progression */}
       <div>
-        <div className="mb-1 flex justify-between text-xs text-slate-500">
+        <div className="mb-1 flex justify-between text-xs text-pr-black-soft/50">
           <span>
             Section {step + 1} / {DEBRIEF_SECTIONS.length}
           </span>
           <span>{progress}%</span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+        <div className="h-2 overflow-hidden rounded-full bg-pr-stone">
           <div
             className="h-full bg-provence transition-all"
             style={{ width: `${progress}%` }}
@@ -186,9 +186,9 @@ function DebriefContent({
         <section className="space-y-4 rounded-lg border border-pr-stone bg-white p-4">
           <h3 className="font-semibold text-pr-black">Photos de l'événement</h3>
           <PhotoGallery eventId={event.event_id} spaceId={spaceId} photoType="mise_en_place" label="Photos mise en place" responsableNom={responsable} />
-          <hr className="border-slate-100" />
+          <hr className="border-pr-stone/60" />
           <PhotoGallery eventId={event.event_id} spaceId={spaceId} photoType="fb" label="Photos F&B" responsableNom={responsable} />
-          <hr className="border-slate-100" />
+          <hr className="border-pr-stone/60" />
           <PhotoGallery eventId={event.event_id} spaceId={spaceId} photoType="fin_evenement" label="Photos fin d'événement" responsableNom={responsable} />
         </section>
       )}
@@ -272,14 +272,14 @@ function FieldInput({
 }) {
   if (field.type === 'checkbox') {
     return (
-      <label className="flex items-center gap-2 rounded-lg bg-white p-3 ring-1 ring-slate-200">
+      <label className="flex items-center gap-2 rounded-lg bg-white p-3 ring-1 ring-pr-stone">
         <input
           type="checkbox"
-          className="h-5 w-5 rounded border-slate-300 text-provence focus:ring-provence"
+          className="h-5 w-5 rounded border-pr-stone text-provence focus:ring-provence"
           checked={Boolean(value)}
           onChange={(e) => onChange(e.target.checked)}
         />
-        <span className="text-sm font-medium text-slate-700">{field.label}</span>
+        <span className="text-sm font-medium text-pr-black-soft/80">{field.label}</span>
       </label>
     );
   }

@@ -146,13 +146,13 @@ export default function MatchZoneStocks() {
   // Flush à la sortie (changement de page dans l'app) pour ne rien perdre.
   useEffect(() => () => { if (timer.current) { clearTimeout(timer.current); void persist(); } }, []);
 
-  if (loading) return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Chargement…</div>;
-  if (!session?.success) return <div className="p-8 text-center text-slate-500">Session expirée.</div>;
+  if (loading) return <div className="flex min-h-screen items-center justify-center bg-pr-cream text-pr-black-soft/50">Chargement…</div>;
+  if (!session?.success) return <div className="p-8 text-center text-pr-black-soft/50">Session expirée.</div>;
 
   const nomValid = nom.trim().length >= 2;
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-28">
+    <div className="min-h-screen bg-pr-cream pb-28">
       <MatchZoneHeader session={session} back />
       <div className="mx-auto max-w-lg space-y-3 p-4">
         {/* Stepper — flush avant de changer d'étape */}
@@ -163,7 +163,7 @@ export default function MatchZoneStocks() {
               type="button"
               onClick={() => { flushSave(); setStep(s.key); }}
               className={`rounded-xl border-2 py-3 text-center text-sm font-semibold transition-colors ${
-                step === s.key ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-500'
+                step === s.key ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-pr-stone bg-white text-pr-black-soft/50'
               }`}
             >
               <span className="block text-lg">{s.icon}</span>
@@ -172,13 +172,13 @@ export default function MatchZoneStocks() {
           ))}
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <label className="mb-2 block text-sm font-medium text-slate-700">Votre nom *</label>
+        <div className="rounded-xl border border-pr-stone bg-white p-4">
+          <label className="mb-2 block text-sm font-medium text-pr-black-soft/80">Votre nom *</label>
           <input
             value={nom}
             onChange={(e) => setNom(e.target.value.toUpperCase())}
             placeholder="NOM Prénom"
-            className="min-h-[48px] w-full rounded-lg border border-slate-200 px-3 py-3 text-base focus:ring-2 focus:ring-amber-400"
+            className="min-h-[48px] w-full rounded-lg border border-pr-stone px-3 py-3 text-base focus:ring-2 focus:ring-amber-400"
           />
           {!nomValid && <p className="mt-2 text-xs text-amber-700">Indiquez votre nom pour activer l'enregistrement automatique (RG-001).</p>}
         </div>
@@ -189,14 +189,14 @@ export default function MatchZoneStocks() {
           </div>
         )}
         {ready && lines.length === 0 && (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+          <div className="rounded-xl border border-pr-stone bg-white p-6 text-center text-sm text-pr-black-soft/50">
             Aucun produit actif pour cet espace. Contactez l'équipe stade.
           </div>
         )}
 
         {/* Clôture : bandeau récap + garde-fou si l'ouverture n'a pas été saisie */}
         {mode === 'final' && lines.length > 0 && visibleLines.length > 0 && (
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <div className="flex items-center gap-2 rounded-xl border border-pr-stone bg-pr-cream px-4 py-3 text-sm text-pr-black-soft/70">
             <span>📋</span>
             <span>
               <strong>{visibleLines.length} produit(s)</strong> à saisir — uniquement ceux déclarés à l'ouverture ou au réassort.
@@ -214,7 +214,7 @@ export default function MatchZoneStocks() {
 
       {/* Barre d'état fixe — enregistrement automatique */}
       {visibleLines.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 p-4 backdrop-blur">
+        <div className="fixed inset-x-0 bottom-0 border-t border-pr-stone bg-white/95 p-4 backdrop-blur">
           <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
             <div className="min-w-0 flex-1 text-sm">
               {!nomValid ? (
@@ -222,11 +222,11 @@ export default function MatchZoneStocks() {
               ) : saveState === 'error' ? (
                 <span className="text-red-600">⚠️ {saveErr}</span>
               ) : saveState === 'saving' || saveState === 'pending' ? (
-                <span className="text-slate-500">💾 Enregistrement…</span>
+                <span className="text-pr-black-soft/50">💾 Enregistrement…</span>
               ) : saveState === 'saved' ? (
                 <span className="font-medium text-green-700">✓ Enregistré automatiquement{savedAt ? ` · ${savedAt}` : ''}</span>
               ) : (
-                <span className="text-slate-400">Chaque chiffre est enregistré automatiquement.</span>
+                <span className="text-pr-black-soft/45">Chaque chiffre est enregistré automatiquement.</span>
               )}
               {mode === 'final' && anomalies.length > 0 && (
                 <p className="mt-0.5 text-xs text-amber-700">
@@ -238,7 +238,7 @@ export default function MatchZoneStocks() {
             <button
               onClick={() => flushSave()}
               disabled={!nomValid || saveState === 'saving'}
-              className="min-h-[48px] shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"
+              className="min-h-[48px] shrink-0 rounded-xl border border-pr-stone bg-white px-4 py-2 text-sm font-semibold text-pr-black-soft/80 disabled:opacity-40"
             >
               Enregistrer
             </button>

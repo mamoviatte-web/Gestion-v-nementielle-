@@ -217,7 +217,7 @@ export const RUNNER_ROW_CLASSES: Record<RunnerRowColor, string> = {
   orange: 'bg-amber-50',
   red: 'bg-red-50',
   blue: 'bg-blue-50',
-  gray: 'bg-slate-50 text-slate-400',
+  gray: 'bg-pr-cream text-pr-black-soft/45',
 };
 
 /** Libellés des statuts de validation runner. */

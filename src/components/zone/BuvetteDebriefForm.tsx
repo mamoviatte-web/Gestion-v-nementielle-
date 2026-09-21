@@ -47,12 +47,12 @@ const asNum = (v: unknown): number | null => {
 function Section({ icon, title, children, open = false }: { icon: string; title: string; children: ReactNode; open?: boolean }) {
   const [o, setO] = useState(open);
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-hidden rounded-xl border border-pr-stone bg-white">
       <button type="button" onClick={() => setO(!o)} className="flex w-full items-center justify-between px-4 py-4">
-        <span className="flex items-center gap-2 font-semibold text-slate-800"><span>{icon}</span>{title}</span>
-        <span className="text-lg text-slate-400">{o ? '▲' : '▼'}</span>
+        <span className="flex items-center gap-2 font-semibold text-pr-black-soft/90"><span>{icon}</span>{title}</span>
+        <span className="text-lg text-pr-black-soft/45">{o ? '▲' : '▼'}</span>
       </button>
-      {o && <div className="space-y-5 border-t border-slate-100 px-4 pb-5 pt-4">{children}</div>}
+      {o && <div className="space-y-5 border-t border-pr-stone/60 px-4 pb-5 pt-4">{children}</div>}
     </div>
   );
 }
@@ -64,7 +64,7 @@ function YesNo({ value, onChange, partiel = true }: { value: YN; onChange: (v: Y
       {opts.map((v) => (
         <button key={v} type="button" onClick={() => onChange(v)}
           className={`rounded-lg py-3 text-sm font-medium ${
-            value === v ? (v === 'oui' ? 'bg-green-500 text-white' : v === 'non' ? 'bg-red-500 text-white' : 'bg-amber-500 text-white') : 'bg-slate-100 text-slate-600'
+            value === v ? (v === 'oui' ? 'bg-green-500 text-white' : v === 'non' ? 'bg-red-500 text-white' : 'bg-amber-500 text-white') : 'bg-pr-stone/50 text-pr-black-soft/70'
           }`}>
           {v === 'oui' ? '✅ Oui' : v === 'non' ? '❌ Non' : '⚠️ Partiel'}
         </button>
@@ -76,11 +76,11 @@ function YesNo({ value, onChange, partiel = true }: { value: YN; onChange: (v: Y
 function Score({ label, value, onChange }: { label: string; value: number | null; onChange: (v: number) => void }) {
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-slate-700">{label}</p>
+      <p className="text-sm font-medium text-pr-black-soft/80">{label}</p>
       <div className="flex gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
           <button key={n} type="button" onClick={() => onChange(n)}
-            className={`flex-1 rounded-lg py-2 text-sm font-bold ${value === n ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600'}`}>
+            className={`flex-1 rounded-lg py-2 text-sm font-bold ${value === n ? 'bg-amber-500 text-white' : 'bg-pr-stone/50 text-pr-black-soft/70'}`}>
             {n}
           </button>
         ))}
@@ -92,9 +92,9 @@ function Score({ label, value, onChange }: { label: string; value: number | null
 function Area({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-slate-700">{label}</label>
+      <label className="text-sm font-medium text-pr-black-soft/80">{label}</label>
       <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={3}
-        className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-400" />
+        className="w-full resize-none rounded-lg border border-pr-stone px-3 py-2.5 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-400" />
     </div>
   );
 }
@@ -185,13 +185,13 @@ export function BuvetteDebriefForm({
     <div className="space-y-3">
       <Section icon="👥" title="Effectif & Organisation" open>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-slate-700">Nombre de personnes présentes *</label>
+          <label className="text-sm font-medium text-pr-black-soft/80">Nombre de personnes présentes *</label>
           <input type="number" min={0} inputMode="numeric" value={form.nb_personnes || ''}
             onChange={(e) => set('nb_personnes', parseInt(e.target.value) || 0)}
-            className="min-h-[48px] w-full rounded-lg border border-slate-200 px-3 py-3 text-base" placeholder="ex : 3" />
+            className="min-h-[48px] w-full rounded-lg border border-pr-stone px-3 py-3 text-base" placeholder="ex : 3" />
         </div>
         <div className="space-y-2">
-          <p className="text-sm font-medium text-slate-700">L'effectif était-il adapté ?</p>
+          <p className="text-sm font-medium text-pr-black-soft/80">L'effectif était-il adapté ?</p>
           <YesNo value={form.effectif_adapte} onChange={(v) => set('effectif_adapte', v)} />
         </div>
         <Score label="Efficacité de l'équipe (1 à 5)" value={form.efficacite} onChange={(v) => set('efficacite', v)} />
@@ -200,7 +200,7 @@ export function BuvetteDebriefForm({
 
       <Section icon="📦" title="Stocks & Matériel">
         <div className="space-y-2">
-          <p className="text-sm font-medium text-slate-700">Les stocks étaient-ils suffisants ?</p>
+          <p className="text-sm font-medium text-pr-black-soft/80">Les stocks étaient-ils suffisants ?</p>
           <YesNo value={form.stocks_suffisants} onChange={(v) => set('stocks_suffisants', v)} />
         </div>
         <Area label="Commentaire stocks" placeholder="Ruptures, surstock, produits manquants…" value={form.stocks_comment} onChange={(v) => set('stocks_comment', v)} />
@@ -210,7 +210,7 @@ export function BuvetteDebriefForm({
 
       <Section icon="🗣" title="Clients & Communication">
         <div className="space-y-2">
-          <p className="text-sm font-medium text-slate-700">Les consignes étaient-elles claires ?</p>
+          <p className="text-sm font-medium text-pr-black-soft/80">Les consignes étaient-elles claires ?</p>
           <YesNo value={form.consignes_claires} onChange={(v) => set('consignes_claires', v)} />
         </div>
         <Score label="Satisfaction clients ressentie (1 à 5)" value={form.retours_clients} onChange={(v) => set('retours_clients', v)} />
@@ -220,7 +220,7 @@ export function BuvetteDebriefForm({
 
       <Section icon="🧹" title="Propreté & État de l'espace">
         <div className="space-y-2">
-          <p className="text-sm font-medium text-slate-700">Espace rendu propre et en bon état ?</p>
+          <p className="text-sm font-medium text-pr-black-soft/80">Espace rendu propre et en bon état ?</p>
           <YesNo value={form.espace_etat_bon} onChange={(v) => set('espace_etat_bon', v)} partiel={false} />
         </div>
         <Area label="Problèmes de propreté / déchets" placeholder="Points noirs, dépassements…" value={form.problemes_dechets} onChange={(v) => set('problemes_dechets', v)} />
@@ -233,7 +233,7 @@ export function BuvetteDebriefForm({
 
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}
       <button onClick={() => void submit()} disabled={saving || responsable.trim().length < 2}
-        className="min-h-[56px] w-full rounded-xl bg-slate-900 py-4 text-base font-bold text-white disabled:opacity-40">
+        className="min-h-[56px] w-full rounded-xl bg-pr-black py-4 text-base font-bold text-white disabled:opacity-40">
         {saving ? 'Envoi…' : `✅ Soumettre le débrief${code ? ` — ${code}` : ''}`}
       </button>
     </div>

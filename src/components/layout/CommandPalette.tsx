@@ -30,7 +30,7 @@ interface Entry {
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 const KIND_STYLE: Record<Kind, string> = {
-  'Écran': 'bg-slate-100 text-slate-500',
+  'Écran': 'bg-pr-stone/50 text-pr-black-soft/50',
   Match: 'bg-amber-100 text-amber-700',
   Produit: 'bg-sky-100 text-sky-700',
 };

@@ -56,16 +56,16 @@ export function PdfPhotoSummary({ eventId }: { eventId: string }) {
   const empty = selected.length === 0;
 
   return (
-    <div className={`rounded-xl border-2 p-4 ${empty ? 'border-slate-200 bg-slate-50' : 'border-amber-300 bg-amber-50'}`}>
+    <div className={`rounded-xl border-2 p-4 ${empty ? 'border-pr-stone bg-pr-cream' : 'border-amber-300 bg-amber-50'}`}>
       <div className="mb-3 flex items-center justify-between">
-        <span className="flex items-center gap-2 text-sm font-bold text-slate-800">📄 Sélection pour le rapport PDF</span>
-        <span className={`rounded-full px-2 py-1 text-xs font-bold ${empty ? 'bg-slate-200 text-slate-500' : 'bg-amber-400 text-slate-900'}`}>
+        <span className="flex items-center gap-2 text-sm font-bold text-pr-black-soft/90">📄 Sélection pour le rapport PDF</span>
+        <span className={`rounded-full px-2 py-1 text-xs font-bold ${empty ? 'bg-pr-stone text-pr-black-soft/50' : 'bg-amber-400 text-pr-black'}`}>
           {selected.length} photo{selected.length > 1 ? 's' : ''}
         </span>
       </div>
 
       {empty ? (
-        <p className="py-3 text-center text-xs text-slate-400">
+        <p className="py-3 text-center text-xs text-pr-black-soft/45">
           Aucune photo sélectionnée.
           <br />
           Appuyez sur « Ajouter au PDF » sous chaque photo souhaitée.
@@ -80,7 +80,7 @@ export function PdfPhotoSummary({ eventId }: { eventId: string }) {
                   alt={photo.pdf_caption ?? ''}
                   className="h-14 w-14 rounded-lg border-2 border-amber-400 object-cover"
                 />
-                <span className="absolute -left-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[9px] font-black text-slate-900">
+                <span className="absolute -left-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[9px] font-black text-pr-black">
                   {TYPE_LABEL[photo.photo_type]?.match(/\p{Emoji}/u)?.[0] ?? '?'}
                 </span>
               </div>
@@ -91,7 +91,7 @@ export function PdfPhotoSummary({ eventId }: { eventId: string }) {
               const count = selected.filter((p) => p.photo_type === type).length;
               if (count === 0) return null;
               return (
-                <div key={type} className="flex items-center justify-between text-xs text-slate-600">
+                <div key={type} className="flex items-center justify-between text-xs text-pr-black-soft/70">
                   <span>{TYPE_LABEL[type] ?? type}</span>
                   <span className="font-bold">
                     {count} photo{count > 1 ? 's' : ''}
@@ -100,7 +100,7 @@ export function PdfPhotoSummary({ eventId }: { eventId: string }) {
               );
             })}
           </div>
-          <p className="mt-2 text-center text-[10px] text-slate-400">Ces photos seront disposées en grille dans le rapport PDF séminaire.</p>
+          <p className="mt-2 text-center text-[10px] text-pr-black-soft/45">Ces photos seront disposées en grille dans le rapport PDF séminaire.</p>
         </>
       )}
     </div>

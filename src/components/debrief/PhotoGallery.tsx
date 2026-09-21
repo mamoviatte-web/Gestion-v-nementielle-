@@ -144,10 +144,10 @@ export function PhotoGallery({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-2 font-medium text-slate-700">
-          <Camera className="h-4 w-4 text-slate-500" /> {label}
+        <span className="flex items-center gap-2 font-medium text-pr-black-soft/80">
+          <Camera className="h-4 w-4 text-pr-black-soft/50" /> {label}
         </span>
-        <span className="text-sm text-slate-400">{photos.length} photo(s)</span>
+        <span className="text-sm text-pr-black-soft/45">{photos.length} photo(s)</span>
       </div>
 
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
@@ -158,15 +158,15 @@ export function PhotoGallery({
               alt={photo.pdf_caption ?? photo.caption ?? label}
               loading="lazy"
               className={`h-full w-full rounded-lg object-cover ${
-                photo.include_in_pdf ? 'border-2 border-amber-400 shadow-md shadow-amber-100' : 'border border-slate-200'
+                photo.include_in_pdf ? 'border-2 border-amber-400 shadow-md shadow-amber-100' : 'border border-pr-stone'
               }`}
             />
             {photo.include_in_pdf && !showPdfSelector && (
-              <span className="absolute right-1 top-1 rounded bg-amber-400 px-1 text-[9px] font-black text-slate-900">PDF</span>
+              <span className="absolute right-1 top-1 rounded bg-amber-400 px-1 text-[9px] font-black text-pr-black">PDF</span>
             )}
             <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
               <button onClick={() => setLightbox(photo)} className="rounded-full bg-white/90 p-1.5" title="Agrandir">
-                <ZoomIn className="h-3.5 w-3.5 text-slate-700" />
+                <ZoomIn className="h-3.5 w-3.5 text-pr-black-soft/80" />
               </button>
               {!readonly && (
                 <button onClick={() => void deletePhoto(photo)} className="rounded-full bg-red-500/90 p-1.5" title="Supprimer">
@@ -179,7 +179,7 @@ export function PhotoGallery({
                 <button
                   onClick={() => void togglePdf(photo)}
                   className={`flex w-full items-center justify-center gap-1 rounded py-0.5 text-[10px] font-bold transition-colors ${
-                    photo.include_in_pdf ? 'bg-amber-400 text-slate-900' : 'bg-white/20 text-white hover:bg-white/30'
+                    photo.include_in_pdf ? 'bg-amber-400 text-pr-black' : 'bg-white/20 text-white hover:bg-white/30'
                   }`}
                 >
                   <FileText className="h-2.5 w-2.5" />
@@ -190,7 +190,7 @@ export function PhotoGallery({
                     defaultValue={photo.pdf_caption ?? ''}
                     onBlur={(e) => void savePdfCaption(photo, e.target.value)}
                     placeholder="Légende PDF…"
-                    className="w-full rounded bg-white/90 px-1 py-0.5 text-[10px] text-slate-800 focus:outline-none"
+                    className="w-full rounded bg-white/90 px-1 py-0.5 text-[10px] text-pr-black-soft/90 focus:outline-none"
                   />
                 )}
               </div>
@@ -200,19 +200,19 @@ export function PhotoGallery({
 
         {!readonly && (
           <label
-            className={`flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 transition-colors hover:border-amber-400 hover:bg-amber-50 ${
+            className={`flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-pr-stone transition-colors hover:border-amber-400 hover:bg-amber-50 ${
               uploading ? 'pointer-events-none opacity-50' : ''
             }`}
           >
-            <Upload className="mb-1 h-5 w-5 text-slate-400" />
-            <span className="text-xs text-slate-400">{uploading ? `${progress}%` : 'Ajouter'}</span>
+            <Upload className="mb-1 h-5 w-5 text-pr-black-soft/45" />
+            <span className="text-xs text-pr-black-soft/45">{uploading ? `${progress}%` : 'Ajouter'}</span>
             <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple className="hidden" onChange={handleFiles} />
           </label>
         )}
       </div>
 
       {uploading && (
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-pr-stone">
           <div className="h-1.5 rounded-full bg-amber-500 transition-all" style={{ width: `${progress}%` }} />
         </div>
       )}

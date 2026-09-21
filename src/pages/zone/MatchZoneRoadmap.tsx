@@ -50,9 +50,9 @@ interface Roadmap {
 function BriefField({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value) return null;
   return (
-    <div className="border-b border-slate-50 px-4 py-3 last:border-0">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-800">{value}</p>
+    <div className="border-b border-pr-cream px-4 py-3 last:border-0">
+      <p className="text-xs font-semibold uppercase tracking-wide text-pr-black-soft/45">{label}</p>
+      <p className="mt-0.5 whitespace-pre-wrap text-sm text-pr-black-soft/90">{value}</p>
     </div>
   );
 }
@@ -76,8 +76,8 @@ export default function MatchZoneRoadmap() {
     });
   }, [token, session]);
 
-  if (loading) return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Chargement…</div>;
-  if (!session?.success) return <div className="p-8 text-center text-slate-500">Session expirée.</div>;
+  if (loading) return <div className="flex min-h-screen items-center justify-center bg-pr-cream text-pr-black-soft/50">Chargement…</div>;
+  if (!session?.success) return <div className="p-8 text-center text-pr-black-soft/50">Session expirée.</div>;
 
   const byCat = dotations.reduce<Record<string, Dotation[]>>((acc, d) => {
     (acc[d.category] ??= []).push(d);
@@ -92,7 +92,7 @@ export default function MatchZoneRoadmap() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-pr-cream">
       <MatchZoneHeader session={session} back />
       <div className="mx-auto max-w-lg space-y-5 p-4">
         {ready === false && (
@@ -103,7 +103,7 @@ export default function MatchZoneRoadmap() {
 
         {/* ── Brief stade ─────────────────────────────────────────────── */}
         <section>
-          <h2 className="mb-3 font-bold text-slate-800">📋 Brief de l'espace</h2>
+          <h2 className="mb-3 font-bold text-pr-black-soft/90">📋 Brief de l'espace</h2>
           {!hasBrief ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
               <p className="text-sm font-semibold text-amber-800">⏳ Brief en cours de préparation</p>
@@ -124,7 +124,7 @@ export default function MatchZoneRoadmap() {
                 </div>
               )}
 
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="overflow-hidden rounded-xl border border-pr-stone bg-white">
                 <BriefField label="Client / réception" value={rm?.brief_client} />
                 <BriefField label="Consignes de service" value={rm?.brief_consigne} />
                 <BriefField label="Horaires" value={rm?.brief_horaires} />
@@ -132,25 +132,25 @@ export default function MatchZoneRoadmap() {
               </div>
 
               {briefDotations.length > 0 && (
-                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                  <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                <div className="overflow-hidden rounded-xl border border-pr-stone bg-white">
+                  <div className="border-b border-pr-stone/60 bg-pr-cream px-4 py-2 text-xs font-bold uppercase tracking-wide text-pr-black-soft/50">
                     Dotations spécifiques
                   </div>
                   {briefDotations.map((d, i) => (
-                    <div key={i} className="flex items-center justify-between border-b border-slate-50 px-4 py-3 last:border-0">
+                    <div key={i} className="flex items-center justify-between border-b border-pr-cream px-4 py-3 last:border-0">
                       <div>
-                        <p className="text-sm font-medium text-slate-800">{d.label ?? d.product_name ?? '—'}</p>
-                        {d.note && <p className="text-xs text-slate-400">{d.note}</p>}
+                        <p className="text-sm font-medium text-pr-black-soft/90">{d.label ?? d.product_name ?? '—'}</p>
+                        {d.note && <p className="text-xs text-pr-black-soft/45">{d.note}</p>}
                       </div>
-                      {d.qty != null && <p className="text-lg font-bold text-slate-900">{d.qty}</p>}
+                      {d.qty != null && <p className="text-lg font-bold text-pr-black">{d.qty}</p>}
                     </div>
                   ))}
                 </div>
               )}
 
               {(rm?.info_contact || rm?.info_acces || rm?.info_materiel) && (
-                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                  <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                <div className="overflow-hidden rounded-xl border border-pr-stone bg-white">
+                  <div className="border-b border-pr-stone/60 bg-pr-cream px-4 py-2 text-xs font-bold uppercase tracking-wide text-pr-black-soft/50">
                     Infos pratiques
                   </div>
                   <BriefField label="Contact" value={rm?.info_contact} />
@@ -160,7 +160,7 @@ export default function MatchZoneRoadmap() {
               )}
 
               {rm?.published_by && (
-                <p className="text-center text-xs text-slate-400">
+                <p className="text-center text-xs text-pr-black-soft/45">
                   Publié par {rm.published_by}
                   {rm.published_at ? ` · ${new Date(rm.published_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
                 </p>
@@ -170,27 +170,27 @@ export default function MatchZoneRoadmap() {
         </section>
 
         <section>
-          <h2 className="mb-3 font-bold text-slate-800">📦 Dotations prévues ({dotations.length})</h2>
+          <h2 className="mb-3 font-bold text-pr-black-soft/90">📦 Dotations prévues ({dotations.length})</h2>
           {dotations.length === 0 ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+            <div className="rounded-xl border border-pr-stone bg-white p-4 text-sm text-pr-black-soft/50">
               Aucune dotation configurée pour cet espace.
             </div>
           ) : (
             <div className="space-y-3">
               {Object.entries(byCat).map(([cat, lines]) => (
-                <div key={cat} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                  <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                <div key={cat} className="overflow-hidden rounded-xl border border-pr-stone bg-white">
+                  <div className="border-b border-pr-stone/60 bg-pr-cream px-4 py-2 text-xs font-bold uppercase tracking-wide text-pr-black-soft/50">
                     {cat}
                   </div>
                   {lines.map((l, i) => (
-                    <div key={i} className="flex items-center justify-between border-b border-slate-50 px-4 py-3 last:border-0">
+                    <div key={i} className="flex items-center justify-between border-b border-pr-cream px-4 py-3 last:border-0">
                       <div>
-                        <p className="text-sm font-medium text-slate-800">{l.product_name}</p>
-                        <p className="text-xs text-slate-400">{l.unit}</p>
+                        <p className="text-sm font-medium text-pr-black-soft/90">{l.product_name}</p>
+                        <p className="text-xs text-pr-black-soft/45">{l.unit}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-lg font-bold text-slate-900">{l.planned_qty}</p>
-                        <p className="text-xs text-slate-400">{l.runner_status?.replace(/_/g, ' ')}</p>
+                        <p className="text-lg font-bold text-pr-black">{l.planned_qty}</p>
+                        <p className="text-xs text-pr-black-soft/45">{l.runner_status?.replace(/_/g, ' ')}</p>
                       </div>
                     </div>
                   ))}
@@ -201,21 +201,21 @@ export default function MatchZoneRoadmap() {
         </section>
 
         <section>
-          <h2 className="mb-3 font-bold text-slate-800">⏱ Équipe prévue</h2>
+          <h2 className="mb-3 font-bold text-pr-black-soft/90">⏱ Équipe prévue</h2>
           {schedules.length === 0 ? (
-            <div className="rounded-xl bg-slate-100 p-4 text-sm text-slate-500">Aucun horaire configuré.</div>
+            <div className="rounded-xl bg-pr-stone/50 p-4 text-sm text-pr-black-soft/50">Aucun horaire configuré.</div>
           ) : (
-            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+            <div className="divide-y divide-pr-stone/60 rounded-xl border border-pr-stone bg-white">
               {schedules.map((s, i) => (
                 <div key={i} className="flex items-center gap-3 px-4 py-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-600">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-pr-stone/50 text-sm font-bold text-pr-black-soft/70">
                     {s.staff_name.charAt(0).toUpperCase()}
                   </span>
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-slate-800">{s.staff_name}</p>
-                    <p className="text-xs text-slate-400">{s.role}</p>
+                    <p className="text-sm font-medium text-pr-black-soft/90">{s.staff_name}</p>
+                    <p className="text-xs text-pr-black-soft/45">{s.role}</p>
                   </div>
-                  <p className="text-sm font-medium text-slate-700">
+                  <p className="text-sm font-medium text-pr-black-soft/80">
                     {s.planned_arrival?.slice(0, 5)} → {s.planned_departure?.slice(0, 5)}
                   </p>
                 </div>
@@ -224,7 +224,7 @@ export default function MatchZoneRoadmap() {
           )}
         </section>
 
-        <p className="pb-6 text-center text-xs text-slate-400">Configuré par l'équipe stade · Lecture seule</p>
+        <p className="pb-6 text-center text-xs text-pr-black-soft/45">Configuré par l'équipe stade · Lecture seule</p>
       </div>
     </div>
   );

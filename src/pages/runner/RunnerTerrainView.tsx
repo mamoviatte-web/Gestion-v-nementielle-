@@ -49,7 +49,7 @@ export default function RunnerTerrainView() {
     <div className="mx-auto max-w-md p-4">
       <header className="mb-4 rounded-lg bg-provence p-4 text-white">
         <h1 className="text-lg font-bold">Fiche runner</h1>
-        <p className="text-xs text-slate-300">Dotations à monter par produit</p>
+        <p className="text-xs text-pr-black-soft/30">Dotations à monter par produit</p>
       </header>
 
       {rows.length === 0 ? (
@@ -63,16 +63,16 @@ export default function RunnerTerrainView() {
           {rows.map((r) => (
             <li
               key={r.id}
-              className="flex items-center justify-between gap-3 rounded-lg bg-white p-4 ring-1 ring-slate-200"
+              className="flex items-center justify-between gap-3 rounded-lg bg-white p-4 ring-1 ring-pr-stone"
             >
               <div className="min-w-0">
-                <p className="truncate font-semibold text-slate-900">{r.product_name}</p>
-                <p className="text-sm text-slate-500">
+                <p className="truncate font-semibold text-pr-black">{r.product_name}</p>
+                <p className="text-sm text-pr-black-soft/50">
                   À monter : <strong>{r.quantity_to_move ?? r.validated_quantity ?? 0}</strong>{' '}
                   {r.unit}
                 </p>
                 {r.responsible_name && (
-                  <p className="text-xs text-slate-400">Resp. : {r.responsible_name}</p>
+                  <p className="text-xs text-pr-black-soft/45">Resp. : {r.responsible_name}</p>
                 )}
               </div>
               <Badge tone="info">{RUNNER_STATUS_LABELS[r.validation_status]}</Badge>
@@ -81,7 +81,7 @@ export default function RunnerTerrainView() {
         </ul>
       )}
 
-      <p className="mt-4 text-center text-xs text-slate-400">
+      <p className="mt-4 text-center text-xs text-pr-black-soft/45">
         Saisie des quantités prises/retournées : via le poste Stade.
       </p>
     </div>

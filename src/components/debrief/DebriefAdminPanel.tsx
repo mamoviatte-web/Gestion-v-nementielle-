@@ -28,11 +28,11 @@ export function DebriefAdminPanel({
       <div className="space-y-4">
         <button
           onClick={() => setSelected(null)}
-          className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700"
+          className="inline-flex items-center gap-1 text-sm text-pr-black-soft/50 hover:text-pr-black-soft/80"
         >
           <ArrowLeft className="h-4 w-4" /> Tous les espaces
         </button>
-        <h2 className="text-base font-semibold text-slate-900">
+        <h2 className="text-base font-semibold text-pr-black">
           {space?.spaces?.space_name ?? selected.space_id}
         </h2>
         <DebriefReadonly debrief={selected} />
@@ -60,18 +60,18 @@ export function DebriefAdminPanel({
               onClick={() => submitted && debrief && setSelected(debrief)}
               className={`flex flex-col gap-2 rounded-lg p-4 text-left ring-1 transition-colors ${
                 submitted
-                  ? 'bg-white ring-slate-200 hover:bg-slate-50'
-                  : 'bg-slate-50 ring-slate-200 opacity-70'
+                  ? 'bg-white ring-pr-stone hover:bg-pr-cream'
+                  : 'bg-pr-cream ring-pr-stone opacity-70'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="font-medium text-slate-900">
+                <span className="font-medium text-pr-black">
                   {s.spaces?.space_name ?? s.space_id}
                 </span>
                 {submitted ? (
                   <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                 ) : (
-                  <Circle className="h-5 w-5 text-slate-300" />
+                  <Circle className="h-5 w-5 text-pr-black-soft/30" />
                 )}
               </div>
               {submitted && debrief ? (
@@ -89,7 +89,7 @@ export function DebriefAdminPanel({
                   )}
                 </div>
               ) : (
-                <span className="text-xs text-slate-400">En attente</span>
+                <span className="text-xs text-pr-black-soft/45">En attente</span>
               )}
             </button>
           );

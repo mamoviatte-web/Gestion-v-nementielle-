@@ -90,12 +90,12 @@ function ScheduleContent({ spaceId }: { spaceId: string }) {
             return (
               <div
                 key={s.schedule_id}
-                className="space-y-2 rounded-lg bg-white p-4 ring-1 ring-slate-200"
+                className="space-y-2 rounded-lg bg-white p-4 ring-1 ring-pr-stone"
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="font-semibold text-slate-900">{s.staff_name}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="font-semibold text-pr-black">{s.staff_name}</p>
+                    <p className="text-xs text-pr-black-soft/50">
                       {s.role ?? 'Agent'} · Arr. {s.planned_arrival?.slice(0, 5) ?? '—'} ·
                       Dép. prévu {s.planned_departure?.slice(0, 5) ?? '—'}
                     </p>

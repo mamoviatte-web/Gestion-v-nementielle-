@@ -35,15 +35,15 @@ const EMPTY = {
 function Section({ icon, title, children, open = false }: { icon: string; title: string; children: ReactNode; open?: boolean }) {
   const [o, setO] = useState(open);
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-hidden rounded-xl border border-pr-stone bg-white">
       <button type="button" onClick={() => setO(!o)} className="flex w-full items-center justify-between px-4 py-4">
-        <span className="flex items-center gap-2 font-semibold text-slate-800">
+        <span className="flex items-center gap-2 font-semibold text-pr-black-soft/90">
           <span>{icon}</span>
           {title}
         </span>
-        <span className="text-lg text-slate-400">{o ? '▲' : '▼'}</span>
+        <span className="text-lg text-pr-black-soft/45">{o ? '▲' : '▼'}</span>
       </button>
-      {o && <div className="space-y-5 border-t border-slate-100 px-4 pb-5 pt-4">{children}</div>}
+      {o && <div className="space-y-5 border-t border-pr-stone/60 px-4 pb-5 pt-4">{children}</div>}
     </div>
   );
 }
@@ -64,7 +64,7 @@ function YesNo({ value, onChange, partiel = true }: { value: YN; onChange: (v: Y
                 : v === 'non'
                   ? 'bg-red-500 text-white'
                   : 'bg-amber-500 text-white'
-              : 'bg-slate-100 text-slate-600'
+              : 'bg-pr-stone/50 text-pr-black-soft/70'
           }`}
         >
           {v === 'oui' ? '✅ Oui' : v === 'non' ? '❌ Non' : '⚠️ Partiel'}
@@ -77,14 +77,14 @@ function YesNo({ value, onChange, partiel = true }: { value: YN; onChange: (v: Y
 function Score({ label, value, onChange }: { label: string; value: number | null; onChange: (v: number) => void }) {
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-slate-700">{label}</p>
+      <p className="text-sm font-medium text-pr-black-soft/80">{label}</p>
       <div className="flex gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             type="button"
             onClick={() => onChange(n)}
-            className={`flex-1 rounded-lg py-2 text-sm font-bold ${value === n ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600'}`}
+            className={`flex-1 rounded-lg py-2 text-sm font-bold ${value === n ? 'bg-amber-500 text-white' : 'bg-pr-stone/50 text-pr-black-soft/70'}`}
           >
             {n}
           </button>
@@ -97,13 +97,13 @@ function Score({ label, value, onChange }: { label: string; value: number | null
 function Area({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-slate-700">{label}</label>
+      <label className="text-sm font-medium text-pr-black-soft/80">{label}</label>
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         rows={3}
-        className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2.5 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-400"
+        className="w-full resize-none rounded-lg border border-pr-stone px-3 py-2.5 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-400"
       />
     </div>
   );
@@ -126,8 +126,8 @@ export default function MatchZoneDebrief() {
   const set = <K extends keyof typeof EMPTY>(k: K, v: (typeof EMPTY)[K]) =>
     setDraft((d) => ({ ...d, form: { ...d.form, [k]: v } }));
 
-  if (loading) return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Chargement…</div>;
-  if (!session?.success) return <div className="p-8 text-center text-slate-500">Session expirée.</div>;
+  if (loading) return <div className="flex min-h-screen items-center justify-center bg-pr-cream text-pr-black-soft/50">Chargement…</div>;
+  if (!session?.success) return <div className="p-8 text-center text-pr-black-soft/50">Session expirée.</div>;
 
   async function submit() {
     setError('');
@@ -149,7 +149,7 @@ export default function MatchZoneDebrief() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-pr-cream">
         <MatchZoneHeader session={session} back />
         <div className="mx-auto max-w-lg p-4">
           <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center">
@@ -162,34 +162,34 @@ export default function MatchZoneDebrief() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-12">
+    <div className="min-h-screen bg-pr-cream pb-12">
       <MatchZoneHeader session={session} back />
       <div className="mx-auto max-w-lg space-y-3 p-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <label className="mb-2 block text-sm font-medium text-slate-700">Votre nom *</label>
+        <div className="rounded-xl border border-pr-stone bg-white p-4">
+          <label className="mb-2 block text-sm font-medium text-pr-black-soft/80">Votre nom *</label>
           <input
             value={nom}
             onChange={(e) => setNom(e.target.value.toUpperCase())}
             placeholder="NOM Prénom"
-            className="min-h-[48px] w-full rounded-lg border border-slate-200 px-3 py-3 text-base focus:ring-2 focus:ring-amber-400"
+            className="min-h-[48px] w-full rounded-lg border border-pr-stone px-3 py-3 text-base focus:ring-2 focus:ring-amber-400"
           />
         </div>
 
         <Section icon="👥" title="Effectif & Organisation" open>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700">Nombre de personnes présentes *</label>
+            <label className="text-sm font-medium text-pr-black-soft/80">Nombre de personnes présentes *</label>
             <input
               type="number"
               min={0}
               inputMode="numeric"
               value={form.nb_personnes || ''}
               onChange={(e) => set('nb_personnes', parseInt(e.target.value) || 0)}
-              className="min-h-[48px] w-full rounded-lg border border-slate-200 px-3 py-3 text-base"
+              className="min-h-[48px] w-full rounded-lg border border-pr-stone px-3 py-3 text-base"
               placeholder="ex : 4"
             />
           </div>
           <div className="space-y-2">
-            <p className="text-sm font-medium text-slate-700">L'effectif était-il adapté ?</p>
+            <p className="text-sm font-medium text-pr-black-soft/80">L'effectif était-il adapté ?</p>
             <YesNo value={form.effectif_adapte} onChange={(v) => set('effectif_adapte', v)} />
           </div>
           <Score label="Efficacité de l'équipe (1 à 5)" value={form.efficacite} onChange={(v) => set('efficacite', v)} />
@@ -198,7 +198,7 @@ export default function MatchZoneDebrief() {
 
         <Section icon="📦" title="Stocks & Matériel">
           <div className="space-y-2">
-            <p className="text-sm font-medium text-slate-700">Les stocks étaient-ils suffisants ?</p>
+            <p className="text-sm font-medium text-pr-black-soft/80">Les stocks étaient-ils suffisants ?</p>
             <YesNo value={form.stocks_suffisants} onChange={(v) => set('stocks_suffisants', v)} />
           </div>
           <Area label="Commentaire stocks" placeholder="Ruptures, surstock, produits manquants…" value={form.stocks_comment} onChange={(v) => set('stocks_comment', v)} />
@@ -208,7 +208,7 @@ export default function MatchZoneDebrief() {
 
         <Section icon="🗣" title="Clients & Communication">
           <div className="space-y-2">
-            <p className="text-sm font-medium text-slate-700">Les consignes étaient-elles claires ?</p>
+            <p className="text-sm font-medium text-pr-black-soft/80">Les consignes étaient-elles claires ?</p>
             <YesNo value={form.consignes_claires} onChange={(v) => set('consignes_claires', v)} />
           </div>
           <Score label="Satisfaction clients ressentie (1 à 5)" value={form.retours_clients} onChange={(v) => set('retours_clients', v)} />
@@ -218,7 +218,7 @@ export default function MatchZoneDebrief() {
 
         <Section icon="🧹" title="Propreté & État de l'espace">
           <div className="space-y-2">
-            <p className="text-sm font-medium text-slate-700">Espace rendu propre et en bon état ?</p>
+            <p className="text-sm font-medium text-pr-black-soft/80">Espace rendu propre et en bon état ?</p>
             <YesNo value={form.espace_etat_bon} onChange={(v) => set('espace_etat_bon', v)} partiel={false} />
           </div>
           <Area label="Problèmes de propreté / déchets" placeholder="Points noirs, dépassements…" value={form.problemes_dechets} onChange={(v) => set('problemes_dechets', v)} />
@@ -228,9 +228,9 @@ export default function MatchZoneDebrief() {
           {nom.trim().length >= 2 ? (
             <>
               <PhotoGallery eventId={session.event_id} spaceId={session.space_id} photoType="mise_en_place" label="Mise en place (avant)" responsableNom={nom} />
-              <hr className="border-slate-100" />
+              <hr className="border-pr-stone/60" />
               <PhotoGallery eventId={session.event_id} spaceId={session.space_id} photoType="fb" label="F&B en service" responsableNom={nom} />
-              <hr className="border-slate-100" />
+              <hr className="border-pr-stone/60" />
               <PhotoGallery eventId={session.event_id} spaceId={session.space_id} photoType="fin_evenement" label="Fin d'événement" responsableNom={nom} />
             </>
           ) : (
@@ -244,13 +244,13 @@ export default function MatchZoneDebrief() {
         </Section>
 
         {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</p>}
-        <p className="text-center text-xs text-slate-400">
+        <p className="text-center text-xs text-pr-black-soft/45">
           💾 Brouillon enregistré automatiquement sur cet appareil — rien ne se perd si vous rafraîchissez ou changez de page. Soumettez quand tout est complet.
         </p>
         <button
           onClick={() => void submit()}
           disabled={saving || nom.trim().length < 2}
-          className="mt-1 min-h-[56px] w-full rounded-xl bg-slate-900 py-4 text-base font-bold text-white disabled:opacity-40"
+          className="mt-1 min-h-[56px] w-full rounded-xl bg-pr-black py-4 text-base font-bold text-white disabled:opacity-40"
         >
           {saving ? 'Envoi…' : '✅ Soumettre le débrief'}
         </button>

@@ -53,7 +53,7 @@ const SELECT_COLUMNS =
 /** Cellule de notation en cercles (0–5) ou « — » si absente. */
 function StarCell({ score }: { score: number | null }) {
   if (score === null || score === undefined) {
-    return <span className="text-slate-400">—</span>;
+    return <span className="text-pr-black-soft/45">—</span>;
   }
   const n = Math.max(0, Math.min(5, Math.round(score)));
   return (
@@ -91,7 +91,7 @@ export function DebriefScoresGrid({
   });
 
   const title = (
-    <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+    <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-pr-black-soft/50">
       <Star className="h-4 w-4 text-amber-500" aria-hidden />
       Scores des débriefs par espace
     </h2>
@@ -129,7 +129,7 @@ export function DebriefScoresGrid({
   const spaceLabel = (s: EventSpaceWithSpace): string =>
     s.spaces?.space_name ?? s.space_id;
 
-  const dash = <span className="text-slate-400">—</span>;
+  const dash = <span className="text-pr-black-soft/45">—</span>;
 
   /** Alertes agrégées (urgences + anomalies ménage/technique). */
   const alerts = spaces.reduce<
@@ -161,7 +161,7 @@ export function DebriefScoresGrid({
         <Table>
           <THead>
             <TR>
-              <TH className="sticky left-0 z-10 bg-slate-50">Critère</TH>
+              <TH className="sticky left-0 z-10 bg-pr-cream">Critère</TH>
               {spaces.map((s) => (
                 <TH key={s.space_id} className="whitespace-nowrap text-center">
                   {spaceLabel(s)}
@@ -171,7 +171,7 @@ export function DebriefScoresGrid({
           </THead>
           <TBody>
             <TR>
-              <TD className="sticky left-0 z-10 bg-white font-medium text-slate-900">
+              <TD className="sticky left-0 z-10 bg-white font-medium text-pr-black">
                 Global
               </TD>
               {spaces.map((s) => {
@@ -197,7 +197,7 @@ export function DebriefScoresGrid({
             </TR>
 
             <TR>
-              <TD className="sticky left-0 z-10 bg-white font-medium text-slate-900">
+              <TD className="sticky left-0 z-10 bg-white font-medium text-pr-black">
                 Ménage
               </TD>
               {spaces.map((s) => {
@@ -211,7 +211,7 @@ export function DebriefScoresGrid({
             </TR>
 
             <TR>
-              <TD className="sticky left-0 z-10 bg-white font-medium text-slate-900">
+              <TD className="sticky left-0 z-10 bg-white font-medium text-pr-black">
                 Technique
               </TD>
               {spaces.map((s) => {
@@ -225,7 +225,7 @@ export function DebriefScoresGrid({
             </TR>
 
             <TR>
-              <TD className="sticky left-0 z-10 bg-white font-medium text-slate-900">
+              <TD className="sticky left-0 z-10 bg-white font-medium text-pr-black">
                 Stocks
               </TD>
               {spaces.map((s) => {
@@ -250,7 +250,7 @@ export function DebriefScoresGrid({
             </TR>
 
             <TR>
-              <TD className="sticky left-0 z-10 bg-white font-medium text-slate-900">
+              <TD className="sticky left-0 z-10 bg-white font-medium text-pr-black">
                 Urgent
               </TD>
               {spaces.map((s) => {
@@ -277,7 +277,7 @@ export function DebriefScoresGrid({
             </TR>
 
             <TR>
-              <TD className="sticky left-0 z-10 bg-white font-medium text-slate-900">
+              <TD className="sticky left-0 z-10 bg-white font-medium text-pr-black">
                 Soumis
               </TD>
               {spaces.map((s) => {
@@ -312,7 +312,7 @@ export function DebriefScoresGrid({
 
       {alerts.length > 0 && (
         <div className="space-y-2">
-          <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-pr-black-soft/50">
             <AlertTriangle className="h-4 w-4" aria-hidden />
             Alertes débrief
           </h3>

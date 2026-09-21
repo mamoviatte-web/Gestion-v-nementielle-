@@ -375,11 +375,11 @@ export function SeminaireBilanTab({
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-pr-black">
             <BarChart3 className="h-5 w-5 text-pr-olive-dark" aria-hidden />
             Bilan {event.event_name}
           </h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-pr-black-soft/50">
             {formatDate(event.event_date)} · {event.expected_attendees ?? '—'} participants
           </p>
         </div>
@@ -397,11 +397,11 @@ export function SeminaireBilanTab({
 
       {/* 1 — Avancement --------------------------------------------------- */}
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-pr-black-soft/70">
           Avancement par espace
         </h3>
         {spaces.length === 0 ? (
-          <p className="text-sm text-slate-500">Aucun espace activé pour cet événement.</p>
+          <p className="text-sm text-pr-black-soft/50">Aucun espace activé pour cet événement.</p>
         ) : (
           <div className="space-y-2">
             {spaces.map((s) => {
@@ -421,16 +421,16 @@ export function SeminaireBilanTab({
               return (
                 <div
                   key={s.space_id}
-                  className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:flex-row sm:items-center"
+                  className="flex flex-col gap-2 rounded-lg border border-pr-stone bg-white p-3 sm:flex-row sm:items-center"
                 >
                   <div className="w-full sm:w-48 sm:shrink-0">
-                    <p className="text-sm font-medium text-slate-900">{nameOf(s.space_id)}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-sm font-medium text-pr-black">{nameOf(s.space_id)}</p>
+                    <p className="text-xs text-pr-black-soft/50">
                       {timing.space_responsible_name ?? 'Responsable —'}
                     </p>
                   </div>
                   <div className="flex-1">
-                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-pr-stone/50">
                       <div
                         className="h-full rounded-full bg-pr-olive-dark transition-all"
                         style={{ width: `${pct}%` }}
@@ -438,7 +438,7 @@ export function SeminaireBilanTab({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 sm:w-56 sm:justify-end">
-                    <span className="text-xs font-semibold text-slate-600">{pct}%</span>
+                    <span className="text-xs font-semibold text-pr-black-soft/70">{pct}%</span>
                     <Badge tone={pct === 100 ? 'success' : pct > 0 ? 'info' : 'neutral'}>
                       {status}
                     </Badge>
@@ -452,10 +452,10 @@ export function SeminaireBilanTab({
 
       {/* 2 — Synthèse des coûts (prix U × consommé) ----------------------- */}
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-pr-black-soft/70">
           Synthèse des coûts F&amp;B
         </h3>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-pr-black-soft/45">
           Coût = prix unitaire HT × consommé (initial + réassort − final). Survolez un produit pour la formule.
         </p>
         <BilanCostTable eventId={event.event_id} />
@@ -466,7 +466,7 @@ export function SeminaireBilanTab({
 
       {/* 4 — Débriefs & photos -------------------------------------------- */}
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-pr-black-soft/70">
           Débriefs &amp; photos
         </h3>
         {spaces.length === 0 ? (
@@ -479,10 +479,10 @@ export function SeminaireBilanTab({
               return (
                 <div
                   key={s.space_id}
-                  className="space-y-2 rounded-lg border border-slate-200 bg-white p-4"
+                  className="space-y-2 rounded-lg border border-pr-stone bg-white p-4"
                 >
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-900">{nameOf(s.space_id)}</p>
+                    <p className="text-sm font-semibold text-pr-black">{nameOf(s.space_id)}</p>
                     {d?.submitted_at ? (
                       <Badge tone="success">Débrief soumis</Badge>
                     ) : (
@@ -490,21 +490,21 @@ export function SeminaireBilanTab({
                     )}
                   </div>
                   {d?.submitted_at ? (
-                    <div className="space-y-1.5 text-sm text-slate-600">
+                    <div className="space-y-1.5 text-sm text-pr-black-soft/70">
                       {d.efficacite && (
                         <p>
-                          <span className="font-medium text-slate-700">Efficacité :</span>{' '}
+                          <span className="font-medium text-pr-black-soft/80">Efficacité :</span>{' '}
                           <Badge tone="info">⭐ {d.efficacite}</Badge>
                         </p>
                       )}
                       {d.stocks_suffisants && (
                         <p>
-                          <span className="font-medium text-slate-700">Stocks suffisants :</span>{' '}
+                          <span className="font-medium text-pr-black-soft/80">Stocks suffisants :</span>{' '}
                           {d.stocks_suffisants}
                         </p>
                       )}
                       {d.suggestions_generales && (
-                        <p className="text-slate-500">{d.suggestions_generales}</p>
+                        <p className="text-pr-black-soft/50">{d.suggestions_generales}</p>
                       )}
                       {photos.length > 0 && (
                         <div className="flex flex-wrap gap-2 pt-1">
@@ -520,7 +520,7 @@ export function SeminaireBilanTab({
                       )}
                     </div>
                   ) : (
-                    <p className="text-sm text-slate-400">⏳ En attente</p>
+                    <p className="text-sm text-pr-black-soft/45">⏳ En attente</p>
                   )}
                 </div>
               );

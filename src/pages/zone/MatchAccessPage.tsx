@@ -199,7 +199,7 @@ export default function MatchAccessPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       {space.is_supervisor ? (
-                        <span className="rounded-full bg-indigo-100 px-2 text-xs text-indigo-700">Superviseur</span>
+                        <span className="rounded-full bg-pr-olive/10 px-2 text-xs text-pr-olive-dark">Superviseur</span>
                       ) : spaceFamily(space) === 'Buvettes' ? (
                         <span className="rounded-full bg-sky-100 px-2 text-xs text-sky-700">Buvette</span>
                       ) : (

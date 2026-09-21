@@ -62,8 +62,8 @@ export default function BuvetteDetailPage() {
     [lines, mode],
   );
 
-  if (loading) return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Chargement…</div>;
-  if (!session?.success) return <div className="p-8 text-center text-slate-500">Session expirée.</div>;
+  if (loading) return <div className="flex min-h-screen items-center justify-center bg-pr-cream text-pr-black-soft/50">Chargement…</div>;
+  if (!session?.success) return <div className="p-8 text-center text-pr-black-soft/50">Session expirée.</div>;
 
   async function save() {
     setError('');
@@ -90,13 +90,13 @@ export default function BuvetteDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-28">
+    <div className="min-h-screen bg-pr-cream pb-28">
       <MatchZoneHeader session={session} back />
       <div className="mx-auto max-w-lg space-y-3 p-4">
         {code && (
-          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-lg text-white">🍺</span>
-            <p className="font-bold text-slate-900">{code}</p>
+          <div className="flex items-center gap-3 rounded-xl border border-pr-stone bg-white px-4 py-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pr-black text-lg text-white">🍺</span>
+            <p className="font-bold text-pr-black">{code}</p>
           </div>
         )}
 
@@ -110,7 +110,7 @@ export default function BuvetteDetailPage() {
                 setSavedMsg('');
                 setError('');
               }}
-              className={`rounded-xl border-2 py-3 text-center text-xs font-semibold transition-colors ${step === s.key ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-500'}`}
+              className={`rounded-xl border-2 py-3 text-center text-xs font-semibold transition-colors ${step === s.key ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-pr-stone bg-white text-pr-black-soft/50'}`}
             >
               <span className="block text-lg">{s.icon}</span>
               {s.label}
@@ -118,13 +118,13 @@ export default function BuvetteDetailPage() {
           ))}
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <label className="mb-2 block text-sm font-medium text-slate-700">Votre nom *</label>
+        <div className="rounded-xl border border-pr-stone bg-white p-4">
+          <label className="mb-2 block text-sm font-medium text-pr-black-soft/80">Votre nom *</label>
           <input
             value={nom}
             onChange={(e) => setNom(e.target.value.toUpperCase())}
             placeholder="NOM Prénom"
-            className="min-h-[48px] w-full rounded-lg border border-slate-200 px-3 py-3 text-base focus:ring-2 focus:ring-amber-400"
+            className="min-h-[48px] w-full rounded-lg border border-pr-stone px-3 py-3 text-base focus:ring-2 focus:ring-amber-400"
           />
         </div>
 
@@ -148,14 +148,14 @@ export default function BuvetteDetailPage() {
       </div>
 
       {!isDebrief && visibleLines.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 p-4 backdrop-blur">
+        <div className="fixed inset-x-0 bottom-0 border-t border-pr-stone bg-white/95 p-4 backdrop-blur">
           <div className="mx-auto max-w-lg space-y-2">
             {error && <p className="rounded-lg bg-red-50 p-2.5 text-sm text-red-600">{error}</p>}
             {savedMsg && <p className="rounded-lg bg-green-50 p-2.5 text-sm text-green-700">{savedMsg}</p>}
             <button
               onClick={() => void save()}
               disabled={saving || nom.trim().length < 2}
-              className="min-h-[56px] w-full rounded-xl bg-slate-900 py-4 text-base font-bold text-white disabled:opacity-40"
+              className="min-h-[56px] w-full rounded-xl bg-pr-black py-4 text-base font-bold text-white disabled:opacity-40"
             >
               {saving ? 'Enregistrement…' : `Enregistrer — ${STOCK_STEPS.find((s) => s.key === step)?.label}`}
             </button>

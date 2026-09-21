@@ -39,10 +39,10 @@ export default function ProviderHomePage() {
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-provence/10 text-provence">
         <UserCircle2 className="h-9 w-9" />
       </div>
-      <h1 className="mt-4 text-lg font-bold text-slate-900">
+      <h1 className="mt-4 text-lg font-bold text-pr-black">
         Bienvenue sur l'espace {user?.spaceCode}
       </h1>
-      <p className="mt-1 text-sm text-slate-500">
+      <p className="mt-1 text-sm text-pr-black-soft/50">
         Avant de commencer, merci d'indiquer votre nom. Il sera associé à vos
         saisies.
       </p>

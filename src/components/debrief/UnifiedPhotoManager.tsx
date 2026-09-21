@@ -208,7 +208,7 @@ export function UnifiedPhotoManager({
         <span className="flex items-center gap-2 text-sm font-bold text-stone-800">
           <Camera className="h-4 w-4 text-stone-500" /> {photos.length} photo{photos.length > 1 ? 's' : ''} au total
         </span>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${inPdfCount ? 'bg-amber-400 text-slate-900' : 'bg-slate-200 text-slate-500'}`}>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${inPdfCount ? 'bg-amber-400 text-pr-black' : 'bg-pr-stone text-pr-black-soft/50'}`}>
           {inPdfCount} dans le PDF
         </span>
       </div>
@@ -267,11 +267,11 @@ export function UnifiedPhotoManager({
                   />
                   <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[9px] font-bold text-white">{cat?.emoji}</span>
                   {photo.include_in_pdf && (
-                    <span className="absolute right-1 top-1 rounded bg-amber-400 px-1 text-[9px] font-black text-slate-900">PDF</span>
+                    <span className="absolute right-1 top-1 rounded bg-amber-400 px-1 text-[9px] font-black text-pr-black">PDF</span>
                   )}
                   <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
                     <button onClick={() => setLightbox(photo)} className="rounded-full bg-white/90 p-1.5" title="Agrandir">
-                      <ZoomIn className="h-3.5 w-3.5 text-slate-700" />
+                      <ZoomIn className="h-3.5 w-3.5 text-pr-black-soft/80" />
                     </button>
                     <button onClick={() => void deletePhoto(photo)} className="rounded-full bg-red-500/90 p-1.5" title="Supprimer">
                       <X className="h-3.5 w-3.5 text-white" />
@@ -282,7 +282,7 @@ export function UnifiedPhotoManager({
                   <button
                     onClick={() => void togglePdf(photo)}
                     className={`flex w-full items-center justify-center gap-1 rounded py-1 text-[10px] font-bold transition-colors ${
-                      photo.include_in_pdf ? 'bg-amber-400 text-slate-900' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                      photo.include_in_pdf ? 'bg-amber-400 text-pr-black' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                     }`}
                   >
                     {photo.include_in_pdf ? <Check className="h-2.5 w-2.5" /> : <FileText className="h-2.5 w-2.5" />}
@@ -293,7 +293,7 @@ export function UnifiedPhotoManager({
                       defaultValue={photo.pdf_caption ?? ''}
                       onBlur={(e) => void saveCaption(photo, e.target.value)}
                       placeholder="Légende PDF…"
-                      className="w-full rounded border border-stone-200 px-1 py-0.5 text-[10px] text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-300"
+                      className="w-full rounded border border-stone-200 px-1 py-0.5 text-[10px] text-pr-black-soft/90 focus:outline-none focus:ring-1 focus:ring-amber-300"
                     />
                   )}
                   <select

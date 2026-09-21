@@ -49,8 +49,8 @@ export default function MatchZoneSchedule() {
   // Flush des timers à la sortie de page (ne rien perdre).
   useEffect(() => () => { for (const t of timers.current.values()) clearTimeout(t); }, []);
 
-  if (loading) return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">Chargement…</div>;
-  if (!session?.success) return <div className="p-8 text-center text-slate-500">Session expirée.</div>;
+  if (loading) return <div className="flex min-h-screen items-center justify-center bg-pr-cream text-pr-black-soft/50">Chargement…</div>;
+  if (!session?.success) return <div className="p-8 text-center text-pr-black-soft/50">Session expirée.</div>;
 
   // Enregistrement d'une ligne (auto, débouncé).
   async function persistRow(id: string) {
@@ -86,12 +86,12 @@ export default function MatchZoneSchedule() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-12">
+    <div className="min-h-screen bg-pr-cream pb-12">
       <MatchZoneHeader session={session} back />
       <div className="mx-auto max-w-lg space-y-3 p-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <h2 className="font-bold text-slate-800">⏱ Horaires de l'équipe</h2>
-          <p className="mt-1 text-sm text-slate-500">
+        <div className="rounded-xl border border-pr-stone bg-white p-4">
+          <h2 className="font-bold text-pr-black-soft/90">⏱ Horaires de l'équipe</h2>
+          <p className="mt-1 text-sm text-pr-black-soft/50">
             Notez l'heure de départ réelle de chaque agent puis confirmez.
           </p>
         </div>
@@ -104,30 +104,30 @@ export default function MatchZoneSchedule() {
           </div>
         )}
         {ready && rows.length === 0 && (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+          <div className="rounded-xl border border-pr-stone bg-white p-6 text-center text-sm text-pr-black-soft/50">
             Aucun agent planifié sur cet espace.
           </div>
         )}
 
         {rows.map((s) => (
-          <div key={s.schedule_id} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+          <div key={s.schedule_id} className="space-y-3 rounded-xl border border-pr-stone bg-white p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-semibold text-slate-800">{s.staff_name}</p>
-                <p className="text-xs text-slate-400">{s.role ?? 'Agent'}</p>
+                <p className="font-semibold text-pr-black-soft/90">{s.staff_name}</p>
+                <p className="text-xs text-pr-black-soft/45">{s.role ?? 'Agent'}</p>
               </div>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-pr-black-soft/50">
                 {hm(s.planned_arrival)} → {hm(s.planned_departure)} <span className="text-xs">(prévu)</span>
               </p>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700">Départ réel</label>
+              <label className="text-sm font-medium text-pr-black-soft/80">Départ réel</label>
               <input
                 type="time"
                 value={s.actual_departure ? s.actual_departure.slice(0, 5) : ''}
                 onChange={(e) => patch(s.schedule_id, { actual_departure: e.target.value })}
-                className="min-h-[48px] w-full rounded-lg border border-slate-200 px-3 py-2.5 text-base focus:ring-2 focus:ring-amber-400"
+                className="min-h-[48px] w-full rounded-lg border border-pr-stone px-3 py-2.5 text-base focus:ring-2 focus:ring-amber-400"
               />
             </div>
 
@@ -141,7 +141,7 @@ export default function MatchZoneSchedule() {
                     type="button"
                     onClick={() => patch(s.schedule_id, { [k]: !on } as Partial<Sched>)}
                     className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg text-sm font-medium ${
-                      on ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-600'
+                      on ? 'bg-green-500 text-white' : 'bg-pr-stone/50 text-pr-black-soft/70'
                     }`}
                   >
                     {on && <Check className="h-4 w-4" />}
@@ -153,13 +153,13 @@ export default function MatchZoneSchedule() {
 
             <p className="text-center text-xs font-medium">
               {status[s.schedule_id] === 'saving' ? (
-                <span className="text-slate-500">💾 Enregistrement…</span>
+                <span className="text-pr-black-soft/50">💾 Enregistrement…</span>
               ) : status[s.schedule_id] === 'error' ? (
                 <span className="text-red-600">⚠️ Échec — réessayez</span>
               ) : status[s.schedule_id] === 'saved' ? (
                 <span className="text-green-700">✓ Enregistré automatiquement</span>
               ) : (
-                <span className="text-slate-400">Enregistrement automatique à chaque saisie</span>
+                <span className="text-pr-black-soft/45">Enregistrement automatique à chaque saisie</span>
               )}
             </p>
           </div>
