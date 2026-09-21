@@ -6,6 +6,7 @@ import { useEvent, useEventSpaces, useEventActions, useEventsList } from '@/hook
 import { useEventStats } from '@/hooks/useEventStats';
 import { EVENT_STATUS_META } from '@/lib/labels';
 import { StockDotationsTable } from '@/components/stock/StockDotationsTable';
+import { KegClosureAudit } from '@/components/stock/KegClosureAudit';
 import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { UnifiedRunnerPanel } from '@/components/runner/UnifiedRunnerPanel';
@@ -175,6 +176,7 @@ export default function EventDetailPage() {
       await setStatus('clôturé');
       // Match : réconciliation fûts (idempotente) — vides à rentrer + retours
       // stockage. Non bloquant : un échec n'empêche pas la clôture.
+      let kegNotice = '';
       if (eventQuery.data?.event_type === 'match' && id) {
         const by = user?.name ?? user?.email ?? 'Stade';
         try {
@@ -182,8 +184,25 @@ export default function EventDetailPage() {
         } catch (kegErr) {
           console.error('Réconciliation fûts:', kegErr);
         }
+        // Opérateur de contrôle des fûts : annonce les défauts au moment de la clôture.
+        try {
+          const { data: aud } = await supabase.rpc('audit_keg_closure', { p_event_id: id });
+          const a = aud as { nb_defauts?: number; nb_bloquants?: number; ancrage_perime?: boolean; defauts?: { gravite: string; product_name: string; space_name: string; detail: string }[] } | null;
+          if (a && ((a.nb_defauts ?? 0) > 0 || a.ancrage_perime)) {
+            const lignes = (a.defauts ?? []).slice(0, 8).map((d) => `• [${d.gravite}] ${d.product_name} — ${d.space_name}\n   ${d.detail}`).join('\n');
+            const anc = a.ancrage_perime ? '\n\n⚠ Comptage physique des fûts requis (dernier comptage antérieur au match → le stock va dériver).' : '';
+            window.alert(
+              `Contrôle des fûts — clôture de « ${eventName} »\n\n` +
+              `${a.nb_defauts ?? 0} défaut(s)${(a.nb_bloquants ?? 0) > 0 ? ` · ${a.nb_bloquants} bloquant(s)` : ''} :\n\n` +
+              `${lignes}${anc}\n\nDétail complet dans l'onglet « Saisie finale » du match.`,
+            );
+            kegNotice = ` — ${a.nb_defauts ?? 0} défaut(s) fûts signalé(s)`;
+          }
+        } catch (auditErr) {
+          console.error('Contrôle fûts:', auditErr);
+        }
       }
-      showToast(`Événement « ${eventName} » clôturé.`, 'success');
+      showToast(`Événement « ${eventName} » clôturé${kegNotice}.`, kegNotice ? 'warning' : 'success');
       // Recharge INTÉGRALE : tous les calculs (F&B, conso, marge, fûts) repartent
       // des données figées — évite les états partiels en cache.
       window.location.reload();
@@ -684,6 +703,7 @@ export default function EventDetailPage() {
       {/* ───────── Match · ③ Clôture ───────── */}
       {isMatch && activeSub === 'final' && (
         <div className="space-y-6">
+          <KegClosureAudit eventId={event.event_id} />
           <KegReconciliationPanel
             eventId={event.event_id}
             closed={event.status === 'clôturé' || event.status === 'archivé'}
