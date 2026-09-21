@@ -7,6 +7,7 @@ import { useEventStats } from '@/hooks/useEventStats';
 import { EVENT_STATUS_META } from '@/lib/labels';
 import { StockDotationsTable } from '@/components/stock/StockDotationsTable';
 import { KegClosureAudit } from '@/components/stock/KegClosureAudit';
+import { KegBlockModal, type KegDefaut } from '@/components/stock/KegBlockModal';
 import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { UnifiedRunnerPanel } from '@/components/runner/UnifiedRunnerPanel';
@@ -167,41 +168,30 @@ export default function EventDetailPage() {
   const [editMode, setEditMode] = useState(false);
   const [showSpacesModal, setShowSpacesModal] = useState(false);
   const [recaling, setRecaling] = useState(false);
+  const [kegBlock, setKegBlock] = useState<{ eventName: string; defauts: KegDefaut[]; ancrage: boolean } | null>(null);
   // R1 : blocage de clôture tant que les données ne sont pas fiables.
   const [closureIssues, setClosureIssues] = useState<ClosureCheck | null>(null);
 
   // Clôture effective (une fois les données jugées fiables ou forcées).
-  async function doClose(eventName: string) {
+  // force=true : passe outre l'avertissement fûts (l'utilisateur a confirmé).
+  async function doClose(eventName: string, force = false) {
     try {
-      let kegNotice = '';
+      let kegNotice = force ? ' — défauts fûts forcés' : '';
       // ── Opérateur de contrôle des fûts — AVANT de figer la clôture ──
-      // Défauts bloquants → avertissement fort + « clôturer quand même ? ».
-      // Non bloquant / ancrage périmé → simple notice.
-      if (eventQuery.data?.event_type === 'match' && id) {
+      // Défauts bloquants → modale d'avertissement forte (stoppe la clôture).
+      // Non bloquant / ancrage périmé → simple notice au toast.
+      if (!force && eventQuery.data?.event_type === 'match' && id) {
         try {
           const { data: aud } = await supabase.rpc('audit_keg_closure', { p_event_id: id });
-          const a = aud as { nb_defauts?: number; ancrage_perime?: boolean; dernier_comptage?: string | null; defauts?: { gravite: string; product_name: string; space_name: string; detail: string }[] } | null;
+          const a = aud as { nb_defauts?: number; ancrage_perime?: boolean; defauts?: KegDefaut[] } | null;
           if (a) {
             const bloquants = (a.defauts ?? []).filter((d) => d.gravite === 'bloquant');
             if (bloquants.length > 0) {
-              const lignes = bloquants.slice(0, 12).map((d) => `•  ${d.product_name} — ${d.space_name}\n    ${d.detail}`).join('\n');
-              const forcer = window.confirm(
-                `⚠  CLÔTURE BLOQUÉE PAR LE CONTRÔLE DES FÛTS\n` +
-                `« ${eventName} » — ${bloquants.length} défaut(s) bloquant(s) :\n\n` +
-                `${lignes}\n\n` +
-                `Ces fûts partis ne sont PAS comptés : le stock fûts sera faux après clôture.\n\n` +
-                `→ « Annuler » pour corriger les stocks finaux d'abord (recommandé).\n` +
-                `→ « OK » pour clôturer QUAND MÊME (les défauts seront tracés).`,
-              );
-              if (!forcer) {
-                showToast(`Clôture annulée — corrigez les ${bloquants.length} défaut(s) fûts signalé(s), puis relancez.`, 'warning');
-                return;
-              }
-              kegNotice = ` — ${bloquants.length} défaut(s) fûts forcé(s)`;
-            } else if ((a.nb_defauts ?? 0) > 0 || a.ancrage_perime) {
-              const anc = a.ancrage_perime ? `\n\n⚠  Comptage physique des fûts requis (dernier comptage ${a.dernier_comptage ?? '—'} antérieur au match → le stock va dériver).` : '';
-              window.alert(`Contrôle des fûts — « ${eventName} »\n\n${a.nb_defauts ?? 0} point(s) de vigilance (non bloquant).${anc}\n\nDétail dans l'onglet « Stock final & fûts ».`);
-              kegNotice = a.ancrage_perime ? ' — comptage fûts à refaire' : '';
+              setKegBlock({ eventName, defauts: a.defauts ?? [], ancrage: !!a.ancrage_perime });
+              return; // la modale prend le relais (Annuler / Clôturer quand même)
+            }
+            if ((a.nb_defauts ?? 0) > 0 || a.ancrage_perime) {
+              kegNotice = a.ancrage_perime ? ' — comptage fûts à refaire' : ` — ${a.nb_defauts} point(s) de vigilance fûts`;
             }
           }
         } catch (auditErr) {
@@ -749,6 +739,24 @@ export default function EventDetailPage() {
       )}
       {isMatch && activeSub === 'analyse' && <ConsumptionAnalysisTab event={event} />}
       {isMatch && activeSub === 'gpvip' && <MatchConsumptionReport eventId={event.event_id} />}
+
+      {kegBlock && (
+        <KegBlockModal
+          eventName={kegBlock.eventName}
+          defauts={kegBlock.defauts}
+          ancragePerime={kegBlock.ancrage}
+          onCancel={() => {
+            const n = kegBlock.defauts.filter((d) => d.gravite === 'bloquant').length;
+            setKegBlock(null);
+            showToast(`Clôture annulée — corrigez les ${n} défaut(s) fûts signalé(s), puis relancez.`, 'warning');
+          }}
+          onForce={() => {
+            const nm = kegBlock.eventName;
+            setKegBlock(null);
+            void doClose(nm, true);
+          }}
+        />
+      )}
     </div>
   );
 }
