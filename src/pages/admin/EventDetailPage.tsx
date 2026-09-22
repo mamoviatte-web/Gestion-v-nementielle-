@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useEvent, useEventSpaces, useEventActions, useEventsList } from '@/hooks/useEvents';
@@ -42,8 +42,8 @@ import { useAuth } from '@/context/AuthContext';
 import { RevenueMarginPanel } from '@/components/events/RevenueMarginPanel';
 import { EventResetButton } from '@/components/events/EventResetButton';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
-import { Alert, Badge, Button, Select, Spinner } from '@/components/ui';
-import { Zap, CalendarClock, Pencil, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Alert, Badge, Button, Select, Spinner, StatTile } from '@/components/ui';
+import { Zap, CalendarClock, Pencil, AlertTriangle, RefreshCw, Building2, FileSpreadsheet } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 
 type Tab =
@@ -153,6 +153,7 @@ export default function EventDetailPage() {
   const allEvents = useEventsList();
   const { setStatus, updating } = useEventActions(id);
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('espaces'); // onglets séminaire uniquement
   const [phase, setPhase] = useState<Phase>('prep'); // phase active (matchs)
@@ -374,7 +375,7 @@ export default function EventDetailPage() {
                     <Pencil className="h-4 w-4" /> {editMode ? 'Fermer l’édition' : 'Modifier'}
                   </Button>
                   <Button size="sm" variant="secondary" onClick={() => setShowSpacesModal(true)}>
-                    🏟️ Espaces ({spaces.length})
+                    <Building2 className="h-4 w-4" /> Espaces ({spaces.length})
                   </Button>
                 </>
               )}
@@ -388,21 +389,14 @@ export default function EventDetailPage() {
                   <Zap className="h-4 w-4" /> Dotations runner
                 </Button>
               )}
-              <Link
-                to={`/admin/events/${event.event_id}/planning`}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-pr-stone bg-white px-3 py-2 text-sm font-medium text-pr-black-soft/70 transition-colors hover:bg-pr-cream"
-              >
+              <Button size="sm" variant="secondary" onClick={() => navigate(`/admin/events/${event.event_id}/planning`)}>
                 <CalendarClock className="h-4 w-4" /> Planning
-              </Link>
+              </Button>
               {!isClosed && (
                 <Button size="sm" loading={updating} onClick={() => void handleCloseEvent(event.event_name)}>
                   Clôturer
                 </Button>
               )}
-              {isMatch && (
-                <EventResetButton eventId={event.event_id} eventName={event.event_name} onDone={() => window.location.reload()} />
-              )}
-              <DeleteEventButton event={{ event_id: event.event_id, event_name: event.event_name, event_type: event.event_type }} />
               {isClosed && (event.event_type === 'match' || event.event_type === 'séminaire') && (
                 <Button
                   size="sm"
@@ -413,7 +407,7 @@ export default function EventDetailPage() {
                       : void genererRapportMatch(event.event_id)
                   }
                 >
-                  📊 Rapport Excel
+                  <FileSpreadsheet className="h-4 w-4" /> Rapport Excel
                 </Button>
               )}
               {isClosed && isMatch && (
@@ -427,23 +421,23 @@ export default function EventDetailPage() {
                   <RefreshCw className="h-4 w-4" /> Recaler les stocks espaces
                 </Button>
               )}
+              {/* Actions destructives — regroupées et séparées visuellement */}
+              <span className="mx-0.5 hidden h-6 w-px self-center bg-pr-stone sm:block" aria-hidden />
+              {isMatch && (
+                <EventResetButton eventId={event.event_id} eventName={event.event_name} onDone={() => window.location.reload()} />
+              )}
+              <DeleteEventButton event={{ event_id: event.event_id, event_name: event.event_name, event_type: event.event_type }} />
             </div>
           </div>
 
           {/* Ligne 2 — compteurs clés + intégrité */}
           <div className="mt-4 flex flex-wrap items-stretch gap-2">
-            <div className="rounded-xl border border-pr-stone bg-white px-3.5 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-pr-black-soft/45">Stocks soumis</p>
-              <p className={clsx('font-display text-lg font-black tabular-nums', stats.spacesClosed >= stats.spacesTotal && stats.spacesTotal > 0 ? 'text-pr-olive-dark' : 'text-pr-black')}>
-                {stats.spacesClosed}/{stats.spacesTotal}
-              </p>
-            </div>
-            <div className="rounded-xl border border-pr-stone bg-white px-3.5 py-2">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-pr-black-soft/45">Débriefs</p>
-              <p className="font-display text-lg font-black tabular-nums text-pr-black">
-                {stats.debriefsReceived}/{stats.spacesTotal}
-              </p>
-            </div>
+            <StatTile
+              label="Stocks soumis"
+              value={`${stats.spacesClosed}/${stats.spacesTotal}`}
+              tone={stats.spacesClosed >= stats.spacesTotal && stats.spacesTotal > 0 ? 'good' : 'default'}
+            />
+            <StatTile label="Débriefs" value={`${stats.debriefsReceived}/${stats.spacesTotal}`} />
             <div className="flex min-w-[220px] flex-1 items-center">
               <IntegrityBadge eventId={event.event_id} />
             </div>
