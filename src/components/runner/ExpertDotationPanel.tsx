@@ -17,7 +17,7 @@ interface Gamme {
   a_monter_actuel: number; a_monter_expert: number; surtransmission: number;
 }
 interface Ligne {
-  space_name: string; product_name: string; gamme: string;
+  space_name: string; product_name: string; gamme: string; modele?: string;
   conso_dernier: number; conso_projetee: number; espace: number; besoin_expert: number;
   a_monter_actuel: number; a_monter_expert: number; surtransmission: number;
 }
@@ -72,8 +72,11 @@ export function ExpertDotationPanel({ eventId, onApplied }: { eventId: string; o
         Analyse conso & dotation experte
       </SectionTitle>
 
-      <p className="mb-3 text-xs text-pr-black-soft/55">
+      <p className="mb-2 text-xs text-pr-black-soft/55">
         Besoin projeté sur l'affluence attendue ({data.expected_attendees.toLocaleString('fr-FR')} pax) à partir de la conso réelle des derniers matchs (pour 1000 spectateurs), <b>moins le stock déjà en espace</b>. Marge de sécurité 15 %.
+      </p>
+      <p className="mb-3 rounded-lg border border-pr-stone bg-pr-cream/60 px-3 py-2 text-xs text-pr-black-soft/60">
+        <b>Loges exclues du recalcul conso</b> — leur stock central regroupe la dotation de base des loges individuelles ; leur « à monter » = base totale − stock central (remise à niveau de la mise en place). Seuls salons, bars, buvettes et bodega sont recalculés sur la consommation.
       </p>
 
       <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
