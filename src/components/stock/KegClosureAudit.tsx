@@ -23,7 +23,7 @@ interface Defaut {
 interface Audit {
   success: boolean;
   event_name: string;
-  resume: { dispatche: number; vides_a_rentrer: number; pleins_retour_stockage: number; pleins_gardes: number; espaces: number };
+  resume: { dispatche: number; vides_a_rentrer: number; pleins_retour_stockage: number; pleins_gardes: number; espaces: number; futs_espace_non_conserves?: number };
   dernier_comptage: string | null;
   ancrage_perime: boolean;
   nb_defauts: number;
@@ -70,9 +70,30 @@ export function KegClosureAudit({ eventId }: { eventId: string }) {
       <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <StatTile label="Dispatché" value={r.dispatche} sub={`${r.espaces} espace(s)`} />
         <StatTile label="Vides à rentrer" value={r.vides_a_rentrer} />
-        <StatTile label="Pleins retournés" value={r.pleins_retour_stockage} sub="au stockage" />
-        <StatTile label="Pleins gardés" value={r.pleins_gardes} sub="sur place" />
+        <StatTile label="Pleins retournés" value={r.pleins_retour_stockage} sub="au stockage central" />
+        <StatTile label="Pleins gardés" value={r.pleins_gardes} sub="cave EST sur place" />
       </div>
+
+      {/* Invariant : aucun fût ne doit rester en inventaire des espaces non conservés */}
+      {typeof r.futs_espace_non_conserves === 'number' && (
+        <div
+          className={`mb-3 flex items-center justify-between gap-2 rounded-xl border px-4 py-2.5 text-sm ${
+            r.futs_espace_non_conserves === 0
+              ? 'border-pr-olive/30 bg-pr-olive/10 text-pr-olive-dark'
+              : 'border-pr-gold/40 bg-pr-gold/10 text-pr-black-soft/80'
+          }`}
+        >
+          <span className="flex items-center gap-2 font-medium">
+            {r.futs_espace_non_conserves === 0 ? (
+              <CheckCircle2 size={15} />
+            ) : (
+              <AlertTriangle size={15} className="text-pr-gold" />
+            )}
+            Fûts restant en inventaire espace (hors cave EST) — doit être 0
+          </span>
+          <span className="font-display text-base font-black tabular-nums">{r.futs_espace_non_conserves}</span>
+        </div>
+      )}
 
       {/* Ancrage périmé → comptage physique requis */}
       {audit.ancrage_perime && (
