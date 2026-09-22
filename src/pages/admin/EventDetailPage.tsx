@@ -42,8 +42,8 @@ import { useAuth } from '@/context/AuthContext';
 import { RevenueMarginPanel } from '@/components/events/RevenueMarginPanel';
 import { EventResetButton } from '@/components/events/EventResetButton';
 import { SeminarReportEditor } from '@/components/seminar/SeminarReportEditor';
-import { Alert, Badge, Button, Select, Spinner, StatTile } from '@/components/ui';
-import { Zap, CalendarClock, Pencil, AlertTriangle, RefreshCw, Building2, FileSpreadsheet } from 'lucide-react';
+import { Alert, Badge, Button, Spinner, StatTile } from '@/components/ui';
+import { Zap, CalendarClock, Pencil, AlertTriangle, RefreshCw, Building2, FileSpreadsheet, Copy, Lock, ChevronRight } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 
 type Tab =
@@ -447,29 +447,29 @@ export default function EventDetailPage() {
           {isMatch && (
             <details className="group mt-3 rounded-xl border border-pr-stone bg-white" open={!isClosed}>
               <summary className="flex cursor-pointer list-none items-center gap-2.5 px-4 py-3 font-display text-sm font-bold text-pr-black [&::-webkit-details-marker]:hidden">
-                <svg className="h-4 w-4 text-pr-black-soft/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="10" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                <Lock size={16} className="text-pr-black-soft/50" />
                 Codes d'accès match
                 <span className="text-xs font-medium text-pr-black-soft/40">· responsables de zone &amp; RH</span>
-                <svg className="ml-auto h-4 w-4 text-pr-black-soft/40 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" /></svg>
+                <ChevronRight size={16} className="ml-auto text-pr-black-soft/40 transition-transform group-open:rotate-90" />
               </summary>
               <div className="space-y-4 border-t border-pr-stone/70 p-4">
                 <MatchAccessCode eventId={event.event_id} code={event.match_access_code ?? null} eventName={event.event_name} />
                 {event.rh_access_code && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="rounded-xl border border-pr-gold/40 bg-pr-gold/10 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="mb-1 text-xs font-bold uppercase tracking-wide text-amber-700">Code accès Responsable RH</p>
-                        <p className="font-display text-3xl font-black tracking-[0.25em] text-stone-900">{event.rh_access_code}</p>
-                        <p className="mt-1 text-xs text-amber-600">À communiquer uniquement à la responsable RH · Valide pour ce match uniquement</p>
+                        <p className="mb-1 text-xs font-bold uppercase tracking-wide text-pr-black-soft/60">Code accès Responsable RH</p>
+                        <p className="font-display text-3xl font-black tracking-[0.25em] text-pr-black">{event.rh_access_code}</p>
+                        <p className="mt-1 text-xs text-pr-black-soft/50">À communiquer uniquement à la responsable RH · Valide pour ce match uniquement</p>
                       </div>
                       <button
                         onClick={() => {
                           void navigator.clipboard.writeText(event.rh_access_code ?? '');
                           showToast('Code RH copié.', 'success');
                         }}
-                        className="shrink-0 rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-white"
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-pr-black px-3 py-2 text-xs font-bold text-pr-cream transition-colors hover:bg-pr-black-soft"
                       >
-                        📋 Copier
+                        <Copy size={13} /> Copier
                       </button>
                     </div>
                   </div>
@@ -593,41 +593,57 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* Sous-onglets : phase active (matchs) ou onglets séminaire */}
-      <div className="mb-5 flex flex-wrap gap-1 border-b border-pr-stone">
-        {(isMatch
-          ? phaseSubs.map((s) => ({ key: s.key as string, label: s.label, active: activeSub === s.key, on: () => setSub(s.key) }))
-          : SEMINAIRE_TABS.map((t) => ({ key: t.key as string, label: t.label, active: activeTab === t.key, on: () => setTab(t.key) }))
-        ).map((t) => (
-          <button
-            key={t.key}
-            onClick={t.on}
-            className={clsx(
-              '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-              t.active
-                ? 'border-pr-black text-pr-black'
-                : 'border-transparent text-pr-black-soft/50 hover:text-pr-black',
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* Sous-onglets : phase active (matchs) ou onglets séminaire — barre segmentée + sélecteur d'espace inline */}
+      {(() => {
+        const showSpaceSelect = isMatch && spaces.length > 0 && SPACE_SUBS.includes(activeSub);
+        return (
+          <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-pr-stone bg-white p-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex flex-wrap items-center gap-1">
+              {(isMatch
+                ? phaseSubs.map((s) => ({ key: s.key as string, label: s.label, active: activeSub === s.key, on: () => setSub(s.key) }))
+                : SEMINAIRE_TABS.map((t) => ({ key: t.key as string, label: t.label, active: activeTab === t.key, on: () => setTab(t.key) }))
+              ).map((t) => (
+                <button
+                  key={t.key}
+                  onClick={t.on}
+                  aria-current={t.active ? 'page' : undefined}
+                  className={clsx(
+                    'rounded-xl px-3 py-2 text-sm font-semibold transition-colors',
+                    t.active
+                      ? 'bg-pr-black text-pr-cream shadow-sm'
+                      : 'text-pr-black-soft/55 hover:bg-pr-stone/50 hover:text-pr-black',
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
 
-      {/* Sélecteur d'espace (sous-onglets par espace) */}
-      {isMatch && spaces.length > 0 && SPACE_SUBS.includes(activeSub) && (
-        <div className="mb-4 max-w-xs">
-          <Select
-            label="Espace"
-            value={selectedSpace}
-            onChange={(e) => setSpaceId(e.target.value)}
-            options={spaces.map((s) => ({
-              value: s.space_id,
-              label: s.spaces?.space_name ?? s.space_id,
-            }))}
-          />
-        </div>
-      )}
+            {/* Sélecteur d'espace (sous-onglets par espace) — inline dans la barre */}
+            {showSpaceSelect && (
+              <div className="flex shrink-0 items-center gap-2 border-t border-pr-stone/70 px-1.5 pt-2 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+                <span className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold uppercase tracking-wider text-pr-black-soft/45">
+                  <Building2 size={13} /> Espace
+                </span>
+                <div className="relative">
+                  <select
+                    value={selectedSpace}
+                    onChange={(e) => setSpaceId(e.target.value)}
+                    className="w-full cursor-pointer appearance-none rounded-xl border border-pr-stone bg-pr-cream/60 py-2 pl-3 pr-9 text-sm font-medium text-pr-black transition-colors hover:border-pr-black-soft/30 focus:border-pr-olive focus:outline-none focus:ring-2 focus:ring-pr-olive/20 sm:min-w-[180px]"
+                  >
+                    {spaces.map((s) => (
+                      <option key={s.space_id} value={s.space_id}>
+                        {s.spaces?.space_name ?? s.space_id}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronRight size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-pr-black-soft/40" />
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ───────── Contenu séminaire ───────── */}
       {!isMatch && activeTab === 'espaces' && <SeminaireSpacesTab event={event} spaces={spaces} />}
