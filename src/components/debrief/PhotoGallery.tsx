@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Camera, FileText, Upload, X, ZoomIn } from 'lucide-react';
+import { Camera, Download, FileText, Upload, X, ZoomIn } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export type DebriefPhotoType = 'mise_en_place' | 'fb' | 'fin_evenement' | 'incident' | 'autre';
@@ -141,13 +141,53 @@ export function PhotoGallery({
     await supabase.from('debrief_photos').update({ pdf_caption: caption }).eq('id', photo.id);
   }
 
+  /** Télécharge une photo (récupère le blob depuis l'URL signée du bucket privé). */
+  async function downloadPhoto(photo: Photo, index: number) {
+    try {
+      const url = photo.public_url || (await signed(photo.storage_path));
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('fetch');
+      const blob = await resp.blob();
+      const ext = (photo.storage_path.split('?')[0].split('.').pop() || 'jpg').toLowerCase();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = `${label.replace(/[^\w-]+/g, '_')}_${index + 1}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(objUrl);
+    } catch {
+      alert('Téléchargement impossible pour cette photo.');
+    }
+  }
+
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  async function downloadAll() {
+    setDownloadingAll(true);
+    for (let i = 0; i < photos.length; i++) {
+      await downloadPhoto(photos[i], i);
+      await new Promise((r) => setTimeout(r, 350));
+    }
+    setDownloadingAll(false);
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-2 font-medium text-pr-black-soft/80">
           <Camera className="h-4 w-4 text-pr-black-soft/50" /> {label}
         </span>
-        <span className="text-sm text-pr-black-soft/45">{photos.length} photo(s)</span>
+        <span className="flex items-center gap-3">
+          {photos.length > 0 && (
+            <button
+              onClick={() => void downloadAll()}
+              disabled={downloadingAll}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-pr-stone bg-white px-2.5 py-1 text-xs font-semibold text-pr-black-soft/80 transition-colors hover:bg-pr-stone/40 disabled:opacity-50"
+            >
+              <Download className="h-3.5 w-3.5" /> {downloadingAll ? 'Export…' : 'Tout télécharger'}
+            </button>
+          )}
+          <span className="text-sm text-pr-black-soft/45">{photos.length} photo(s)</span>
+        </span>
       </div>
 
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
@@ -167,6 +207,9 @@ export function PhotoGallery({
             <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-lg bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
               <button onClick={() => setLightbox(photo)} className="rounded-full bg-white/90 p-1.5" title="Agrandir">
                 <ZoomIn className="h-3.5 w-3.5 text-pr-black-soft/80" />
+              </button>
+              <button onClick={() => void downloadPhoto(photo, photos.indexOf(photo))} className="rounded-full bg-white/90 p-1.5" title="Télécharger">
+                <Download className="h-3.5 w-3.5 text-pr-black-soft/80" />
               </button>
               {!readonly && (
                 <button onClick={() => void deletePhoto(photo)} className="rounded-full bg-red-500/90 p-1.5" title="Supprimer">
@@ -219,9 +262,14 @@ export function PhotoGallery({
 
       {lightbox && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setLightbox(null)}>
-          <button className="absolute right-4 top-4 text-white" onClick={() => setLightbox(null)}>
-            <X className="h-7 w-7" />
-          </button>
+          <div className="absolute right-4 top-4 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <button className="rounded-full bg-white/15 p-2 text-white hover:bg-white/25" title="Télécharger" onClick={() => void downloadPhoto(lightbox, photos.indexOf(lightbox))}>
+              <Download className="h-5 w-5" />
+            </button>
+            <button className="rounded-full bg-white/15 p-2 text-white hover:bg-white/25" onClick={() => setLightbox(null)}>
+              <X className="h-5 w-5" />
+            </button>
+          </div>
           <img src={lightbox.public_url} alt={lightbox.caption ?? ''} onClick={(e) => e.stopPropagation()} className="max-h-full max-w-full rounded-lg object-contain" />
         </div>
       )}

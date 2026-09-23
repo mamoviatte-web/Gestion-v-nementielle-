@@ -172,9 +172,21 @@ function StockEntryContent({
         <ReassortForm stock={stock} responsableNom={responsableNom} onDone={() => setMode('view')} draftKey={`stockdraft:reassort:${event.event_id}:${spaceId}`} />
       )}
       {stock.phase === 'reassort' && mode === 'closing' && (
-        <ClosingForm stock={stock} responsableNom={responsableNom} onCancel={() => setMode('view')} draftKey={`stockdraft:closing:${event.event_id}:${spaceId}`} />
+        <ClosingForm stock={stock} responsableNom={responsableNom} onCancel={() => setMode('view')} onDone={() => setMode('view')} draftKey={`stockdraft:closing:${event.event_id}:${spaceId}`} />
       )}
-      {stock.phase === 'cloture' && <RecapView stock={stock} />}
+      {stock.phase === 'cloture' && mode !== 'closing' && (
+        <RecapView stock={stock} onCorrect={() => setMode('closing')} />
+      )}
+      {stock.phase === 'cloture' && mode === 'closing' && (
+        <ClosingForm
+          stock={stock}
+          responsableNom={responsableNom}
+          isCorrection
+          onCancel={() => setMode('view')}
+          onDone={() => setMode('view')}
+          draftKey={`stockdraft:correction:${event.event_id}:${spaceId}`}
+        />
+      )}
     </div>
   );
 }
@@ -432,21 +444,33 @@ function ClosingForm({
   stock,
   responsableNom,
   onCancel,
+  onDone,
   draftKey,
+  isCorrection = false,
 }: {
   stock: ReturnType<typeof useStock>;
   responsableNom: string;
   onCancel: () => void;
+  onDone?: () => void;
   draftKey: string;
+  /** Correction d'une clôture déjà validée : pré-remplit les valeurs saisies. */
+  isCorrection?: boolean;
 }) {
   const lines = stock.stockLines.data ?? [];
   const [form, setForm, clearForm] = usePersistentDraft<Record<string, ClosingState>>(draftKey, {});
-  // Initialiser les lignes non encore brouillonnées (état par défaut « fermé »).
+  // Initialiser les lignes non encore brouillonnées. En correction : pré-remplir
+  // avec les valeurs déjà saisies (restant, état, anomalie) pour rectifier.
   useEffect(() => {
     if (lines.length === 0) return;
     setForm((prev) => {
       const next = { ...prev };
-      for (const l of lines) if (next[l.product_id] == null) next[l.product_id] = { final: '', state: 'fermé', anomaly: '' };
+      for (const l of lines) {
+        if (next[l.product_id] == null) {
+          next[l.product_id] = isCorrection
+            ? { final: l.final_qty != null ? String(l.final_qty) : '', state: l.product_state ?? 'fermé', anomaly: l.anomaly_comment ?? '' }
+            : { final: '', state: 'fermé', anomaly: '' };
+        }
+      }
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -473,6 +497,7 @@ function ClosingForm({
     try {
       await stock.submitClosing(inputs, responsableNom);
       clearForm();
+      onDone?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de la clôture.');
     }
@@ -480,9 +505,10 @@ function ClosingForm({
 
   return (
     <div className="space-y-4">
-      <Alert variant="warning" title="Inventaire de clôture">
-        Saisissez le restant, l'état du produit, et un commentaire si la
-        consommation est négative (RG-004).
+      <Alert variant="warning" title={isCorrection ? 'Correction de la clôture' : 'Inventaire de clôture'}>
+        {isCorrection
+          ? 'Rectifiez les valeurs erronées puis revalidez. La correction est tracée et recalcule la consommation.'
+          : 'Saisissez le restant, l\'état du produit, et un commentaire si la consommation est négative (RG-004).'}
       </Alert>
       {error && <Alert variant="error">{error}</Alert>}
 
@@ -530,7 +556,7 @@ function ClosingForm({
           Annuler
         </Button>
         <Button size="lg" loading={stock.submitting} onClick={handleSubmit}>
-          <ClipboardCheck className="h-5 w-5" /> Valider la clôture
+          <ClipboardCheck className="h-5 w-5" /> {isCorrection ? 'Valider la correction' : 'Valider la clôture'}
         </Button>
       </div>
     </div>
@@ -541,7 +567,13 @@ function ClosingForm({
 /* Récapitulatif (terminé) — sans prix (RG-003)                        */
 /* ------------------------------------------------------------------ */
 
-function RecapView({ stock }: { stock: ReturnType<typeof useStock> }) {
+function RecapView({
+  stock,
+  onCorrect,
+}: {
+  stock: ReturnType<typeof useStock>;
+  onCorrect?: () => void;
+}) {
   const lines = stock.stockLines.data ?? [];
   const rows = useMemo(
     () =>
@@ -557,6 +589,17 @@ function RecapView({ stock }: { stock: ReturnType<typeof useStock> }) {
       <Alert variant="success" title="Clôture validée">
         L'inventaire de clôture a été enregistré. Récapitulatif ci-dessous.
       </Alert>
+
+      {onCorrect && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-pr-stone bg-white p-3">
+          <p className="text-sm text-pr-black-soft/70">
+            Une erreur de saisie ? Vous pouvez corriger tant que l'événement n'est pas clôturé par le Stade.
+          </p>
+          <Button variant="secondary" onClick={onCorrect}>
+            <PlusCircle className="h-4 w-4" /> Corriger la clôture
+          </Button>
+        </div>
+      )}
 
       <Table>
         <THead>
