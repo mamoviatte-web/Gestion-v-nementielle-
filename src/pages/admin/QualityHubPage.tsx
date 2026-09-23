@@ -7,18 +7,21 @@
 
 import { useSearchParams } from 'react-router-dom';
 import { clsx } from 'clsx';
-import { ShieldCheck, Activity } from 'lucide-react';
+import { ShieldCheck, Activity, Boxes } from 'lucide-react';
 import AuditPilotPage from '@/pages/admin/AuditPilotPage';
 import DataHealthPage from '@/pages/admin/DataHealthPage';
+import ReserveReconcilePage from '@/pages/admin/ReserveReconcilePage';
 
 const TABS = [
   { key: 'audit', label: 'Audit', icon: ShieldCheck },
   { key: 'sante', label: 'Santé', icon: Activity },
+  { key: 'reserve', label: 'Réserve', icon: Boxes },
 ] as const;
 
 export default function QualityHubPage() {
   const [params, setParams] = useSearchParams();
-  const tab = params.get('tab') === 'sante' ? 'sante' : 'audit';
+  const raw = params.get('tab');
+  const tab = raw === 'sante' ? 'sante' : raw === 'reserve' ? 'reserve' : 'audit';
 
   return (
     <div>
@@ -42,7 +45,7 @@ export default function QualityHubPage() {
           })}
         </div>
       </div>
-      {tab === 'audit' ? <AuditPilotPage /> : <DataHealthPage />}
+      {tab === 'audit' ? <AuditPilotPage /> : tab === 'reserve' ? <ReserveReconcilePage /> : <DataHealthPage />}
     </div>
   );
 }
