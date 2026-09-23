@@ -12,6 +12,7 @@ import { Boxes, RefreshCw, Check, X, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/context/ToastContext';
 import { Badge, Button, Card, EmptyState, Input, SectionTitle, Spinner, StatTile } from '@/components/ui';
+import { StockHealthPanel } from '@/components/stock/StockHealthPanel';
 
 interface Row {
   reserve_id: string;
@@ -74,6 +75,7 @@ export default function ReserveReconcilePage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:px-6">
+      <StockHealthPanel />
       <Card accent={negatifs > 0 ? 'rust' : 'olive'}>
         <SectionTitle
           icon={Boxes}
