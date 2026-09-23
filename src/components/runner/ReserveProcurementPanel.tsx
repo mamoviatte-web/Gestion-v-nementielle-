@@ -6,9 +6,10 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ShoppingCart, RefreshCw } from 'lucide-react';
+import { ShoppingCart, RefreshCw, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Card, SectionTitle, Spinner, StatTile } from '@/components/ui';
+import { Button, Card, SectionTitle, Spinner, StatTile } from '@/components/ui';
+import { downloadAoaWorkbook, type AoaCell } from '@/lib/xlsxAoa';
 
 interface Ligne {
   product_name: string; category: string;
@@ -34,6 +35,34 @@ export function ReserveProcurementPanel({ eventId }: { eventId: string }) {
   }, [eventId]);
   useEffect(() => { void load(); }, [load]);
 
+  const [exporting, setExporting] = useState(false);
+  async function exportOrder() {
+    if (!data) return;
+    setExporting(true);
+    try {
+      const today = new Date().toLocaleDateString('fr-FR');
+      const aoa: AoaCell[][] = [
+        [`Commande réserve — ${data.event_name}`],
+        [`Généré le ${today} · ${data.nb_produits_a_commander} produit(s) · ${data.total_a_commander} unité(s) · ${data.total_cout_ht.toFixed(2)} € HT`],
+        [],
+        ['Produit', 'Catégorie', 'À commander', 'PU HT (€)', 'Total HT (€)'],
+        ...data.lignes.map((l) => [l.product_name, l.category, l.a_commander, l.pu_ht, l.cout_ht] as AoaCell[]),
+        ['Total', '', data.total_a_commander, '', data.total_cout_ht],
+      ];
+      await downloadAoaWorkbook(
+        [{
+          name: 'Commande',
+          aoa,
+          widths: [34, 14, 13, 12, 14],
+          columns: [undefined, undefined, { align: 'right' }, { numFmt: '#,##0.00', align: 'right' }, { numFmt: '#,##0.00', align: 'right' }],
+        }],
+        `Commande_${data.event_name.replace(/[^\w-]+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (loading) return <Card><Spinner label="Prévisionnel d'achat…" /></Card>;
   if (!data?.success || data.lignes.length === 0) return null;
 
@@ -42,9 +71,14 @@ export function ReserveProcurementPanel({ eventId }: { eventId: string }) {
       <SectionTitle
         icon={ShoppingCart}
         right={
-          <button onClick={() => void load()} className="inline-flex items-center gap-1 text-xs text-pr-black-soft/45 hover:text-pr-black-soft/70">
-            <RefreshCw size={12} /> Recalculer
-          </button>
+          <div className="flex items-center gap-3">
+            <Button variant="secondary" size="sm" loading={exporting} onClick={() => void exportOrder()}>
+              <FileSpreadsheet size={14} /> Exporter la commande
+            </Button>
+            <button onClick={() => void load()} className="inline-flex items-center gap-1 text-xs text-pr-black-soft/45 hover:text-pr-black-soft/70">
+              <RefreshCw size={12} /> Recalculer
+            </button>
+          </div>
         }
       >
         Prévisionnel d'achat réserve
