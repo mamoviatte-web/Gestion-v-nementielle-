@@ -12,6 +12,7 @@ import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
 import { DebriefAdminPanel } from '@/components/debrief/DebriefAdminPanel';
 import { UnifiedRunnerPanel } from '@/components/runner/UnifiedRunnerPanel';
 import { ExpertDotationPanel } from '@/components/runner/ExpertDotationPanel';
+import { ReserveProcurementPanel } from '@/components/runner/ReserveProcurementPanel';
 import { genererRapportMatch, genererRapportSeminaire } from '@/lib/rapportExcel';
 import { ConsumptionAnalysisTab } from '@/components/analytics/ConsumptionAnalysisTab';
 import { MatchConsumptionReport } from '@/components/analytics/MatchConsumptionReport';
@@ -676,6 +677,7 @@ export default function EventDetailPage() {
             <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
           )}
           <ExpertDotationPanel eventId={event.event_id} />
+          <ReserveProcurementPanel eventId={event.event_id} />
           <UnifiedRunnerPanel
             eventId={event.event_id}
             matchNom={event.event_name}
