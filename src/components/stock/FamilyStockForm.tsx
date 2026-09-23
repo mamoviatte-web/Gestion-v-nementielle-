@@ -193,6 +193,20 @@ export function FamilyStockForm({ lines, mode, onChange, spaceType }: Props) {
                               )}
                             </p>
                           )}
+                          {/* Raccourci : 0 restant = tout consommé (conso = total reçu). */}
+                          {mode === 'final' && totalIn > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => onChange(line.product_id, field, 0)}
+                              className={`mt-1.5 inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                                line.final_qty === 0
+                                  ? 'border-green-300 bg-green-100 text-green-800'
+                                  : 'border-stone-200 bg-white text-stone-500 hover:border-amber-300 hover:bg-amber-50'
+                              }`}
+                            >
+                              {line.final_qty === 0 ? '✓ Tout consommé (0 restant)' : 'Tout consommé (0)'}
+                            </button>
+                          )}
                         </div>
                         <input
                           ref={(el) => (inputRefs.current[line.product_id] = el)}
@@ -209,7 +223,7 @@ export function FamilyStockForm({ lines, mode, onChange, spaceType }: Props) {
                           className={`min-h-[56px] w-24 shrink-0 rounded-xl border-2 py-3 text-center text-xl font-bold transition-colors focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400 ${
                             isAnomaly
                               ? 'border-red-300 bg-red-50 text-red-700'
-                              : displayQty !== '' && displayQty !== 0
+                              : (mode === 'final' ? line.final_qty !== null : displayQty !== '' && displayQty !== 0)
                                 ? 'border-green-300 bg-green-50 text-green-800'
                                 : 'border-stone-200 bg-white text-stone-800'
                           }`}

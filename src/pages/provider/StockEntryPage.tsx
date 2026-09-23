@@ -538,6 +538,19 @@ function ClosingForm({
                 error={negative ? 'Consommation négative' : null}
                 onChange={(e) => update(l.product_id, { final: e.target.value })}
               />
+              {available > 0 && (
+                <button
+                  type="button"
+                  onClick={() => update(l.product_id, { final: '0' })}
+                  className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    f.final === '0'
+                      ? 'border-pr-olive/40 bg-pr-olive/10 text-pr-olive-dark'
+                      : 'border-pr-stone bg-white text-pr-black-soft/60 hover:border-pr-olive/40 hover:bg-pr-olive/5'
+                  }`}
+                >
+                  {f.final === '0' ? '✓ Tout consommé (0 restant)' : 'Tout consommé (0)'}
+                </button>
+              )}
               {negative && (
                 <Textarea
                   label="Commentaire d'anomalie (obligatoire)"
