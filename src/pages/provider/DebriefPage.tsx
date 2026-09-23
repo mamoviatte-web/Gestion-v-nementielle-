@@ -67,7 +67,7 @@ function DebriefContent({
 
   // Brouillon local (offline-first) — restauré au montage, effacé à la soumission.
   const draftKey = `debrief.${event?.event_id ?? 'none'}.${spaceId}`;
-  const { loadDraft, clearDraft } = useAutosaveDraft(draftKey, values);
+  const { loadDraft, clearDraft, lastSavedAt } = useAutosaveDraft(draftKey, values);
   const restored = useRef(false);
   useEffect(() => {
     if (restored.current || !event) return;
@@ -150,6 +150,14 @@ function DebriefContent({
   return (
     <div className="space-y-4">
       <PageHeader title="Débrief" description={event.event_name} />
+
+      {/* Sauvegarde automatique — réassurance responsable */}
+      <p className="flex items-center gap-1.5 text-xs text-pr-olive">
+        <span className="h-1.5 w-1.5 rounded-full bg-pr-olive" />
+        {lastSavedAt
+          ? `Brouillon enregistré automatiquement · ${new Date(lastSavedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
+          : 'Sauvegarde automatique activée'}
+      </p>
 
       {/* Barre de progression */}
       <div>
