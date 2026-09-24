@@ -217,8 +217,7 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
       {alerts.length > 0 && (
         <BilanSection
           title={`⚠️ ${alerts.length} point${alerts.length > 1 ? 's' : ''} à traiter`}
-          aside={criticalCount > 0 ? `${criticalCount} critique(s)` : undefined}
-          defaultOpen={criticalCount > 0}
+          aside={criticalCount > 0 ? `🔴 ${criticalCount} critique(s)` : 'à consulter'}
         >
           <div className="divide-y divide-stone-50">
             {alerts.map((a, i) => (
