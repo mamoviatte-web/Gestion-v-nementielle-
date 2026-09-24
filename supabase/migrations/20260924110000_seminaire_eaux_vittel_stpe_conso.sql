@@ -36,7 +36,7 @@ declare
   v_event uuid := 'c2072f9f-231f-413b-8ae3-0f92eb162829'; -- Altrad ENDEL 2026-09-23
   v_space uuid := 'f52ece0b-bfaf-4a76-b280-720f158ba470'; -- Salon Sud
   v_src   uuid := 'd7cfd5c8-651f-4bdc-9441-47ea83b422b4'; -- « sur place » (espace)
-  v_resp  text := '21B0FC';                                -- régie (attribution existante)
+  v_resp  text := 'Valentin CONSTANT';                     -- régie (nom réel, cf. § 4)
   v_vittel uuid := '922c8f3c-4274-49a0-8870-e331c87d857f';
   v_stpe   uuid := '08c46d8d-5566-4046-b372-8f437e5e7cce';
 begin
@@ -61,3 +61,20 @@ begin
           submitted_at       = now();
   end if;
 end $$;
+
+-- ---------------------------------------------------------------------
+-- 4) RH — le régisseur du séminaire Altrad ENDEL 23/09 avait été enregistré
+--    sous le CODE d'accès « 21B0FC » au lieu de son nom. On le corrige en
+--    « Valentin CONSTANT » : ses 12,5 h (06:30→19:00 @ 10 €/h = 125 €) se
+--    fondent automatiquement dans ses heures du mois via rh_person_key
+--    (rh_monthly_hours : 35 h → 47,5 h, 350 € → 475 €). On aligne aussi la
+--    traçabilité de la conso séminaire (responsable_nom) sur son vrai nom.
+--    Idempotent : ne touche que les lignes encore au code « 21B0FC ».
+-- ---------------------------------------------------------------------
+update public.schedules
+set staff_name = 'Valentin CONSTANT'
+where staff_name = '21B0FC';
+
+update public.event_stock_lines
+set responsable_nom = 'Valentin CONSTANT'
+where responsable_nom = '21B0FC';
