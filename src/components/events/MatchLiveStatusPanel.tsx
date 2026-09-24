@@ -51,9 +51,12 @@ export function MatchLiveStatusPanel({ eventId }: { eventId: string }) {
   })).filter((g) => g.items.length > 0);
 
   return (
-    <div className="mb-5 rounded-xl border border-pr-stone bg-white p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <details className="group/live mb-5 overflow-hidden rounded-xl border border-pr-stone bg-white">
+      {/* Replié par défaut : on garde la vue concentrée. Le résumé (connectés /
+          clôturés) reste visible d'un coup d'œil ; on déplie au besoin. */}
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 transition-colors hover:bg-pr-cream/40 [&::-webkit-details-marker]:hidden">
         <h3 className="flex items-center gap-2 font-semibold text-pr-black-soft/90">
+          <ChevronRight size={15} className="shrink-0 text-pr-black-soft/40 transition-transform group-open/live:rotate-90" />
           <span className="relative flex h-2.5 w-2.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
             <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
@@ -63,9 +66,9 @@ export function MatchLiveStatusPanel({ eventId }: { eventId: string }) {
         <p className="text-xs text-pr-black-soft/50">
           {connected} connecté(s) · {closed}/{spaces.length} espace(s) clôturé(s)
         </p>
-      </div>
+      </summary>
 
-      <div className="space-y-2">
+      <div className="space-y-2 border-t border-pr-stone/60 px-4 pb-4 pt-3">
         {groups.map((g) => {
           const gConnected = g.items.reduce((s, x) => s + (x.active_sessions ?? 0), 0);
           const gClosed = g.items.filter((s) => s.stock_status === 'clôturé').length;
@@ -118,6 +121,6 @@ export function MatchLiveStatusPanel({ eventId }: { eventId: string }) {
           );
         })}
       </div>
-    </div>
+    </details>
   );
 }
