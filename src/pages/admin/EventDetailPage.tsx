@@ -92,8 +92,8 @@ const MATCH_PHASES: { key: Phase; label: string; subs: { key: MatchSub; label: s
     key: 'prep',
     label: '① Préparation',
     subs: [
-      { key: 'pax', label: 'Espaces & pax' },
-      { key: 'dotations', label: 'Dotations & fiches runner' },
+      { key: 'pax', label: '📍 Espaces & pax' },
+      { key: 'dotations', label: '📦 Dotations & runner' },
       { key: 'route', label: '📄 Feuille de route' },
       { key: 'buvettes', label: '🍺 Buvettes' },
     ],
@@ -102,16 +102,18 @@ const MATCH_PHASES: { key: Phase; label: string; subs: { key: MatchSub; label: s
     key: 'jourj',
     label: '② Jour J',
     subs: [
-      { key: 'saisie', label: '📦 Saisie stock' },
-      { key: 'rh', label: '⏱ Horaires / RH staff' },
+      { key: 'saisie', label: '✍️ Saisie stock' },
+      { key: 'rh', label: '⏱ Horaires / RH' },
     ],
   },
   {
     key: 'cloture',
     label: '③ Clôture',
     subs: [
-      { key: 'final', label: '🍺 Stock final & fûts' },
-      { key: 'debriefs', label: 'Débriefs' },
+      // Fûts déplacés dans un volet interne repliable (voir onglet) — la clôture
+      // se concentre sur l'essentiel : sécuriser le stock final.
+      { key: 'final', label: '📦 Stock final' },
+      { key: 'debriefs', label: '📝 Débriefs' },
     ],
   },
   {
@@ -723,18 +725,43 @@ export default function EventDetailPage() {
       )}
 
       {/* ───────── Match · ③ Clôture ───────── */}
+      {/* Priorité à l'ESSENTIEL : sécuriser les stocks finaux (conso/coûts en
+          découlent). La logistique fûts (mouvements, consignes brasseur) est
+          conservée mais REPLIÉE dans une « cachette » interne — elle reste
+          disponible sans alourdir la clôture ni masquer les chiffres. Le
+          garde-fou fûts continue de s'exécuter au clic « Clôturer » (KegBlockModal),
+          indépendamment de l'ouverture de ce volet. */}
       {isMatch && activeSub === 'final' && (
         <div className="space-y-6">
-          <KegClosureAudit eventId={event.event_id} />
-          <KegReconciliationPanel
-            eventId={event.event_id}
-            closed={event.status === 'clôturé' || event.status === 'archivé'}
-          />
           {selectedSpace ? (
             <StockDotationsTable eventId={event.event_id} spaceId={selectedSpace} />
           ) : (
             <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
           )}
+
+          <details className="group overflow-hidden rounded-2xl border border-pr-stone bg-white">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-pr-black-soft/70 transition-colors hover:bg-pr-cream/40">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="text-base">🍺</span>
+                Logistique fûts — interne
+                <span className="rounded-full bg-pr-stone/60 px-2 py-0.5 text-[11px] font-medium text-pr-black-soft/60">
+                  contrôle &amp; réconciliation
+                </span>
+              </span>
+              <span className="shrink-0 text-xs text-pr-black-soft/40 transition-transform group-open:rotate-180">▼</span>
+            </summary>
+            <div className="space-y-6 border-t border-pr-stone px-4 py-5 sm:px-5">
+              <p className="text-xs text-pr-black-soft/50">
+                Suivi des mouvements de fûts (vides à rentrer, pleins retournés / gardés). Usage
+                logistique interne — sans effet sur les chiffres de consommation et de coûts.
+              </p>
+              <KegClosureAudit eventId={event.event_id} />
+              <KegReconciliationPanel
+                eventId={event.event_id}
+                closed={event.status === 'clôturé' || event.status === 'archivé'}
+              />
+            </div>
+          </details>
         </div>
       )}
       {isMatch && activeSub === 'debriefs' && (
