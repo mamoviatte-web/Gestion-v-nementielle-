@@ -446,9 +446,10 @@ export default function EventDetailPage() {
             </div>
           </div>
 
-          {/* Codes d'accès — repliés (ouverts tant que le match n'est pas clôturé) */}
+          {/* Codes d'accès — repliés par défaut (on déplie au moment de partager
+              les codes) pour garder le haut de fiche concentré. */}
           {isMatch && (
-            <details className="group mt-3 rounded-xl border border-pr-stone bg-white" open={!isClosed}>
+            <details className="group mt-3 rounded-xl border border-pr-stone bg-white">
               <summary className="flex cursor-pointer list-none items-center gap-2.5 px-4 py-3 font-display text-sm font-bold text-pr-black [&::-webkit-details-marker]:hidden">
                 <Lock size={16} className="text-pr-black-soft/50" />
                 Codes d'accès match
