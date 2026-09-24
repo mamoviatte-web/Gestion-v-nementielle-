@@ -4,9 +4,9 @@
  * Source : vue match_closed_summary (supabase/match_closed_summary.sql).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  AlertTriangle, ChevronDown, ChevronRight, TrendingUp, Users, Package,
+  ChevronDown, ChevronRight, TrendingUp, Users, Package,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { SuiviRhBlock } from './SuiviRhBlock';
@@ -53,6 +53,37 @@ interface Alert {
   level: 'critical' | 'warning' | 'info';
   msg: string;
   sub: string;
+}
+
+/**
+ * Section repliable du bilan (details/summary). Par défaut refermée pour garder
+ * le bilan concentré sur les chiffres (KPI) ; on déplie chaque bloc au besoin.
+ * `bare` = sans habillage de carte (pour envelopper un composant déjà encarté).
+ */
+function BilanSection({
+  title, aside, defaultOpen = false, bare = false, children,
+}: {
+  title: string;
+  aside?: ReactNode;
+  defaultOpen?: boolean;
+  bare?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details
+      open={defaultOpen}
+      className={`group ${bare ? '' : 'overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm'}`}
+    >
+      <summary
+        className={`flex cursor-pointer list-none items-center gap-2 ${bare ? 'px-1 py-2' : 'px-5 py-3'} transition-colors hover:bg-stone-50/60 [&::-webkit-details-marker]:hidden`}
+      >
+        <ChevronRight size={15} className="shrink-0 text-stone-400 transition-transform group-open:rotate-90" />
+        <span className="text-sm font-bold text-stone-800">{title}</span>
+        {aside != null && <span className="ml-auto text-xs text-stone-400">{aside}</span>}
+      </summary>
+      <div className={bare ? 'pt-1' : 'border-t border-stone-50'}>{children}</div>
+    </details>
+  );
 }
 
 export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventName: string; paxCount: number }) {
@@ -177,16 +208,18 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
         ))}
       </div>
 
-      {/* ── SUIVI RH (espaces + pôles hors resto + agents) ── */}
-      <SuiviRhBlock eventId={eventId} fbCost={totals.fb} />
+      {/* ── SUIVI RH (espaces + pôles hors resto + agents) — replié ── */}
+      <BilanSection title="⏱ Suivi RH — pôles & agents" bare>
+        <SuiviRhBlock eventId={eventId} fbCost={totals.fb} />
+      </BilanSection>
 
-      {/* ── ALERTES ── */}
+      {/* ── ALERTES — repliées, mais ouvertes d'office si critiques ── */}
       {alerts.length > 0 && (
-        <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm">
-          <div className="flex items-center gap-2 border-b border-stone-50 px-5 py-3">
-            <AlertTriangle size={15} className="text-amber-500" />
-            <p className="text-sm font-bold text-stone-800">{alerts.length} point{alerts.length > 1 ? 's' : ''} à traiter</p>
-          </div>
+        <BilanSection
+          title={`⚠️ ${alerts.length} point${alerts.length > 1 ? 's' : ''} à traiter`}
+          aside={criticalCount > 0 ? `${criticalCount} critique(s)` : undefined}
+          defaultOpen={criticalCount > 0}
+        >
           <div className="divide-y divide-stone-50">
             {alerts.map((a, i) => (
               <div key={i} className={`flex items-start gap-3 px-5 py-3 ${a.level === 'critical' ? 'bg-red-50' : a.level === 'warning' ? 'bg-amber-50' : 'bg-stone-50'}`}>
@@ -198,15 +231,12 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
               </div>
             ))}
           </div>
-        </div>
+        </BilanSection>
       )}
 
-      {/* ── ESPACES VIP & BARS ── */}
+      {/* ── ESPACES VIP & BARS — repliés ── */}
       {vipSpaces.length > 0 && (
-        <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm">
-          <div className="border-b border-stone-50 px-5 py-3">
-            <p className="text-sm font-bold text-stone-800">Espaces VIP &amp; Bars</p>
-          </div>
+        <BilanSection title="Espaces VIP & Bars" aside={`${vipSpaces.length} espace(s)`}>
           <div className="divide-y divide-stone-50">
             {visibleVIP.map((space) => {
               const style = STATUT_STYLE[space.statut_espace] ?? STATUT_STYLE.aucun_stock;
@@ -285,18 +315,16 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
               Voir {vipSpaces.length - 8} espaces de plus ↓
             </button>
           )}
-        </div>
+        </BilanSection>
       )}
 
-      {/* ── BUVETTES & TERRASSES — résumé agrégé ── */}
+      {/* ── BUVETTES & TERRASSES — résumé agrégé, replié ── */}
       {buvetteSpaces.length > 0 && (
-        <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm font-bold text-stone-800">🍺 Buvettes &amp; Terrasses</p>
-            <span className="text-xs text-stone-400">
-              {buvetteSpaces.filter((s) => s.statut_espace === 'complet').length}/{buvetteSpaces.length} complètes
-            </span>
-          </div>
+        <BilanSection
+          title="🍺 Buvettes & Terrasses"
+          aside={`${buvetteSpaces.filter((s) => s.statut_espace === 'complet').length}/${buvetteSpaces.length} complètes`}
+        >
+          <div className="p-5">
           <div className="mb-3 h-2.5 overflow-hidden rounded-full bg-stone-100">
             <div
               className="h-full rounded-full bg-green-500 transition-all"
@@ -318,7 +346,8 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
               F&amp;B buvettes : <strong className="text-stone-700">{eur(buvetteFb)} € HT</strong>
             </p>
           )}
-        </div>
+          </div>
+        </BilanSection>
       )}
     </div>
   );
