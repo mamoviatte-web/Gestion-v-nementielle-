@@ -139,8 +139,13 @@ L'écriture directe en base de prod peut être bloquée par le bac à sable de s
 5. Lance les audits existants comme filet : `run_business_audit`, `_audit_stock_flux`,
    `audit_keg_closure` — ce sont tes contrôleurs de règles automatisés.
 
-Helper de lecture DB (scratchpad de session) : `python3 mgmt.py "<SQL>"` (SELECT).
-Ne jamais coder de secret en dur dans le dépôt ; utiliser le helper de session.
+Helpers de lecture DB (SELECT uniquement) :
+- Session interactive : `python3 mgmt.py "<SQL>"` (dans le scratchpad de session).
+- Session fraîche / protocole quotidien : `python3 scripts/regie_db_read.py "<SQL>"`
+  (jeton lu dans le secret d'environnement `SUPABASE_ACCESS_TOKEN` ; garde-fou
+  intégré : refuse toute requête non-lecture). Si le secret n'est pas configuré,
+  signale-le au lieu de deviner des chiffres.
+Ne jamais coder de secret en dur dans le dépôt ; toujours passer par un helper.
 
 ## MÉTHODE DE TRAVAIL
 
