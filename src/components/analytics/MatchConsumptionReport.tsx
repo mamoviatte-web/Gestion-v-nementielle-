@@ -14,6 +14,63 @@ function num(v: number | null, digits = 1): string {
   return v == null ? '—' : v.toFixed(digits);
 }
 
+// Palette validée (dataviz) : VIP gold / Bar rust — ΔE CVD 28.6, étiquettes
+// directes obligatoires (contraste gold/surface < 3:1). Buvette = olive (série unique).
+const TONE_COLOR: Record<string, string> = { vip: '#C9A646', bar: '#8A3B1F', gp: '#6B7548' };
+const TONE_LABEL: Record<string, string> = { vip: 'VIP', bar: 'Bar', gp: 'Buvette' };
+
+interface SpaceBar { key: string; label: string; tone: string; cost: number; conso: number }
+
+/**
+ * Barres horizontales pour COMPARER les espaces (magnitude) : longueur ∝ coût,
+ * couleur = type d'espace (identité), valeur en étiquette directe, tri décroissant.
+ * Survol = détail (coût + conso). Légende présente dès 2 couleurs.
+ */
+function SpaceBarChart({ title, bars, legendTones }: { title: string; bars: SpaceBar[]; legendTones: string[] }) {
+  if (bars.length === 0) return null;
+  const max = Math.max(1, ...bars.map((b) => b.cost));
+  return (
+    <div className="rounded-2xl border border-pr-stone bg-white p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold text-pr-black">{title}</h4>
+        {legendTones.length > 1 && (
+          <div className="flex items-center gap-3 text-[11px] text-pr-black-soft/60">
+            {legendTones.map((t) => (
+              <span key={t} className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: TONE_COLOR[t] }} aria-hidden />
+                {TONE_LABEL[t]}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        {bars.map((b) => {
+          const pct = Math.max(0, (b.cost / max) * 100);
+          return (
+            <div
+              key={b.key}
+              className="flex items-center gap-3"
+              title={`${b.label} · ${formatEuro(b.cost)} · conso ${b.conso}`}
+            >
+              <span className="w-24 shrink-0 truncate text-xs font-medium text-pr-black-soft/80 sm:w-32">{b.label}</span>
+              <div className="relative h-5 flex-1 overflow-hidden rounded-md bg-pr-stone/40">
+                <div
+                  className="h-full rounded-md transition-all"
+                  style={{ width: `${pct}%`, background: TONE_COLOR[b.tone] ?? TONE_COLOR.gp }}
+                />
+              </div>
+              <span className={`w-20 shrink-0 text-right text-xs font-semibold tabular-nums ${b.cost < 0 ? 'text-pr-rust' : 'text-pr-black'}`}>
+                {formatEuro(b.cost)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function MatchConsumptionReport({ eventId }: { eventId: string }) {
   const { data, isLoading } = useMatchConsumptionReport(eventId);
 
@@ -33,6 +90,29 @@ export function MatchConsumptionReport({ eventId }: { eventId: string }) {
       map.set(l.product_id, e);
     }
     return [...map.values()].sort((a, b) => a.category.localeCompare(b.category, 'fr') || a.name.localeCompare(b.name, 'fr'));
+  }, [gp]);
+
+  // Agrégats par espace pour la comparaison visuelle (coût + conso).
+  const vipBySpace = useMemo<SpaceBar[]>(() => {
+    const m = new Map<string, SpaceBar>();
+    for (const l of vip) {
+      const e = m.get(l.space_id) ?? { key: l.space_id, label: l.space_name, tone: l.service_type === 'vip' ? 'vip' : 'bar', cost: 0, conso: 0 };
+      e.cost += l.cost_ht ?? 0;
+      e.conso += l.final_qty === null ? 0 : l.consumed_qty;
+      m.set(l.space_id, e);
+    }
+    return [...m.values()].sort((a, b) => b.cost - a.cost);
+  }, [vip]);
+
+  const gpBySpace = useMemo<SpaceBar[]>(() => {
+    const m = new Map<string, SpaceBar>();
+    for (const l of gp) {
+      const e = m.get(l.space_id) ?? { key: l.space_id, label: l.space_name, tone: 'gp', cost: 0, conso: 0 };
+      e.cost += l.cost_ht ?? 0;
+      e.conso += l.consumed_qty;
+      m.set(l.space_id, e);
+    }
+    return [...m.values()].sort((a, b) => b.cost - a.cost);
   }, [gp]);
 
   const totalVipCost = vip.reduce((s, l) => s + (l.cost_ht ?? 0), 0);
@@ -79,6 +159,14 @@ export function MatchConsumptionReport({ eventId }: { eventId: string }) {
           <p className="mt-1 text-xs text-pr-black-soft/50">Buvettes B1–B9</p>
         </Card>
       </div>
+
+      {/* Comparaison visuelle des espaces (coût F&B) */}
+      {(vipBySpace.length > 0 || gpBySpace.length > 0) && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <SpaceBarChart title="Coût F&B par espace — VIP & Bars" bars={vipBySpace} legendTones={['vip', 'bar']} />
+          <SpaceBarChart title="Coût F&B par buvette — Grand Public" bars={gpBySpace} legendTones={['gp']} />
+        </div>
+      )}
 
       {/* Tableau VIP & Bars */}
       <section className="space-y-2">
