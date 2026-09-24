@@ -24,15 +24,21 @@ export interface PayrollRow {
   nb_evenements: number;
 }
 
-/** Une ligne de détail = une personne × un événement × une nature de charge.
- *  Source : vue rh_monthly_event_detail (réconcilie avec rh_monthly_hours). */
+/** Une ligne de détail = un SHIFT (personne × événement × jour × tâche).
+ *  Source : vue rh_person_event_shift (réconcilie avec rh_monthly_hours) ;
+ *  repli sur rh_monthly_event_detail (sans jour/horaires) si la vue fine n'est
+ *  pas encore déployée. event_id sert au lien profond vers la fiche événement. */
 export interface PayrollDetailRow {
   staff_name: string;
   categorie: string; // 'Match' | 'Séminaire' | 'Opérationnel' | 'Autre'
+  event_id: string;
   event_name: string;
   event_date: string; // 'YYYY-MM-DD'
+  jour: string;       // 'YYYY-MM-DD' — jour réellement presté (montage la veille…)
   nature: string;     // Service espace / Runner / Montage / Responsable espace…
   espace: string;
+  arrivee: string;    // 'HH:MM' ou '' si inconnu
+  depart: string;     // 'HH:MM' ou '' si inconnu
   payment_type: string;
   heures: number;
   cout_ht: number;
@@ -115,6 +121,8 @@ export async function downloadPayrollWorkbook(
   mois: string,
   rows: PayrollRow[],
   detail: PayrollDetailRow[] = [],
+  /** Base URL de l'appli (window.location.origin) pour les liens événement. */
+  origin = '',
 ): Promise<void> {
   const ExcelJSMod = (await loadModule(() => import('exceljs'))).default;
   const wb = new ExcelJSMod.Workbook();
@@ -247,22 +255,39 @@ export async function downloadPayrollWorkbook(
   // son « À verser » de la feuille 1 (vue rh_monthly_event_detail).
   // ═══════════════════════════════════════════════════════════════════════
   if (detail.length > 0) {
-    buildDetailSheet(wb, mois, rows, detail, arial);
+    buildDetailSheet(wb, mois, rows, detail, arial, origin);
   }
 
   download(await wb.xlsx.writeBuffer(), `Recap_paie_${mois}.xlsx`);
 }
 
-/** Ordre chronologique par date d'événement, puis nature. */
-function byDateThenNature(a: PayrollDetailRow, b: PayrollDetailRow): number {
-  if (a.event_date !== b.event_date) return a.event_date < b.event_date ? -1 : 1;
+/** Ordre chronologique par jour presté, puis événement, puis tâche. */
+function byDayThenEvent(a: PayrollDetailRow, b: PayrollDetailRow): number {
+  const ja = a.jour || a.event_date;
+  const jb = b.jour || b.event_date;
+  if (ja !== jb) return ja < jb ? -1 : 1;
+  if (a.event_name !== b.event_name) return a.event_name.localeCompare(b.event_name);
   return a.nature.localeCompare(b.nature);
 }
 
-/** Date FR courte (JJ/MM) à partir d'un 'YYYY-MM-DD'. */
-function frShort(d: string): string {
+const JOURS_FR = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+/** 'YYYY-MM-DD' → 'mer. 24/09' (jour de semaine + JJ/MM), robuste hors fuseau. */
+function frJour(d: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d);
-  return m ? `${m[3]}/${m[2]}` : d;
+  if (!m) return d;
+  const [, y, mo, da] = m;
+  const wd = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(da))).getUTCDay();
+  return `${JOURS_FR[wd]} ${da}/${mo}`;
+}
+
+/** Créneau 'HH:MM → HH:MM' (— si l'un des deux manque). */
+function frCreneau(arr: string, dep: string): string {
+  const a = (arr || '').trim();
+  const d = (dep || '').trim();
+  if (a && d) return `${a} → ${d}`;
+  if (a) return `dès ${a}`;
+  if (d) return `→ ${d}`;
+  return '—';
 }
 
 function buildDetailSheet(
@@ -271,47 +296,50 @@ function buildDetailSheet(
   rows: PayrollRow[],
   detail: PayrollDetailRow[],
   arial: (extra?: Partial<ExcelJS.Font>) => Partial<ExcelJS.Font>,
+  origin: string,
 ): void {
   const ws = wb.addWorksheet(`Détail ${mois}`, { views: [{ state: 'frozen', ySplit: 5 }] });
 
-  // Colonnes A..G : Date · Événement · Type · Poste · Espace · Heures · Coût HT
-  [12, 26, 14, 20, 22, 10, 14].forEach((w, i) => (ws.getColumn(i + 1).width = w));
+  // Colonnes A..H : Jour · Événement(lien) · Type · Poste/Tâche · Espace · Horaire · Heures · Coût HT
+  [14, 26, 13, 20, 20, 16, 9, 13].forEach((w, i) => (ws.getColumn(i + 1).width = w));
+  const LINK = 'FF1D4ED8';
 
   // Circuit de paiement par personne (couleur du nom, repris de la feuille 1)
   const typeByName = new Map(rows.map((r) => [r.staff_name, r.type_paiement]));
+  const base = origin.replace(/\/+$/, '');
 
   // ── Bandeaux
-  ws.mergeCells('A1:G1');
+  ws.mergeCells('A1:H1');
   const t = ws.getCell('A1');
-  t.value = 'PROVENCE RUGBY — Détail des charges RH par événement';
+  t.value = 'PROVENCE RUGBY — Détail RH par personne, événement et jour';
   t.font = arial({ size: 14, bold: true, color: { argb: 'FFFFFFFF' } });
   t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
   t.alignment = { vertical: 'middle', horizontal: 'center' };
   ws.getRow(1).height = 26;
 
-  ws.mergeCells('A2:G2');
+  ws.mergeCells('A2:H2');
   const st = ws.getCell('A2');
-  st.value = `Justification des charges par événement · Mois : ${mois}`;
+  st.value = `Chaque ligne = un créneau presté (jour + horaires + tâche) · Mois : ${mois}`;
   st.font = arial({ italic: true, color: { argb: 'FF334155' } });
   st.alignment = { horizontal: 'center' };
 
-  ws.mergeCells('A3:G3');
+  ws.mergeCells('A3:H3');
   const lg = ws.getCell('A3');
   lg.value = 'Type : BLEU = Match · VIOLET = Séminaire · AMBRE = Opérationnel (montage, livraison). '
-    + 'Total d’une personne = son « À verser » de la feuille Récap.';
+    + 'Événement cliquable (ouvre la fiche). Total d’une personne = son « À verser » de la feuille Récap.';
   lg.font = arial({ bold: true });
   lg.alignment = { horizontal: 'center' };
   ws.getRow(4).height = 4;
 
   // ── En-tête colonnes (ligne 5)
-  const headers = ['Date', 'Événement', 'Type', 'Poste', 'Espace', 'Heures', 'Coût HT (€)'];
+  const headers = ['Jour', 'Événement', 'Type', 'Poste / tâche', 'Espace', 'Horaire', 'Heures', 'Coût HT (€)'];
   const head = ws.getRow(5);
   headers.forEach((h, i) => {
     const c = head.getCell(i + 1);
     c.value = h;
     c.font = arial({ bold: true, color: { argb: 'FFFFFFFF' } });
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
-    c.alignment = { horizontal: i >= 5 ? 'right' : 'left', vertical: 'middle' };
+    c.alignment = { horizontal: i >= 6 ? 'right' : 'left', vertical: 'middle' };
   });
   head.height = 20;
 
@@ -321,55 +349,67 @@ function buildDetailSheet(
   let r = 6;
 
   for (const name of names) {
-    const lines = detail.filter((d) => d.staff_name === name).sort(byDateThenNature);
+    const lines = detail.filter((d) => d.staff_name === name).sort(byDayThenEvent);
     if (lines.length === 0) continue;
 
-    // Sous-en-tête personne : nom coloré par circuit + sous-total vivant
+    // Sous-en-tête personne : nom coloré par circuit + nb d'événements + sous-total vivant
     const shRow = r;
     subheaderRows.push(shRow);
     ws.mergeCells(`A${shRow}:E${shRow}`);
     const nameCell = ws.getCell(`A${shRow}`);
     const pa5 = typeByName.get(name) ?? 'non défini';
-    nameCell.value = `▸ ${name}  —  ${pa5}`;
+    const nbEvts = new Set(lines.map((l) => l.event_id || l.event_name)).size;
+    nameCell.value = `▸ ${name}  —  ${pa5}  ·  ${nbEvts} événement${nbEvts > 1 ? 's' : ''} · ${lines.length} créneau${lines.length > 1 ? 'x' : ''}`;
     nameCell.font = arial({ bold: true, size: 11, color: { argb: nameColor(pa5) } });
     nameCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT } };
     nameCell.alignment = { vertical: 'middle' };
+    ws.getCell(`F${shRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT } };
 
     const firstLine = shRow + 1;
     const lastLine = shRow + lines.length;
-    // Sous-totaux personne (formules vivantes sur SES lignes)
-    const shH = ws.getCell(`F${shRow}`);
-    shH.value = { formula: `SUM(F${firstLine}:F${lastLine})` };
+    // Sous-totaux personne (formules vivantes sur SES lignes) en G (heures) et H (coût)
+    const shH = ws.getCell(`G${shRow}`);
+    shH.value = { formula: `SUM(G${firstLine}:G${lastLine})` };
     shH.numFmt = H_FMT;
     shH.font = arial({ bold: true });
     shH.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT } };
     shH.alignment = { horizontal: 'right' };
-    const shC = ws.getCell(`G${shRow}`);
-    shC.value = { formula: `SUM(G${firstLine}:G${lastLine})` };
+    const shC = ws.getCell(`H${shRow}`);
+    shC.value = { formula: `SUM(H${firstLine}:H${lastLine})` };
     shC.numFmt = EUR_FMT;
     shC.font = arial({ bold: true });
     shC.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT } };
     shC.alignment = { horizontal: 'right' };
     r++;
 
-    // Lignes de détail
+    // Lignes de détail — un créneau par ligne
     for (const l of lines) {
       const row = ws.getRow(r);
-      row.getCell(1).value = frShort(l.event_date);
+      row.getCell(1).value = frJour(l.jour || l.event_date);
       row.getCell(1).font = arial({ color: { argb: GREY } });
-      row.getCell(2).value = l.event_name;
-      row.getCell(2).font = arial();
+      // Événement cliquable (lien profond vers la fiche) si on a l'origine + id
+      const cEvt = row.getCell(2);
+      if (base && l.event_id) {
+        cEvt.value = { text: l.event_name, hyperlink: `${base}/admin/events/${l.event_id}` };
+        cEvt.font = arial({ color: { argb: LINK }, underline: true });
+      } else {
+        cEvt.value = l.event_name;
+        cEvt.font = arial();
+      }
       row.getCell(3).value = l.categorie;
       row.getCell(3).font = arial({ bold: true, color: { argb: catColor(l.categorie) } });
       row.getCell(4).value = l.nature;
       row.getCell(4).font = arial({ color: { argb: GREY } });
       row.getCell(5).value = l.espace;
       row.getCell(5).font = arial({ color: { argb: GREY } });
-      row.getCell(6).value = l.heures;
-      row.getCell(6).numFmt = H_FMT;
-      row.getCell(7).value = l.cout_ht;
-      row.getCell(7).numFmt = EUR_FMT;
-      for (let c = 1; c <= 7; c++) {
+      row.getCell(6).value = frCreneau(l.arrivee, l.depart);
+      row.getCell(6).font = arial({ color: { argb: GREY } });
+      row.getCell(6).alignment = { horizontal: 'right' };
+      row.getCell(7).value = l.heures;
+      row.getCell(7).numFmt = H_FMT;
+      row.getCell(8).value = l.cout_ht;
+      row.getCell(8).numFmt = EUR_FMT;
+      for (let c = 1; c <= 8; c++) {
         row.getCell(c).border = { bottom: { style: 'hair', color: { argb: 'FFE5E7EB' } } };
         if (!row.getCell(c).font) row.getCell(c).font = arial();
       }
@@ -381,23 +421,21 @@ function buildDetailSheet(
   const totalRow = r + 1;
   const tg = ws.getRow(totalRow);
   tg.getCell(1).value = 'TOTAL GÉNÉRAL';
-  const sumSub = (col: string) => subheaderRows.map((n) => `${col}${n}`).join('+') || '0';
-  tg.getCell(6).value = { formula: subheaderRows.length ? `SUM(${sumSub('F').replace(/\+/g, ',')})` : '0' };
-  tg.getCell(6).numFmt = H_FMT;
-  tg.getCell(7).value = { formula: subheaderRows.length ? `SUM(${sumSub('G').replace(/\+/g, ',')})` : '0' };
-  tg.getCell(7).numFmt = EUR_FMT;
-  for (let c = 1; c <= 7; c++) {
+  const sumSub = (col: string) => subheaderRows.map((n) => `${col}${n}`).join(',') || '0';
+  tg.getCell(7).value = { formula: subheaderRows.length ? `SUM(${sumSub('G')})` : '0' };
+  tg.getCell(7).numFmt = H_FMT;
+  tg.getCell(8).value = { formula: subheaderRows.length ? `SUM(${sumSub('H')})` : '0' };
+  tg.getCell(8).numFmt = EUR_FMT;
+  for (let c = 1; c <= 8; c++) {
     tg.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT } };
     tg.getCell(c).font = arial({ bold: true, size: 11 });
-    tg.getCell(c).alignment = { horizontal: c >= 6 ? 'right' : 'left' };
+    tg.getCell(c).alignment = { horizontal: c >= 7 ? 'right' : 'left' };
   }
 
   // ── Sous-totaux par CATÉGORIE (SUMIF sur la colonne Type = C, uniquement
   //    renseignée sur les lignes de détail → pas de double compte).
   //    Dynamique : une ligne par catégorie RÉELLEMENT présente ce mois-ci, dans
   //    l'ordre métier (Match, Séminaire, …, Opérationnel), le reste alphabétique.
-  //    → une nouvelle catégorie (cocktail, réception…) obtient son sous-total
-  //      automatiquement, sans retoucher ce code.
   const present = Array.from(new Set(detail.map((d) => d.categorie)));
   present.sort((a, b) => {
     const ia = CAT_ORDER.indexOf(a); const ib = CAT_ORDER.indexOf(b);
@@ -411,17 +449,17 @@ function buildDetailSheet(
     cr.getCell(1).font = arial({ bold: true, color: { argb: catColor(cat) } });
     // Échappe les guillemets pour rester robuste dans la formule SUMIF.
     const key = cat.replace(/"/g, '""');
-    cr.getCell(6).value = { formula: `SUMIF($C:$C,"${key}",$F:$F)` };
-    cr.getCell(6).numFmt = H_FMT;
-    cr.getCell(6).font = arial({ bold: true, color: { argb: catColor(cat) } });
-    cr.getCell(6).alignment = { horizontal: 'right' };
     cr.getCell(7).value = { formula: `SUMIF($C:$C,"${key}",$G:$G)` };
-    cr.getCell(7).numFmt = EUR_FMT;
+    cr.getCell(7).numFmt = H_FMT;
     cr.getCell(7).font = arial({ bold: true, color: { argb: catColor(cat) } });
     cr.getCell(7).alignment = { horizontal: 'right' };
+    cr.getCell(8).value = { formula: `SUMIF($C:$C,"${key}",$H:$H)` };
+    cr.getCell(8).numFmt = EUR_FMT;
+    cr.getCell(8).font = arial({ bold: true, color: { argb: catColor(cat) } });
+    cr.getCell(8).alignment = { horizontal: 'right' };
   });
 
-  // Impression : paysage, 1 page de large, en-tête répété (feuille détail = 7 col.)
+  // Impression : paysage, 1 page de large, en-tête répété (feuille détail = 8 col.)
   const lastRow = totalRow + 1 + present.length;
-  applyPrintLayout(ws, 'G', lastRow);
+  applyPrintLayout(ws, 'H', lastRow);
 }

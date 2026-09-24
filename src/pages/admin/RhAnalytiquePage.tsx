@@ -137,24 +137,43 @@ export default function RhAnalytiquePage() {
   async function exportPaie() {
     setExporting(true);
     try {
-      // Détail par événement (justification des charges) — même mois, réservé RG-003.
-      const { data: det } = await supabase
-        .from('rh_monthly_event_detail')
-        .select('staff_name, mois, categorie, event_name, event_date, nature, espace, payment_type, heures, cout_ht')
+      // Détail FIN par créneau (jour presté + horaires + tâche + lien événement),
+      // réservé RG-003. Source : vue rh_person_event_shift ; repli automatique sur
+      // rh_monthly_event_detail (sans jour/horaires) si la vue fine n'est pas encore
+      // déployée — l'export reste fonctionnel avec les liens et la synthèse.
+      type DetailRaw = Partial<PayrollDetailRow> & { arrivee?: string; depart?: string; jour?: string };
+      let raw: DetailRaw[] = [];
+      const fine = await supabase
+        .from('rh_person_event_shift')
+        .select('staff_name, mois, categorie, event_id, event_name, event_date, jour, nature, espace, arrivee, depart, payment_type, heures, cout_ht')
         .eq('mois', payMonth)
-        .order('staff_name').order('event_date');
-      const detailRows: PayrollDetailRow[] = (det ?? []).map((r) => ({
-        staff_name: String((r as PayrollDetailRow).staff_name ?? ''),
-        categorie: String((r as PayrollDetailRow).categorie ?? 'Autre'),
-        event_name: String((r as PayrollDetailRow).event_name ?? ''),
-        event_date: String((r as PayrollDetailRow).event_date ?? ''),
-        nature: String((r as PayrollDetailRow).nature ?? ''),
-        espace: String((r as PayrollDetailRow).espace ?? ''),
-        payment_type: String((r as PayrollDetailRow).payment_type ?? 'non défini'),
-        heures: num((r as PayrollDetailRow).heures),
-        cout_ht: num((r as PayrollDetailRow).cout_ht),
+        .order('staff_name').order('jour');
+      if (fine.error) {
+        const coarse = await supabase
+          .from('rh_monthly_event_detail')
+          .select('staff_name, mois, categorie, event_id, event_name, event_date, nature, espace, payment_type, heures, cout_ht')
+          .eq('mois', payMonth)
+          .order('staff_name').order('event_date');
+        raw = (coarse.data ?? []) as DetailRaw[];
+      } else {
+        raw = (fine.data ?? []) as DetailRaw[];
+      }
+      const detailRows: PayrollDetailRow[] = raw.map((r) => ({
+        staff_name: String(r.staff_name ?? ''),
+        categorie: String(r.categorie ?? 'Autre'),
+        event_id: String(r.event_id ?? ''),
+        event_name: String(r.event_name ?? ''),
+        event_date: String(r.event_date ?? ''),
+        jour: String(r.jour ?? r.event_date ?? ''),
+        nature: String(r.nature ?? ''),
+        espace: String(r.espace ?? ''),
+        arrivee: String(r.arrivee ?? ''),
+        depart: String(r.depart ?? ''),
+        payment_type: String(r.payment_type ?? 'non défini'),
+        heures: num(r.heures),
+        cout_ht: num(r.cout_ht),
       }));
-      await downloadPayrollWorkbook(payMonth, payRows, detailRows);
+      await downloadPayrollWorkbook(payMonth, payRows, detailRows, window.location.origin);
     }
     finally { setExporting(false); }
   }

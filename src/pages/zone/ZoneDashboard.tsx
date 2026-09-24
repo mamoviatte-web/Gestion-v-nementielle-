@@ -656,6 +656,17 @@ interface ConsoRow {
   source: string;
 }
 
+/** Normalise pour la recherche : minuscules, sans accents, ponctuation → espaces.
+ *  Ex. « San Pellegrino (St-Pé) » ⇒ « san pellegrino st pe » → trouvé via « st pe ». */
+function normalizeText(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 const FAMILY_ORDER = ['Vins', 'Bières', 'Soft', 'Sirops', 'Spiritueux', 'Matériel'];
 const FAMILY_LABEL: Record<string, string> = {
   Vins: '🍷 Vins & Champagnes',
@@ -734,10 +745,10 @@ function SeminarConsumptionSection({ token, name, state, onDone, showToast }: Se
 
   // Groupement par famille + filtre recherche.
   const grouped = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = normalizeText(search);
     const map = new Map<string, ZoneProduct[]>();
     for (const p of state.products) {
-      if (q && !p.product_name.toLowerCase().includes(q)) continue;
+      if (q && !normalizeText(p.product_name).includes(q)) continue;
       const arr = map.get(p.category) ?? [];
       arr.push(p);
       map.set(p.category, arr);
