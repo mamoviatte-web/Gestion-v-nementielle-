@@ -205,14 +205,23 @@ function dataBar(ws: WS, ref: string, argb: string): void {
 
 const colLetter = (c: number): string => String.fromCharCode(64 + c);
 
-/** Feuille « moteur » Produits (commune match & séminaire). Retourne la ligne du total. */
+/**
+ * Feuille « moteur » Produits (commune match & séminaire). Retourne la ligne du total.
+ * Précision analytique : Reçu (initial+réassort) → Restant → Consommé → Coût, plus
+ * une lecture ABC/Pareto (% du coût, % cumulé, classe A/B/C) pour hiérarchiser les
+ * postes. Barres de données in-cell sur Consommé et Coût. Trié par coût décroissant
+ * pour que le cumul soit lisible directement (loi de Pareto).
+ */
 function sheetProduits(wb: WB, produits: Produit[]): number {
   const ws = wb.addWorksheet('Produits', { views: [{ showGridLines: false }] });
-  [28, 14, 12, 12, 12, 12, 14, 12].forEach((w, i) => (ws.getColumn(i + 1).width = w));
-  ['Produit', 'Catégorie', 'Stock initial', 'Stock final', 'Consommé', 'PU HT', 'Coût HT', 'Taux retour'].forEach(
+  // Tri par coût de consommation décroissant → le cumul Pareto se lit de haut en bas.
+  const rowsP = [...produits].sort((a, b) => (b.init - b.fin) * b.pu - (a.init - a.fin) * a.pu);
+  [26, 13, 11, 11, 12, 11, 13, 10, 9, 10, 8].forEach((w, i) => (ws.getColumn(i + 1).width = w));
+  ['Produit', 'Catégorie', 'Reçu (I+R)', 'Restant', 'Consommé', 'PU HT', 'Coût HT', 'Taux retour', '% coût', '% cumulé', 'Classe'].forEach(
     (h, i) => hdr(ws, 1, i + 1, h),
   );
-  produits.forEach((p, i) => {
+  const tot = rowsP.length + 2; // ligne du total (référencée par les % coût)
+  rowsP.forEach((p, i) => {
     const r = i + 2;
     bordered(ws.getCell(r, 1)).value = p.produit;
     ws.getCell(r, 1).font = { name: 'Arial', size: 9, bold: true };
@@ -245,22 +254,42 @@ function sheetProduits(wb: WB, produits: Produit[]): number {
     ws.getCell(r, 7).numFmt = EUR;
     bordered(ws.getCell(r, 8)).value = { formula: `IFERROR(D${r}/C${r},0)` };
     ws.getCell(r, 8).numFmt = PCT;
+    // ABC / Pareto : part du coût, cumul (rangée triée), classe A(≤80%)/B(≤95%)/C.
+    bordered(ws.getCell(r, 9)).value = { formula: `IFERROR(G${r}/G${tot},0)` };
+    ws.getCell(r, 9).numFmt = PCT;
+    bordered(ws.getCell(r, 10)).value = { formula: `IFERROR(SUM(G$2:G${r})/G${tot},0)` };
+    ws.getCell(r, 10).numFmt = PCT;
+    const cl = bordered(ws.getCell(r, 11));
+    cl.value = { formula: `IF(J${r}<=0.8,"A",IF(J${r}<=0.95,"B","C"))` };
+    cl.alignment = { horizontal: 'center' };
+    cl.font = { name: 'Arial', size: 9, bold: true };
   });
-  const tot = produits.length + 2;
   ws.getCell(tot, 1).value = 'TOTAL';
+  ws.getCell(tot, 3).value = { formula: `SUM(C2:C${tot - 1})` };
+  ws.getCell(tot, 3).numFmt = INT;
+  ws.getCell(tot, 4).value = { formula: `SUM(D2:D${tot - 1})` };
+  ws.getCell(tot, 4).numFmt = INT;
   ws.getCell(tot, 5).value = { formula: `SUM(E2:E${tot - 1})` };
   ws.getCell(tot, 5).numFmt = INT;
   ws.getCell(tot, 7).value = { formula: `SUM(G2:G${tot - 1})` };
   ws.getCell(tot, 7).numFmt = EUR;
-  for (let c = 1; c <= 8; c++) {
+  ws.getCell(tot, 9).value = 1;
+  ws.getCell(tot, 9).numFmt = PCT;
+  for (let c = 1; c <= 11; c++) {
     const x = ws.getCell(tot, c);
     x.font = { name: 'Arial', bold: true };
     x.fill = fill(GOLD);
     bordered(x);
   }
+  // Barres de données in-cell : consommé (unités) et coût HT (€) → lecture visuelle.
+  dataBar(ws, `E2:E${tot - 1}`, 'FF1FA37A');
+  dataBar(ws, `G2:G${tot - 1}`, 'FFC9A227');
   ws.getCell(tot + 2, 1).value =
-    'Cellules bleues (stocks & PU) = saisie manuelle → Consommé, Coût et Taux se recalculent.';
+    'Cellules bleues (Reçu, Restant, PU) = saisie manuelle → Consommé, Coût, Taux et ABC se recalculent. Reçu = stock initial + réassort.';
   ws.getCell(tot + 2, 1).font = { name: 'Arial', size: 8, italic: true, color: { argb: GREY } };
+  ws.getCell(tot + 3, 1).value =
+    'Lecture ABC (Pareto) : A = 80 % du coût (postes à piloter en priorité) · B = 80–95 % · C = derniers 5 % (longue traîne). Trié par coût décroissant.';
+  ws.getCell(tot + 3, 1).font = { name: 'Arial', size: 8, italic: true, color: { argb: GREY } };
   return tot;
 }
 

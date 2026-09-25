@@ -22,16 +22,10 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { Button, EmptyState, Input, Select, Spinner } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
+import { catColor, catRank } from '@/lib/categoryColors';
 import type { Event } from '@/lib/types';
 
 const num = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-const CATEGORY_ORDER = ['Bières', 'Soft', 'Vins', 'Spiritueux', 'Sirops', 'Champagne', 'Matériel'];
-const catRank = (c: string) => { const i = CATEGORY_ORDER.indexOf(c); return i === -1 ? CATEGORY_ORDER.length : i; };
-const CAT_COLOR: Record<string, string> = {
-  'Bières': '#C2751A', 'Soft': '#2F6FED', 'Vins': '#8B2E5A',
-  'Spiritueux': '#6B4CD6', 'Sirops': '#1FA37A', 'Champagne': '#B8860B', 'Matériel': '#64748B',
-};
-const catColor = (c: string) => CAT_COLOR[c] ?? '#64748B';
 const fmtDate = (d: string | null) => (d ? new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: '2-digit' }) : '—');
 
 interface EventSummary { nb_espaces: number; nb_produits_consommes: number; total_consomme: number; valeur_ht: number; nb_anomalies: number }

@@ -11,6 +11,7 @@ import { computeConsumed, computeCost, formatEuro } from '@/lib/calculations';
 import { PRODUCT_STATE_META } from '@/lib/labels';
 import { RunnerStatusBadge } from '@/components/stock/RunnerStatusBadge';
 import { MovementHistory } from '@/components/stock/MovementHistory';
+import { ConsumptionVizPanel, ConsumptionBar } from '@/components/stock/ConsumptionVizPanel';
 import {
   Alert,
   Badge,
@@ -175,6 +176,28 @@ export function StockDotationsTable({
         />
       </div>
 
+      {/* ── Analyse visuelle — on privilégie le graphique sur les chiffres ── */}
+      <details open className="group rounded-2xl border border-pr-stone bg-white">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden">
+          <span className="font-display text-sm font-bold uppercase tracking-wide text-pr-black-soft/60">
+            Analyse visuelle — consommation
+          </span>
+          <span className="text-xs text-pr-black-soft/45 transition-transform group-open:rotate-180">▾</span>
+        </summary>
+        <div className="border-t border-pr-stone p-4">
+          <ConsumptionVizPanel
+            rows={rows.map((r) => ({
+              product_name: r.product_name,
+              category: r.category,
+              consumed: r.consumed,
+              cost: r.cost,
+              recu: (r.initial_qty ?? 0) + (r.reassort_qty ?? 0),
+              final: r.final_qty,
+            }))}
+          />
+        </div>
+      </details>
+
       {/* ── Points de contrôle (regroupés, scannables) ──────────────────── */}
       {negatives.length > 0 && (
         <Alert variant="error" title={`${negatives.length} consommation(s) négative(s) — RG-004`}>
@@ -267,7 +290,14 @@ export function StockDotationsTable({
                   ) : r.consumed < 0 ? (
                     <Badge tone="danger">{r.consumed}</Badge>
                   ) : (
-                    <span className="font-semibold text-pr-black">{r.consumed}</span>
+                    <div className="flex flex-col items-end">
+                      <span className="font-semibold text-pr-black">{r.consumed}</span>
+                      <ConsumptionBar
+                        consumed={r.consumed}
+                        recu={(r.initial_qty ?? 0) + (r.reassort_qty ?? 0)}
+                        category={r.category}
+                      />
+                    </div>
                   )}
                 </TD>
                 <TD className="text-right tabular-nums text-pr-black-soft/70">
