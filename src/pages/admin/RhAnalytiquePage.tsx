@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, AlertTriangle, FileSpreadsheet, LineChart } from 'lucide-react';
+import { Download, AlertTriangle, FileSpreadsheet, LineChart, Pencil, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Card, SectionTitle, StatTile } from '@/components/ui';
 import { TrendChart } from '@/components/ui/charts/TrendChart';
@@ -133,6 +133,43 @@ export default function RhAnalytiquePage() {
     }
   }
 
+  const [reloadTick, setReloadTick] = useState(0);
+  /** Renommer / attribuer une personne (ex. code ou « Nom non renseigné » → vrai nom). */
+  async function renameStaff(current: string) {
+    const nn = window.prompt(`Renommer / attribuer « ${current} » — saisissez le nom correct (Nom Prénom) :`, current);
+    if (nn == null) return;
+    const target = nn.trim();
+    if (target.length < 2 || target === current) return;
+    setSavingCircuit(current);
+    try {
+      const { data, error } = await supabase.rpc('rh_rename_staff', { p_old: current, p_new: target });
+      const r = data as { success?: boolean; error?: string } | null;
+      if (error || !r?.success) throw new Error(r?.error ?? error?.message ?? 'Échec');
+      await loadPay();
+      setReloadTick((t) => t + 1);
+    } catch (e) {
+      alert('Échec du renommage : ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setSavingCircuit(null);
+    }
+  }
+  /** Supprimer les heures d'une personne sur le mois de paie affiché (saisie erronée, doublon, ligne sans nom). */
+  async function deleteStaff(name: string) {
+    if (!window.confirm(`Supprimer toutes les heures de « ${name} » sur ${payMonth} ?\n\nAction irréversible.`)) return;
+    setSavingCircuit(name);
+    try {
+      const { data, error } = await supabase.rpc('rh_delete_staff', { p_name: name, p_mois: payMonth });
+      const r = data as { success?: boolean; error?: string; lignes?: number } | null;
+      if (error || !r?.success) throw new Error(r?.error ?? error?.message ?? 'Échec');
+      await loadPay();
+      setReloadTick((t) => t + 1);
+    } catch (e) {
+      alert('Échec de la suppression : ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setSavingCircuit(null);
+    }
+  }
+
   async function exportPaie() {
     setExporting(true);
     try {
@@ -206,7 +243,7 @@ export default function RhAnalytiquePage() {
       setLoading(false);
     });
     return () => { alive = false; };
-  }, [debut, fin]);
+  }, [debut, fin, reloadTick]);
 
   const totals = useMemo(() => {
     const heures = rows.reduce((s, r) => s + r.heures, 0);
@@ -388,6 +425,7 @@ export default function RhAnalytiquePage() {
                     <th className="px-3 py-2 text-right">Heures</th>
                     <th className="px-3 py-2 text-right">Coût HT</th>
                     <th className="px-4 py-2 text-right">À verser</th>
+                    <th className="px-3 py-2 text-right">Corriger</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-50">
@@ -421,6 +459,28 @@ export default function RhAnalytiquePage() {
                       <td className="px-3 py-2 text-right tabular-nums">{hrs(r.heures)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{eur(r.cout_ht)}</td>
                       <td className="px-4 py-2 text-right font-bold tabular-nums">{eur(r.cout_ht)}</td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={savingCircuit === r.staff_name}
+                            onClick={() => void renameStaff(r.staff_name)}
+                            title="Renommer / attribuer un nom (ex. code ou « Nom non renseigné » → vrai nom)"
+                            className="rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 disabled:opacity-40"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={savingCircuit === r.staff_name}
+                            onClick={() => void deleteStaff(r.staff_name)}
+                            title={`Supprimer les heures de « ${r.staff_name} » sur ce mois`}
+                            className="rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
