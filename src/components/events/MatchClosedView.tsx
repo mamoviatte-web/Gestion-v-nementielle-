@@ -9,6 +9,7 @@ import {
   ChevronDown, ChevronRight, TrendingUp, Users, Package,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { StatTile } from '@/components/ui';
 import { SuiviRhBlock } from './SuiviRhBlock';
 
 type StatutEspace = 'complet' | 'cloture_partielle' | 'ouverture_seule' | 'aucun_stock';
@@ -72,16 +73,16 @@ function BilanSection({
   return (
     <details
       open={defaultOpen}
-      className={`group ${bare ? '' : 'overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm'}`}
+      className={`group ${bare ? '' : 'overflow-hidden rounded-2xl border border-pr-stone bg-white'}`}
     >
       <summary
-        className={`flex cursor-pointer list-none items-center gap-2 ${bare ? 'px-1 py-2' : 'px-5 py-3'} transition-colors hover:bg-stone-50/60 [&::-webkit-details-marker]:hidden`}
+        className={`flex cursor-pointer list-none items-center gap-2 ${bare ? 'px-1 py-2' : 'px-5 py-3'} transition-colors hover:bg-pr-cream/40 [&::-webkit-details-marker]:hidden`}
       >
-        <ChevronRight size={15} className="shrink-0 text-stone-400 transition-transform group-open:rotate-90" />
-        <span className="text-sm font-bold text-stone-800">{title}</span>
-        {aside != null && <span className="ml-auto text-xs text-stone-400">{aside}</span>}
+        <ChevronRight size={15} className="shrink-0 text-pr-black-soft/40 transition-transform group-open:rotate-90" />
+        <span className="font-display text-sm font-bold text-pr-black-soft/75">{title}</span>
+        {aside != null && <span className="ml-auto text-xs text-pr-black-soft/45">{aside}</span>}
       </summary>
-      <div className={bare ? 'pt-1' : 'border-t border-stone-50'}>{children}</div>
+      <div className={bare ? 'pt-1' : 'border-t border-pr-stone'}>{children}</div>
     </details>
   );
 }
@@ -164,47 +165,43 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
   if (loading)
     return (
       <div className="mt-4 space-y-3">
-        {[...Array(4)].map((_, i) => <div key={i} className="h-16 animate-pulse rounded-2xl bg-stone-100" />)}
+        {[...Array(4)].map((_, i) => <div key={i} className="h-16 animate-pulse rounded-2xl bg-pr-stone/50" />)}
       </div>
     );
 
-  const kpis = [
+  const kpis: { label: string; value: ReactNode; sub?: ReactNode; tone: 'default' | 'good' | 'warn' | 'crit' }[] = [
     {
-      icon: '💰', accent: '#C9A646', label: 'Coût F&B HT',
+      label: 'Coût F&B HT',
       value: totals.fb > 0 ? `${eur(totals.fb)} €` : '—',
-      sub: paxCount > 0 && totals.fb > 0 ? `${(totals.fb / paxCount).toFixed(2)} €/pax` : undefined,
+      sub: paxCount > 0 && totals.fb > 0 ? `${(totals.fb / paxCount).toFixed(2)} €/pax` : 'consommation réelle',
+      tone: 'default',
     },
     {
-      icon: '⏱', accent: '#2563EB', label: 'Coût RH HT',
+      label: 'Coût RH HT',
       value: totals.rh > 0 ? `${eur(totals.rh)} €` : '—',
-      sub: totals.heures > 0 ? `${totals.heures.toFixed(0)} h · ${totals.agents} agents` : undefined,
+      sub: totals.heures > 0 ? `${totals.heures.toFixed(0)} h · ${totals.agents} agents` : 'horaires à saisir',
+      tone: 'default',
     },
     {
-      icon: '✅', accent: totals.partiels > 0 ? '#F97316' : '#059669', label: 'Espaces complets',
+      label: 'Espaces complets',
       value: `${totals.complets}/${spaces.length}`,
-      sub: totals.partiels > 0 ? `${totals.partiels} incomplet(s)` : 'Tout complet',
+      sub: totals.partiels > 0 ? `${totals.partiels} incomplet(s)` : 'tout complet ✓',
+      tone: totals.partiels > 0 ? 'warn' : 'good',
     },
     {
-      icon: '⚡',
-      accent: criticalCount > 0 ? '#DC2626' : alerts.length > 0 ? '#F97316' : '#9CA3AF',
+      label: criticalCount > 0 ? 'Alertes critiques' : alerts.length > 0 ? 'Points attention' : 'Alertes',
       value: criticalCount > 0 ? criticalCount : alerts.length > 0 ? alerts.length : '—',
-      label: criticalCount > 0 ? 'Alerte(s) critique(s)' : alerts.length > 0 ? 'Point(s) attention' : 'Aucune alerte',
-      sub: undefined,
+      sub: criticalCount > 0 ? 'à traiter en priorité' : alerts.length > 0 ? 'à consulter' : 'rien à signaler ✓',
+      tone: criticalCount > 0 ? 'crit' : alerts.length > 0 ? 'warn' : 'good',
     },
   ];
 
   return (
     <div className="mt-4 space-y-5">
-      {/* ── BILAN GLOBAL ── */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {/* ── BILAN GLOBAL — l'essentiel (chiffre / conso / coûts / clôture) ── */}
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
         {kpis.map((k, i) => (
-          <div key={i} className="relative overflow-hidden rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
-            <div className="absolute left-0 right-0 top-0 h-1 rounded-t-2xl" style={{ background: k.accent }} />
-            <span className="text-xl">{k.icon}</span>
-            <p className="mt-2 text-2xl font-black text-stone-900">{k.value}</p>
-            <p className="mt-0.5 text-xs text-stone-500">{k.label}</p>
-            {k.sub && <p className="mt-0.5 text-[11px] text-stone-400">{k.sub}</p>}
-          </div>
+          <StatTile key={i} label={k.label} value={k.value} sub={k.sub} tone={k.tone} />
         ))}
       </div>
 
@@ -219,13 +216,13 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
           title={`⚠️ ${alerts.length} point${alerts.length > 1 ? 's' : ''} à traiter`}
           aside={criticalCount > 0 ? `🔴 ${criticalCount} critique(s)` : 'à consulter'}
         >
-          <div className="divide-y divide-stone-50">
+          <div className="divide-y divide-pr-stone/60">
             {alerts.map((a, i) => (
-              <div key={i} className={`flex items-start gap-3 px-5 py-3 ${a.level === 'critical' ? 'bg-red-50' : a.level === 'warning' ? 'bg-amber-50' : 'bg-stone-50'}`}>
+              <div key={i} className={`flex items-start gap-3 px-5 py-3 ${a.level === 'critical' ? 'bg-red-50' : a.level === 'warning' ? 'bg-amber-50' : 'bg-pr-cream/60'}`}>
                 <span className="mt-0.5 shrink-0 text-base">{a.level === 'critical' ? '🔴' : a.level === 'warning' ? '🟡' : 'ℹ️'}</span>
                 <div>
-                  <p className={`text-sm font-semibold ${a.level === 'critical' ? 'text-red-800' : a.level === 'warning' ? 'text-amber-800' : 'text-stone-700'}`}>{a.msg}</p>
-                  {a.sub && <p className="mt-0.5 text-xs text-stone-400">{a.sub}</p>}
+                  <p className={`text-sm font-semibold ${a.level === 'critical' ? 'text-red-800' : a.level === 'warning' ? 'text-amber-800' : 'text-pr-black'}`}>{a.msg}</p>
+                  {a.sub && <p className="mt-0.5 text-xs text-pr-black-soft/45">{a.sub}</p>}
                 </div>
               </div>
             ))}
@@ -236,7 +233,7 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
       {/* ── ESPACES VIP & BARS — repliés ── */}
       {vipSpaces.length > 0 && (
         <BilanSection title="Espaces VIP & Bars" aside={`${vipSpaces.length} espace(s)`}>
-          <div className="divide-y divide-stone-50">
+          <div className="divide-y divide-pr-stone/60">
             {visibleVIP.map((space) => {
               const style = STATUT_STYLE[space.statut_espace] ?? STATUT_STYLE.aucun_stock;
               const isOpen = expanded.has(space.space_id);
@@ -253,48 +250,48 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
                         return next;
                       });
                     }}
-                    className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-stone-50"
+                    className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-pr-cream/50"
                   >
                     <div className={`h-2 w-2 shrink-0 rounded-full ${style.dot}`} />
                     <span className="shrink-0 text-base">{PROFILE_ICON[space.space_profile] ?? '📋'}</span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-semibold text-stone-800">{space.space_name}</p>
-                        {space.responsable && <span className="hidden text-xs text-stone-400 sm:inline">{space.responsable}</span>}
+                        <p className="truncate text-sm font-semibold text-pr-black">{space.space_name}</p>
+                        {space.responsable && <span className="hidden text-xs text-pr-black-soft/45 sm:inline">{space.responsable}</span>}
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-4">
-                      {space.cout_fb_espace > 0 && <span className="text-sm font-bold text-stone-700">{space.cout_fb_espace.toFixed(0)} €</span>}
+                      {space.cout_fb_espace > 0 && <span className="text-sm font-bold text-pr-black">{space.cout_fb_espace.toFixed(0)} €</span>}
                       <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${style.bg} ${style.border}`}>{style.label}</span>
-                      {hasData && (isOpen ? <ChevronDown size={14} className="text-stone-400" /> : <ChevronRight size={14} className="text-stone-400" />)}
+                      {hasData && (isOpen ? <ChevronDown size={14} className="text-pr-black-soft/45" /> : <ChevronRight size={14} className="text-pr-black-soft/45" />)}
                     </div>
                   </button>
 
                   {isOpen && (
-                    <div className={`border-t border-stone-100 px-5 pb-4 pt-0 ${style.bg}`}>
+                    <div className={`border-t border-pr-stone px-5 pb-4 pt-0 ${style.bg}`}>
                       <div className="mt-3 grid grid-cols-3 gap-3">
                         <div className="rounded-xl bg-white p-3 text-center">
-                          <Package size={13} className="mx-auto mb-1 text-stone-300" />
-                          <p className="text-lg font-black text-stone-900">{space.produits_clotures}/{space.produits_saisis}</p>
-                          <p className="text-[10px] text-stone-400">produits clôturés</p>
+                          <Package size={13} className="mx-auto mb-1 text-pr-black-soft/30" />
+                          <p className="text-lg font-black text-pr-black">{space.produits_clotures}/{space.produits_saisis}</p>
+                          <p className="text-[10px] text-pr-black-soft/45">produits clôturés</p>
                         </div>
                         <div className="rounded-xl bg-white p-3 text-center">
-                          <Users size={13} className="mx-auto mb-1 text-stone-300" />
-                          <p className="text-lg font-black text-stone-900">{space.agents_confirmes}/{space.nb_agents_declares}</p>
-                          <p className="text-[10px] text-stone-400">agents confirmés</p>
-                          {space.heures_travaillees > 0 && <p className="text-[10px] text-stone-300">{space.heures_travaillees.toFixed(1)} h total</p>}
+                          <Users size={13} className="mx-auto mb-1 text-pr-black-soft/30" />
+                          <p className="text-lg font-black text-pr-black">{space.agents_confirmes}/{space.nb_agents_declares}</p>
+                          <p className="text-[10px] text-pr-black-soft/45">agents confirmés</p>
+                          {space.heures_travaillees > 0 && <p className="text-[10px] text-pr-black-soft/30">{space.heures_travaillees.toFixed(1)} h total</p>}
                         </div>
                         <div className="rounded-xl bg-white p-3 text-center">
-                          <TrendingUp size={13} className="mx-auto mb-1 text-stone-300" />
+                          <TrendingUp size={13} className="mx-auto mb-1 text-pr-black-soft/30" />
                           {space.debrief_soumis_le ? (
                             <>
                               <p className="text-lg font-black text-green-600">✓</p>
-                              <p className="text-[10px] text-stone-400">Débrief soumis</p>
+                              <p className="text-[10px] text-pr-black-soft/45">Débrief soumis</p>
                             </>
                           ) : (
                             <>
-                              <p className="text-lg font-black text-stone-300">—</p>
-                              <p className="text-[10px] text-stone-400">Pas de débrief</p>
+                              <p className="text-lg font-black text-pr-black-soft/30">—</p>
+                              <p className="text-[10px] text-pr-black-soft/45">Pas de débrief</p>
                             </>
                           )}
                         </div>
@@ -309,7 +306,7 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
           {!showAll && vipSpaces.length > 8 && (
             <button
               onClick={() => setShowAll(true)}
-              className="w-full border-t border-stone-50 py-3 text-sm text-stone-400 transition-colors hover:bg-stone-50 hover:text-stone-600"
+              className="w-full border-t border-pr-stone/60 py-3 text-sm text-pr-black-soft/45 transition-colors hover:bg-pr-cream/50 hover:text-pr-black-soft/70"
             >
               Voir {vipSpaces.length - 8} espaces de plus ↓
             </button>
@@ -324,7 +321,7 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
           aside={`${buvetteSpaces.filter((s) => s.statut_espace === 'complet').length}/${buvetteSpaces.length} complètes`}
         >
           <div className="p-5">
-          <div className="mb-3 h-2.5 overflow-hidden rounded-full bg-stone-100">
+          <div className="mb-3 h-2.5 overflow-hidden rounded-full bg-pr-stone/50">
             <div
               className="h-full rounded-full bg-green-500 transition-all"
               style={{ width: `${buvetteSpaces.length > 0 ? (buvetteSpaces.filter((s) => s.statut_espace === 'complet').length / buvetteSpaces.length) * 100 : 0}%` }}
@@ -341,8 +338,8 @@ export function MatchClosedView({ eventId, paxCount }: { eventId: string; eventN
             })}
           </div>
           {buvetteFb > 0 && (
-            <p className="mt-3 text-xs text-stone-400">
-              F&amp;B buvettes : <strong className="text-stone-700">{eur(buvetteFb)} € HT</strong>
+            <p className="mt-3 text-xs text-pr-black-soft/45">
+              F&amp;B buvettes : <strong className="text-pr-black">{eur(buvetteFb)} € HT</strong>
             </p>
           )}
           </div>
