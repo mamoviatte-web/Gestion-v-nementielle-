@@ -44,38 +44,89 @@ export function MovementHistory({
   eventId,
   spaceId,
   productMap,
+  collapsible = false,
+  defaultOpen = false,
 }: {
   eventId: string;
   spaceId: string;
   productMap: Map<string, Product>;
+  /** Rend l'historique repliable (secondaire sur le Jour J), avec son en-tête en résumé cliquable. */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 }) {
   const [page, setPage] = useState(0);
   const { data, isLoading, isFetching } = useMovements(eventId, spaceId, page);
 
-  if (isLoading) return <Spinner label="Chargement de l'historique…" />;
-
-  const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
-  const maxPage = Math.max(0, Math.ceil(total / MOVEMENTS_PAGE_SIZE) - 1);
 
-  if (total === 0) {
+  // En-tête homogène (icône + titre + compteur), partagé entre les deux rendus.
+  const header = (
+    <div className="flex items-center gap-2">
+      <History className="h-4 w-4 text-pr-black-soft/40" />
+      <h3 className="font-display text-sm font-bold text-pr-black">Historique des mouvements</h3>
+      <span className="rounded-full bg-pr-stone/60 px-2 py-0.5 text-xs font-semibold text-pr-black-soft/60">
+        {isLoading ? '…' : total}
+      </span>
+    </div>
+  );
+
+  const body = isLoading ? (
+    <Spinner label="Chargement de l'historique…" />
+  ) : total === 0 ? (
+    <EmptyState
+      icon={History}
+      title="Aucun mouvement"
+      message="Aucun mouvement de stock enregistré pour cet espace."
+    />
+  ) : (
+    <MovementTable
+      rows={data?.rows ?? []}
+      total={total}
+      page={page}
+      setPage={setPage}
+      isFetching={isFetching}
+      productMap={productMap}
+    />
+  );
+
+  if (collapsible) {
     return (
-      <EmptyState
-        icon={History}
-        title="Aucun mouvement"
-        message="Aucun mouvement de stock enregistré pour cet espace."
-      />
+      <details className="group rounded-2xl border border-pr-stone bg-white" open={defaultOpen}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden">
+          {header}
+          <span className="text-xs text-pr-black-soft/45 transition-transform group-open:rotate-180">▾</span>
+        </summary>
+        <div className="border-t border-pr-stone p-4">{body}</div>
+      </details>
     );
   }
 
   return (
     <div className="space-y-2.5">
-      <div className="flex items-center gap-2">
-        <History className="h-4 w-4 text-pr-black-soft/40" />
-        <h3 className="font-display text-sm font-bold text-pr-black">Historique des mouvements</h3>
-        <span className="rounded-full bg-pr-stone/60 px-2 py-0.5 text-xs font-semibold text-pr-black-soft/60">{total}</span>
-      </div>
+      {header}
+      {body}
+    </div>
+  );
+}
 
+function MovementTable({
+  rows,
+  total,
+  page,
+  setPage,
+  isFetching,
+  productMap,
+}: {
+  rows: NonNullable<ReturnType<typeof useMovements>['data']>['rows'];
+  total: number;
+  page: number;
+  setPage: (fn: (p: number) => number) => void;
+  isFetching: boolean;
+  productMap: Map<string, Product>;
+}) {
+  const maxPage = Math.max(0, Math.ceil(total / MOVEMENTS_PAGE_SIZE) - 1);
+  return (
+    <div className="space-y-2.5">
       <Table>
         <THead>
           <TR>
