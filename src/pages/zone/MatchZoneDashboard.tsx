@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useMatchSession } from '@/hooks/useMatchSession';
 import { MatchZoneHeader } from '@/components/zone/MatchZoneHeader';
+import { PETIT_MATERIEL_ENABLED } from '@/lib/featureFlags';
 
 type Status = 'todo' | 'in_progress' | 'done';
 
@@ -68,6 +69,9 @@ export default function MatchZoneDashboard() {
     { icon: '📦', title: 'Stocks', subtitle: 'Saisir stock initial, réassort et final', path: 'stocks', status: status.stocks },
     { icon: '⏱', title: 'Horaires de l\'équipe', subtitle: 'Recenser vos agents et leurs heures réelles', path: 'rh', status: status.schedules },
     { icon: '📝', title: 'Débrief', subtitle: "Retour de fin d'événement + photos", path: 'debrief', status: status.debrief },
+    ...(PETIT_MATERIEL_ENABLED
+      ? [{ icon: '🧰', title: 'Besoins petit matériel', subtitle: 'Gobelets, couverts, consommables pour le prochain match', path: 'materiel' }]
+      : []),
   ];
 
   return (

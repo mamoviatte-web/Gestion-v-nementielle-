@@ -6,6 +6,8 @@ import { useEvent, useEventSpaces, useEventActions, useEventsList } from '@/hook
 import { useEventStats } from '@/hooks/useEventStats';
 import { EVENT_STATUS_META } from '@/lib/labels';
 import { StockDotationsTable } from '@/components/stock/StockDotationsTable';
+import { PetitMaterielPanel } from '@/components/stock/PetitMaterielPanel';
+import { PETIT_MATERIEL_ENABLED } from '@/lib/featureFlags';
 import { KegClosureAudit } from '@/components/stock/KegClosureAudit';
 import { KegBlockModal, type KegDefaut } from '@/components/stock/KegBlockModal';
 import { ScheduleAdminPanel } from '@/components/schedule/ScheduleAdminPanel';
@@ -84,7 +86,8 @@ type MatchSub =
   | 'debriefs'
   | 'recettes' // Résultats
   | 'analyse'
-  | 'gpvip';
+  | 'gpvip'
+  | 'petit_materiel'; // Préparation (drapeau PETIT_MATERIEL_ENABLED)
 
 /** Sous-onglets par phase : la même donnée montée au même endroit qu'avant. */
 const MATCH_PHASES: { key: Phase; label: string; subs: { key: MatchSub; label: string }[] }[] = [
@@ -128,7 +131,7 @@ const MATCH_PHASES: { key: Phase; label: string; subs: { key: MatchSub; label: s
 ];
 
 /** Sous-onglets nécessitant le sélecteur d'espace (composant par espace). */
-const SPACE_SUBS: MatchSub[] = ['pax', 'dotations', 'saisie', 'rh', 'final'];
+const SPACE_SUBS: MatchSub[] = ['pax', 'dotations', 'saisie', 'rh', 'final', 'petit_materiel'];
 
 /** Onglets simplifiés pour un séminaire / événement hors match (sans Prestataires ni Runner). */
 const SEMINAIRE_TABS: { key: Tab; label: string }[] = [
@@ -279,7 +282,12 @@ export default function EventDetailPage() {
   const isMatch = event.event_type === 'match';
   // Matchs : sous-onglet actif = celui de la phase courante.
   const activePhaseDef = MATCH_PHASES.find((p) => p.key === phase) ?? MATCH_PHASES[0];
-  const phaseSubs = activePhaseDef.subs;
+  // Onglet « Petit matériel » (Préparation) — visible uniquement si le drapeau est
+  // activé ; sinon phaseSubs reste strictement identique à l'existant.
+  const phaseSubs =
+    PETIT_MATERIEL_ENABLED && activePhaseDef.key === 'prep'
+      ? [...activePhaseDef.subs, { key: 'petit_materiel' as MatchSub, label: '🧰 Petit matériel' }]
+      : activePhaseDef.subs;
   const activeSub: MatchSub = phaseSubs.some((s) => s.key === sub) ? sub : phaseSubs[0].key;
   // Séminaires : onglets simples inchangés.
   const activeTab: Tab = SEMINAIRE_TABS.some((t) => t.key === tab) ? tab : SEMINAIRE_TABS[0].key;
@@ -701,6 +709,15 @@ export default function EventDetailPage() {
         </div>
       )}
       {isMatch && activeSub === 'buvettes' && <BuvetteGroupsTab />}
+      {isMatch && PETIT_MATERIEL_ENABLED && activeSub === 'petit_materiel' && (
+        <div className="space-y-6">
+          {selectedSpace ? (
+            <PetitMaterielPanel eventId={event.event_id} spaceId={selectedSpace} />
+          ) : (
+            <Alert variant="info">Aucun espace activé pour cet événement.</Alert>
+          )}
+        </div>
+      )}
 
       {/* ───────── Match · ② Jour J ───────── */}
       {isMatch && activeSub === 'saisie' && (

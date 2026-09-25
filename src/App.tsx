@@ -62,6 +62,7 @@ const MatchAccessPage = lazy(() => import('@/pages/zone/MatchAccessPage'));
 const MatchZoneDashboard = lazy(() => import('@/pages/zone/MatchZoneDashboard'));
 const MatchZoneRoadmap = lazy(() => import('@/pages/zone/MatchZoneRoadmap'));
 const MatchZoneStocks = lazy(() => import('@/pages/zone/MatchZoneStocks'));
+const MatchZonePetitMateriel = lazy(() => import('@/pages/zone/MatchZonePetitMateriel'));
 const MatchZoneSchedule = lazy(() => import('@/pages/zone/MatchZoneSchedule'));
 const MatchZoneDebrief = lazy(() => import('@/pages/zone/MatchZoneDebrief'));
 const TerrasseSupervisorPage = lazy(() => import('@/pages/zone/TerrasseSupervisorPage'));
@@ -104,6 +105,7 @@ export default function App() {
         <Route path="/zone/match/:sessionToken" element={<MatchZoneDashboard />} />
         <Route path="/zone/match/:sessionToken/roadmap" element={<MatchZoneRoadmap />} />
         <Route path="/zone/match/:sessionToken/stocks" element={<MatchZoneStocks />} />
+        <Route path="/zone/match/:sessionToken/materiel" element={<MatchZonePetitMateriel />} />
         <Route path="/zone/match/:sessionToken/schedules" element={<MatchZoneSchedule />} />
         <Route path="/zone/match/:sessionToken/debrief" element={<MatchZoneDebrief />} />
         <Route path="/zone/match/:sessionToken/terrasses" element={<TerrasseSupervisorPage />} />
