@@ -488,13 +488,13 @@ function frDayRange(lines: PayrollDetailRow[]): string {
  */
 function buildEventSheet(
   wb: ExcelJS.Workbook,
-  mois: string,
+  label: string,
   rows: PayrollRow[],
   detail: PayrollDetailRow[],
   arial: (extra?: Partial<ExcelJS.Font>) => Partial<ExcelJS.Font>,
   origin: string,
 ): void {
-  const ws = wb.addWorksheet(`Par événement ${mois}`, { views: [{ state: 'frozen', ySplit: 5 }] });
+  const ws = wb.addWorksheet(`Par événement ${label}`.slice(0, 31), { views: [{ state: 'frozen', ySplit: 5 }] });
 
   // Colonnes A..G : Jour · Personne · Poste/tâche · Espace · Horaire · Heures · Coût HT
   [14, 26, 20, 20, 16, 9, 13].forEach((w, i) => (ws.getColumn(i + 1).width = w));
@@ -512,7 +512,7 @@ function buildEventSheet(
 
   ws.mergeCells('A2:G2');
   const st = ws.getCell('A2');
-  st.value = `Un bloc par événement · chaque ligne = un créneau (jour + horaires) · Mois : ${mois}`;
+  st.value = `Un bloc par événement · chaque ligne = un créneau (jour + horaires) · Période : ${label}`;
   st.font = arial({ italic: true, color: { argb: 'FF334155' } });
   st.alignment = { horizontal: 'center' };
 
@@ -634,4 +634,171 @@ function buildEventSheet(
   }
 
   applyPrintLayout(ws, 'G', totalRow);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * RAPPORT RH SUR PÉRIODE (« Exporter Excel » de RH Analytique) — version DAF
+ * habillée. Remplace l'ancien AOA brut par un classeur homogène :
+ *   • Synthèse (qui payer) : 1 ligne/personne, circuit franchise/contrat, à verser.
+ *   • Par événement : événements de la période, noms rattachés + heures + horaires.
+ *   • Par mois : 1 ligne/personne × mois (circuit, missions, heures, coût).
+ * Mêmes règles d'habillage que la paie mensuelle (voir docs/excel-rapport-rh.md).
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Bandeau + en-tête de colonnes standard (lignes 1→5), homogène sur toutes les feuilles. */
+function sheetBanner(
+  ws: ExcelJS.Worksheet,
+  lastCol: string,
+  title: string,
+  subtitle: string,
+  legend: string,
+  headers: string[],
+  arial: (extra?: Partial<ExcelJS.Font>) => Partial<ExcelJS.Font>,
+  rightFrom = 2,
+): void {
+  ws.mergeCells(`A1:${lastCol}1`);
+  const t = ws.getCell('A1');
+  t.value = title;
+  t.font = arial({ size: 14, bold: true, color: { argb: 'FFFFFFFF' } });
+  t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+  t.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws.getRow(1).height = 26;
+  ws.mergeCells(`A2:${lastCol}2`);
+  const st = ws.getCell('A2');
+  st.value = subtitle;
+  st.font = arial({ italic: true, color: { argb: 'FF334155' } });
+  st.alignment = { horizontal: 'center' };
+  ws.mergeCells(`A3:${lastCol}3`);
+  const lg = ws.getCell('A3');
+  lg.value = legend;
+  lg.font = arial({ bold: true });
+  lg.alignment = { horizontal: 'center' };
+  ws.getRow(4).height = 4;
+  const head = ws.getRow(5);
+  headers.forEach((h, i) => {
+    const c = head.getCell(i + 1);
+    c.value = h;
+    c.font = arial({ bold: true, color: { argb: 'FFFFFFFF' } });
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+    c.alignment = { horizontal: i + 1 >= rightFrom ? 'right' : 'left', vertical: 'middle' };
+  });
+  head.height = 20;
+}
+
+/** Libellé de circuit agrégé sur la période. */
+function circuitOf(circuits: Set<string>): string {
+  if (circuits.size === 0) return 'non défini';
+  if (circuits.size === 1) return [...circuits][0];
+  return 'mixte';
+}
+
+export async function downloadHoursReportWorkbook(
+  debut: string,
+  fin: string,
+  monthRows: PayrollRow[],
+  detail: PayrollDetailRow[] = [],
+  origin = '',
+): Promise<void> {
+  const ExcelJSMod = (await loadModule(() => import('exceljs'))).default;
+  const wb = new ExcelJSMod.Workbook();
+  wb.creator = 'StockPilot MD';
+  const arial = (extra: Partial<ExcelJS.Font> = {}): Partial<ExcelJS.Font> => ({ name: 'Arial', size: 10, ...extra });
+  const label = debut === fin ? debut : `${debut} → ${fin}`;
+
+  // ── Agrégat par personne (sur la période)
+  interface Agg { staff_name: string; circuits: Set<string>; heures: number; cout: number; mois: Set<string> }
+  const byPers = new Map<string, Agg>();
+  for (const r of monthRows) {
+    const a = byPers.get(r.staff_name) ?? { staff_name: r.staff_name, circuits: new Set<string>(), heures: 0, cout: 0, mois: new Set<string>() };
+    a.heures += r.heures; a.cout += r.cout_ht; a.mois.add(r.mois);
+    if (r.type_paiement && r.type_paiement !== 'non défini') a.circuits.add(r.type_paiement);
+    byPers.set(r.staff_name, a);
+  }
+  const persons = [...byPers.values()].sort((a, b) => a.staff_name.localeCompare(b.staff_name));
+  let totFranchise = 0, totContrat = 0;
+  for (const r of monthRows) {
+    if (r.type_paiement === 'franchise') totFranchise += r.cout_ht;
+    else if (r.type_paiement === 'contrat') totContrat += r.cout_ht;
+  }
+
+  // ═══ Feuille 1 — SYNTHÈSE (qui payer) ═══
+  const s = wb.addWorksheet(`Synthèse ${label}`.slice(0, 31), { views: [{ state: 'frozen', ySplit: 5 }] });
+  [30, 20, 10, 14, 14].forEach((w, i) => (s.getColumn(i + 1).width = w));
+  sheetBanner(s, 'E',
+    'PROVENCE RUGBY — Synthèse RH (qui payer)',
+    `À l'attention du DAF · Période : ${label}`,
+    'Circuit : ROUGE = Franchise (à facturer) · VERT = Contrat (à intégrer en paie). « À verser » = Coût HT.',
+    ['Personne', 'Circuit', 'Heures', 'Coût HT (€)', 'À verser (€)'], arial, 3);
+  const first = 6;
+  persons.forEach((p, i) => {
+    const rr = first + i;
+    const circ = circuitOf(p.circuits);
+    const row = s.getRow(rr);
+    row.getCell(1).value = p.staff_name;
+    row.getCell(1).font = arial({ bold: true, color: { argb: nameColor(circ) } });
+    row.getCell(2).value = circ;
+    row.getCell(2).font = arial({ color: { argb: nameColor(circ) } });
+    row.getCell(3).value = p.heures; row.getCell(3).numFmt = H_FMT;
+    row.getCell(4).value = Math.round(p.cout * 100) / 100; row.getCell(4).numFmt = EUR_FMT;
+    row.getCell(5).value = { formula: `D${rr}` }; row.getCell(5).numFmt = EUR_FMT; row.getCell(5).font = arial({ bold: true });
+    for (let c = 1; c <= 5; c++) row.getCell(c).border = { bottom: { style: 'hair', color: { argb: 'FFE5E7EB' } } };
+  });
+  const last = first + persons.length - 1;
+  const hi = Math.max(first, last);
+  const totalRow = hi + 2;
+  const tg = s.getRow(totalRow);
+  tg.getCell(1).value = 'TOTAL GÉNÉRAL';
+  tg.getCell(3).value = { formula: `SUM(C${first}:C${hi})` }; tg.getCell(3).numFmt = H_FMT;
+  tg.getCell(4).value = { formula: `SUM(D${first}:D${hi})` }; tg.getCell(4).numFmt = EUR_FMT;
+  tg.getCell(5).value = { formula: `SUM(E${first}:E${hi})` }; tg.getCell(5).numFmt = EUR_FMT;
+  for (let c = 1; c <= 5; c++) { tg.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT } }; tg.getCell(c).font = arial({ bold: true, size: 11 }); }
+  const frRow = s.getRow(totalRow + 2);
+  frRow.getCell(1).value = 'Total FRANCHISE (à facturer)';
+  frRow.getCell(1).font = arial({ bold: true, color: { argb: RED } });
+  frRow.getCell(4).value = Math.round(totFranchise * 100) / 100; frRow.getCell(4).numFmt = EUR_FMT; frRow.getCell(4).font = arial({ bold: true, color: { argb: RED } });
+  const coRow = s.getRow(totalRow + 3);
+  coRow.getCell(1).value = 'Total CONTRAT (à intégrer en paie)';
+  coRow.getCell(1).font = arial({ bold: true, color: { argb: GREEN } });
+  coRow.getCell(4).value = Math.round(totContrat * 100) / 100; coRow.getCell(4).numFmt = EUR_FMT; coRow.getCell(4).font = arial({ bold: true, color: { argb: GREEN } });
+  applyPrintLayout(s, 'E', totalRow + 3);
+
+  // ═══ Feuille 2 — PAR ÉVÉNEMENT (noms + heures) ═══
+  const nameRows: PayrollRow[] = persons.map((p) => ({
+    staff_name: p.staff_name, type_paiement: circuitOf(p.circuits), mois: label,
+    missions: '', heures: p.heures, cout_ht: p.cout, nb_evenements: 0,
+  }));
+  if (detail.length > 0) buildEventSheet(wb, label, nameRows, detail, arial, origin);
+
+  // ═══ Feuille 3 — PAR MOIS (personne × mois) ═══
+  const m = wb.addWorksheet(`Par mois ${label}`.slice(0, 31), { views: [{ state: 'frozen', ySplit: 5 }] });
+  [28, 16, 10, 26, 10, 14, 12].forEach((w, i) => (m.getColumn(i + 1).width = w));
+  sheetBanner(m, 'G',
+    'PROVENCE RUGBY — Heures RH par personne et par mois',
+    `Période : ${label}`,
+    'Circuit : ROUGE = Franchise · VERT = Contrat. Une ligne par personne et par mois.',
+    ['Personne', 'Circuit', 'Mois', 'Missions', 'Heures', 'Coût HT (€)', 'Nb évts'], arial, 5);
+  const sorted = [...monthRows].sort((a, b) => a.staff_name.localeCompare(b.staff_name) || a.mois.localeCompare(b.mois));
+  let r = 6;
+  for (const mr of sorted) {
+    const row = m.getRow(r);
+    row.getCell(1).value = mr.staff_name;
+    row.getCell(1).font = arial({ bold: true, color: { argb: nameColor(mr.type_paiement) } });
+    row.getCell(2).value = mr.type_paiement;
+    row.getCell(2).font = arial({ color: { argb: nameColor(mr.type_paiement) } });
+    row.getCell(3).value = mr.mois;
+    row.getCell(4).value = mr.missions; row.getCell(4).font = arial({ color: { argb: GREY } });
+    row.getCell(5).value = mr.heures; row.getCell(5).numFmt = H_FMT;
+    row.getCell(6).value = Math.round(mr.cout_ht * 100) / 100; row.getCell(6).numFmt = EUR_FMT;
+    row.getCell(7).value = mr.nb_evenements; row.getCell(7).alignment = { horizontal: 'right' };
+    for (let c = 1; c <= 7; c++) { row.getCell(c).border = { bottom: { style: 'hair', color: { argb: 'FFE5E7EB' } } }; if (!row.getCell(c).font) row.getCell(c).font = arial(); }
+    r++;
+  }
+  const mTot = m.getRow(r + 1);
+  mTot.getCell(1).value = 'TOTAL';
+  mTot.getCell(5).value = { formula: `SUM(E6:E${r - 1})` }; mTot.getCell(5).numFmt = H_FMT;
+  mTot.getCell(6).value = { formula: `SUM(F6:F${r - 1})` }; mTot.getCell(6).numFmt = EUR_FMT;
+  for (let c = 1; c <= 7; c++) { mTot.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT } }; mTot.getCell(c).font = arial({ bold: true }); }
+  applyPrintLayout(m, 'G', r + 1);
+
+  download(await wb.xlsx.writeBuffer(), `RH_heures_${debut}_${fin}.xlsx`);
 }

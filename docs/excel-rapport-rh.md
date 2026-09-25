@@ -1,7 +1,9 @@
 # Expertise — rédaction du tableau Excel RH (paie mensuelle)
 
-Référence de conception du classeur `Recap_paie_{mois}.xlsx`
-(généré par `src/lib/payrollExport.ts`). Objectif : un document **propre,
+Référence de conception des classeurs RH (générés par `src/lib/payrollExport.ts`) :
+`Recap_paie_{mois}.xlsx` (paie DAF mensuelle) **et** `RH_heures_{debut}_{fin}.xlsx`
+(RH Analytique sur une plage : Synthèse « qui payer » + circuit · Par événement ·
+Par mois). Les deux partagent les mêmes règles. Objectif : un document **propre,
 homogène et lisible**, qui donne le **détail de chaque mission et de chaque jour
 de chaque personne**, tout en gardant une synthèse financière par personne.
 

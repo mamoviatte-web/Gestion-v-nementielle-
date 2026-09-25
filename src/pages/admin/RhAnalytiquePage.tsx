@@ -13,8 +13,7 @@ import { Download, AlertTriangle, FileSpreadsheet, LineChart } from 'lucide-reac
 import { supabase } from '@/lib/supabase';
 import { Card, SectionTitle, StatTile } from '@/components/ui';
 import { TrendChart } from '@/components/ui/charts/TrendChart';
-import { downloadAoaWorkbook, type AoaSheetOut } from '@/lib/xlsxAoa';
-import { downloadPayrollWorkbook, type PayrollRow, type PayrollDetailRow } from '@/lib/payrollExport';
+import { downloadPayrollWorkbook, downloadHoursReportWorkbook, type PayrollRow, type PayrollDetailRow } from '@/lib/payrollExport';
 
 interface MonthlyRow {
   staff_name: string;
@@ -263,42 +262,66 @@ export default function RhAnalytiquePage() {
       .map(([mois, cout]) => ({ label: moisLabel(mois), value: cout }));
   }, [rows]);
 
-  function exportExcel() {
-    const detail: AoaSheetOut = {
-      name: 'Heures mensuelles',
-      aoa: [
-        ['Personne', 'Mois', 'Missions', 'Heures', 'Coût HT (€)', 'Nb événements'],
-        ...rows.map((r) => [r.staff_name, r.mois, r.missions, r.heures, r.cout_ht, r.nb_evenements]),
-        [],
-        ['TOTAL', '', '', totals.heures, totals.cout, ''],
-      ],
-      widths: [26, 10, 24, 10, 12, 14],
-    };
-    const missions: AoaSheetOut = {
-      name: 'Coût par mission',
-      aoa: [
-        ['Mission', 'Heures', 'Coût HT (€)', 'Lignes'],
-        ...parMission.map((r) => [r.mission, Math.round(r.heures * 10) / 10, Math.round(r.cout * 100) / 100, r.n]),
-      ],
-      widths: [24, 10, 12, 8],
-    };
-    const espaces: AoaSheetOut = {
-      name: 'Coût par espace',
-      aoa: [
-        ['Espace', 'Heures', 'Coût HT (€)'],
-        ...parEspace.map((r) => [r.espace, Math.round(r.heures * 10) / 10, Math.round(r.cout * 100) / 100]),
-      ],
-      widths: [26, 10, 12],
-    };
-    const statuts: AoaSheetOut = {
-      name: 'Coût par statut',
-      aoa: [
-        ['Statut d’emploi', 'Heures', 'Coût HT (€)'],
-        ...parStatut.map((r) => [STATUT_LABEL[r.statut] ?? r.statut, Math.round(r.heures * 10) / 10, Math.round(r.cout * 100) / 100]),
-      ],
-      widths: [22, 10, 12],
-    };
-    void downloadAoaWorkbook([detail, missions, espaces, statuts], `rh-heures_${debut}_${fin}.xlsx`);
+  const [exportingHours, setExportingHours] = useState(false);
+  /**
+   * Export RH sur la plage — classeur DAF habillé (payrollExport) :
+   * Synthèse (qui payer + circuit), Par événement (noms + heures), Par mois.
+   */
+  async function exportExcel() {
+    setExportingHours(true);
+    try {
+      // Heures mensuelles AVEC circuit (type_paiement) sur la plage.
+      const { data: mrows } = await supabase
+        .from('rh_monthly_hours')
+        .select('staff_name, type_paiement, mois, missions, heures, cout_ht, nb_evenements')
+        .gte('mois', debut).lte('mois', fin)
+        .order('staff_name').order('mois');
+      const monthRows: PayrollRow[] = (mrows ?? []).map((r) => ({
+        staff_name: String((r as PayrollRow).staff_name ?? ''),
+        type_paiement: String((r as PayrollRow).type_paiement ?? 'non défini'),
+        mois: String((r as PayrollRow).mois ?? ''),
+        missions: String((r as PayrollRow).missions ?? ''),
+        heures: num((r as PayrollRow).heures),
+        cout_ht: num((r as PayrollRow).cout_ht),
+        nb_evenements: num((r as PayrollRow).nb_evenements),
+      }));
+      // Détail par créneau sur la plage (vue fine ; repli sur la vue agrégée).
+      type DetailRaw = Partial<PayrollDetailRow> & { arrivee?: string; depart?: string; jour?: string };
+      let raw: DetailRaw[] = [];
+      const fine = await supabase
+        .from('rh_person_event_shift')
+        .select('staff_name, mois, categorie, event_id, event_name, event_date, jour, nature, espace, arrivee, depart, payment_type, heures, cout_ht')
+        .gte('mois', debut).lte('mois', fin)
+        .order('staff_name').order('jour');
+      if (fine.error) {
+        const coarse = await supabase
+          .from('rh_monthly_event_detail')
+          .select('staff_name, mois, categorie, event_id, event_name, event_date, nature, espace, payment_type, heures, cout_ht')
+          .gte('mois', debut).lte('mois', fin)
+          .order('staff_name').order('event_date');
+        raw = (coarse.data ?? []) as DetailRaw[];
+      } else {
+        raw = (fine.data ?? []) as DetailRaw[];
+      }
+      const detailRows: PayrollDetailRow[] = raw.map((r) => ({
+        staff_name: String(r.staff_name ?? ''),
+        categorie: String(r.categorie ?? 'Autre'),
+        event_id: String(r.event_id ?? ''),
+        event_name: String(r.event_name ?? ''),
+        event_date: String(r.event_date ?? ''),
+        jour: String(r.jour ?? r.event_date ?? ''),
+        nature: String(r.nature ?? ''),
+        espace: String(r.espace ?? ''),
+        arrivee: String(r.arrivee ?? ''),
+        depart: String(r.depart ?? ''),
+        payment_type: String(r.payment_type ?? 'non défini'),
+        heures: num(r.heures),
+        cout_ht: num(r.cout_ht),
+      }));
+      await downloadHoursReportWorkbook(debut, fin, monthRows, detailRows, window.location.origin);
+    } finally {
+      setExportingHours(false);
+    }
   }
 
   return (
@@ -320,9 +343,9 @@ export default function RhAnalytiquePage() {
             <input type="month" value={fin} min={debut} onChange={(e) => setFin(e.target.value)}
               className="ml-1 rounded-xl border border-stone-200 px-3 py-2 text-sm" />
           </label>
-          <button onClick={exportExcel} disabled={rows.length === 0}
+          <button onClick={() => void exportExcel()} disabled={rows.length === 0 || exportingHours}
             className="flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2 text-sm font-bold text-white hover:bg-stone-700 disabled:opacity-40">
-            <Download size={15} />Exporter Excel
+            <Download size={15} />{exportingHours ? 'Génération…' : 'Exporter Excel (DAF)'}
           </button>
         </div>
       </div>
