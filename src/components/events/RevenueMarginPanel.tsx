@@ -8,11 +8,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, Check, X, TrendingUp, TrendingDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { Button, Input, Select, Spinner } from '@/components/ui';
+import { Button, Card, Input, Select, Spinner, StatTile } from '@/components/ui';
 
 interface PL {
   recettes_ht: number; recettes_ttc: number; nb_ventes: number;
@@ -107,63 +107,64 @@ export function RevenueMarginPanel({ eventId, spaces }: { eventId: string; space
   const maxType = useMemo(() => Math.max(1, ...(pl?.par_type ?? []).map((t) => num(t.ht))), [pl]);
 
   if (loading) return <Spinner />;
-  if (!pl) return <p className="text-sm text-stone-400">Compte de résultat indisponible.</p>;
+  if (!pl) return <p className="text-sm text-pr-black-soft/45">Compte de résultat indisponible.</p>;
 
   const margePos = num(pl.marge_ht) >= 0;
 
   return (
     <div className="space-y-6">
-      {/* Bandeau compte de résultat */}
-      <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
-        <div className="grid grid-cols-1 gap-px bg-stone-100 sm:grid-cols-4">
-          <PLCell label="CA réalisé HT" value={eur(num(pl.recettes_ht))} sub={`${num(pl.nb_ventes)} ventes · panier ${num(pl.panier_moyen).toFixed(2)} €`} />
-          <PLCell label="– Coût F&B HT" value={eur(num(pl.cout_fb_ht))} tone="cost" />
-          <PLCell label="– Coût RH HT" value={eur(num(pl.cout_rh_ht))} tone="cost" />
-          <div className={`p-4 ${margePos ? 'bg-emerald-600' : 'bg-rose-600'} text-white`}>
-            <p className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-white/70">
-              {margePos ? <TrendingUp size={12} /> : <TrendingDown size={12} />} Marge HT
-            </p>
-            <p className="mt-1 text-2xl font-black tabular-nums">{eur(num(pl.marge_ht))}</p>
-            <p className="text-xs font-bold text-white/80">{num(pl.marge_pct).toFixed(1)} %</p>
-          </div>
-        </div>
-
-        {/* Répartition par type + top POS */}
-        {pl.par_type.length > 0 && (
-          <div className="grid grid-cols-1 gap-4 border-t border-stone-100 p-4 lg:grid-cols-2">
-            <div>
-              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-400">CA par type</p>
-              <div className="space-y-1.5">
-                {pl.par_type.map((t) => (
-                  <div key={t.type} className="flex items-center gap-2">
-                    <span className="w-20 shrink-0 text-xs text-stone-500">{POS_LABEL[t.type] ?? t.type}</span>
-                    <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-stone-100">
-                      <div className="h-full rounded-full" style={{ width: `${(num(t.ht) / maxType) * 100}%`, background: TYPE_COLOR[t.type] ?? '#6B7280' }} />
-                    </div>
-                    <span className="w-16 shrink-0 text-right text-xs font-semibold tabular-nums text-stone-700">{eur(num(t.ht))}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-400">Top points de vente</p>
-              <div className="space-y-1">
-                {pl.par_pos.slice(0, 5).map((p, i) => (
-                  <div key={i} className="flex items-center justify-between text-sm">
-                    <span className="truncate text-stone-600">{p.label}</span>
-                    <span className="font-semibold tabular-nums text-stone-800">{eur(num(p.ht))}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+      {/* Compte de résultat — l'essentiel : CA − Coût F&B − Coût RH = Marge */}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <StatTile
+          label="CA réalisé HT"
+          value={eur(num(pl.recettes_ht))}
+          sub={`${num(pl.nb_ventes)} ventes · panier ${num(pl.panier_moyen).toFixed(2)} €`}
+        />
+        <StatTile label="− Coût F&B HT" value={eur(num(pl.cout_fb_ht))} sub="consommation réelle" />
+        <StatTile label="− Coût RH HT" value={eur(num(pl.cout_rh_ht))} sub="heures staff" />
+        <StatTile
+          label="= Marge HT"
+          value={eur(num(pl.marge_ht))}
+          sub={`${num(pl.marge_pct).toFixed(1)} % du CA`}
+          tone={margePos ? 'good' : 'crit'}
+        />
       </div>
+
+      {/* Répartition par type + top POS */}
+      {pl.par_type.length > 0 && (
+        <Card className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-pr-black-soft/45">CA par type</p>
+            <div className="space-y-1.5">
+              {pl.par_type.map((t) => (
+                <div key={t.type} className="flex items-center gap-2">
+                  <span className="w-20 shrink-0 text-xs text-pr-black-soft/60">{POS_LABEL[t.type] ?? t.type}</span>
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-pr-stone/50">
+                    <div className="h-full rounded-full" style={{ width: `${(num(t.ht) / maxType) * 100}%`, background: TYPE_COLOR[t.type] ?? '#6B7280' }} />
+                  </div>
+                  <span className="w-16 shrink-0 text-right text-xs font-semibold tabular-nums text-pr-black">{eur(num(t.ht))}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-pr-black-soft/45">Top points de vente</p>
+            <div className="space-y-1">
+              {pl.par_pos.slice(0, 5).map((p, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <span className="truncate text-pr-black-soft/70">{p.label}</span>
+                  <span className="font-semibold tabular-nums text-pr-black">{eur(num(p.ht))}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Liste des points de vente */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-stone-500">Points de vente ({lines.length})</h3>
+          <h3 className="text-sm font-bold uppercase tracking-wide text-pr-black-soft/60">Points de vente ({lines.length})</h3>
           <Button size="sm" onClick={() => { setAdding((v) => !v); setEditId(null); }}>
             <Plus size={14} /> Ajouter une recette
           </Button>
@@ -174,10 +175,10 @@ export function RevenueMarginPanel({ eventId, spaces }: { eventId: string; space
             onSubmit={async (f) => { const ok = await save({ ...f, id: null }); if (ok) setAdding(false); }} />
         )}
 
-        <div className="overflow-x-auto rounded-2xl border border-stone-100">
+        <div className="overflow-x-auto rounded-2xl border border-pr-stone">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-stone-100 bg-stone-50 text-left text-xs uppercase tracking-wide text-stone-400">
+              <tr className="border-b border-pr-stone bg-pr-cream/60 text-left text-xs uppercase tracking-wide text-pr-black-soft/45">
                 <th className="px-4 py-2">Point de vente</th>
                 <th className="px-3 py-2">Type</th>
                 <th className="px-3 py-2 text-right">CA HT</th>
@@ -186,9 +187,9 @@ export function RevenueMarginPanel({ eventId, spaces }: { eventId: string; space
                 <th className="px-3 py-2" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-stone-50">
+            <tbody className="divide-y divide-pr-stone/60">
               {lines.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-stone-400">Aucune recette saisie.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-6 text-center text-sm text-pr-black-soft/45">Aucune recette saisie.</td></tr>
               ) : lines.map((l) => editId === l.id ? (
                 <tr key={l.id}>
                   <td colSpan={6} className="p-0">
@@ -197,9 +198,9 @@ export function RevenueMarginPanel({ eventId, spaces }: { eventId: string; space
                   </td>
                 </tr>
               ) : (
-                <tr key={l.id} className="text-stone-800">
+                <tr key={l.id} className="text-pr-black">
                   <td className="px-4 py-2 font-medium">{l.pos_label}
-                    {l.source === 'import' && <span className="ml-1 text-[10px] text-stone-400">(import)</span>}
+                    {l.source === 'import' && <span className="ml-1 text-[10px] text-pr-black-soft/45">(import)</span>}
                   </td>
                   <td className="px-3 py-2">
                     <span className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-white" style={{ background: TYPE_COLOR[l.pos_type] ?? '#6B7280' }}>
@@ -207,12 +208,12 @@ export function RevenueMarginPanel({ eventId, spaces }: { eventId: string; space
                     </span>
                   </td>
                   <td className="px-3 py-2 text-right font-semibold tabular-nums">{eur(num(l.revenue_ht))}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-stone-500">{eur(num(l.revenue_ttc))}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-stone-500">{l.nb_ventes ?? '—'}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-pr-black-soft/60">{eur(num(l.revenue_ttc))}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-pr-black-soft/60">{l.nb_ventes ?? '—'}</td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => { setEditId(l.id); setAdding(false); }} className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-700"><Pencil size={14} /></button>
-                      <button onClick={() => void remove(l.id)} className="rounded-lg p-1.5 text-stone-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                      <button onClick={() => { setEditId(l.id); setAdding(false); }} className="rounded-lg p-1.5 text-pr-black-soft/45 hover:bg-pr-cream/60 hover:text-pr-black"><Pencil size={14} /></button>
+                      <button onClick={() => void remove(l.id)} className="rounded-lg p-1.5 text-pr-black-soft/45 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -221,16 +222,6 @@ export function RevenueMarginPanel({ eventId, spaces }: { eventId: string; space
           </table>
         </div>
       </div>
-    </div>
-  );
-}
-
-function PLCell({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'cost' }) {
-  return (
-    <div className="bg-white p-4">
-      <p className="text-[11px] uppercase tracking-wide text-stone-400">{label}</p>
-      <p className={`mt-1 text-2xl font-black tabular-nums ${tone === 'cost' ? 'text-rose-600' : 'text-stone-900'}`}>{value}</p>
-      {sub && <p className="text-xs text-stone-400">{sub}</p>}
     </div>
   );
 }
@@ -252,7 +243,7 @@ function RevenueForm({
   const [space, setSpace] = useState(initial?.space_id ?? '');
 
   return (
-    <div className="grid grid-cols-2 gap-2 border-b border-stone-100 bg-amber-50/40 p-4 sm:grid-cols-7">
+    <div className="grid grid-cols-2 gap-2 border-b border-pr-stone bg-amber-50/40 p-4 sm:grid-cols-7">
       <Input placeholder="Point de vente" value={label} onChange={(e) => setLabel(e.target.value)} className="sm:col-span-2" />
       <Select value={type} onChange={(e) => setType(e.target.value)} options={POS_TYPES.map((t) => ({ value: t.value, label: t.label }))} />
       <Input type="number" step="0.01" placeholder="CA TTC €" value={ttc} onChange={(e) => setTtc(e.target.value)} />
@@ -266,7 +257,7 @@ function RevenueForm({
         <Button size="sm" disabled={busy || !label.trim() || (!ttc && !ht)} onClick={() => onSubmit({ label, type, ttc, ht, ventes, space })}>
           <Check size={14} /> Enregistrer
         </Button>
-        <button onClick={onCancel} className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100"><X size={16} /></button>
+        <button onClick={onCancel} className="rounded-lg p-1.5 text-pr-black-soft/45 hover:bg-pr-cream/60"><X size={16} /></button>
       </div>
     </div>
   );
