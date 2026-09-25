@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Logo, Button, Input, Alert, Spinner } from '@/components/ui';
 import { useToast } from '@/context/ToastContext';
 import { startZoneSession, validateZoneToken } from '@/lib/zoneApi';
+import { validateStaffName } from '@/lib/staffName';
 
 /** Page publique d'entrée « zone responsable » (accès par code, sans compte). */
 export default function ZoneEntryPage() {
@@ -35,10 +36,13 @@ export default function ZoneEntryPage() {
       })
     : '';
 
+  const nameCheck = validateStaffName(name, token);
+
   async function handleEnter() {
     if (!token) return;
-    if (name.trim().length < 2) {
-      showToast('Veuillez saisir votre nom (2 caractères minimum).', 'warning');
+    const check = validateStaffName(name, token);
+    if (!check.ok) {
+      showToast(check.reason ?? 'Nom invalide.', 'warning');
       return;
     }
     setSubmitting(true);
@@ -80,20 +84,30 @@ export default function ZoneEntryPage() {
               </p>
             </div>
 
-            <Input
-              label="Votre nom *"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex : Marie Dupont"
-              className="min-h-[44px]"
-              autoComplete="name"
-            />
+            <div>
+              <Input
+                label="Votre nom et prénom *"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ex : Marie Dupont"
+                className="min-h-[44px]"
+                autoComplete="name"
+              />
+              {name.trim().length > 0 && !nameCheck.ok ? (
+                <p className="mt-1.5 text-xs font-medium text-pr-rust">⚠️ {nameCheck.reason}</p>
+              ) : (
+                <p className="mt-1.5 text-xs text-pr-black-soft/60">
+                  Votre nom apparaît dans les rapports de paie — pas le code d’accès.
+                </p>
+              )}
+            </div>
 
             <Button
               variant="primary"
               size="lg"
               fullWidth
               loading={submitting}
+              disabled={!nameCheck.ok}
               onClick={handleEnter}
               className="min-h-[44px]"
             >

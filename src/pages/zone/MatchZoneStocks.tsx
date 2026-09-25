@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabase';
 import { useMatchSession } from '@/hooks/useMatchSession';
 import { MatchZoneHeader } from '@/components/zone/MatchZoneHeader';
 import { FamilyStockForm, type StockLine, type StockMode } from '@/components/stock/FamilyStockForm';
+import { validateStaffName } from '@/lib/staffName';
 
 type Step = 'ouverture' | 'reassort' | 'cloture';
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
@@ -149,7 +150,8 @@ export default function MatchZoneStocks() {
   if (loading) return <div className="flex min-h-screen items-center justify-center bg-pr-cream text-pr-black-soft/50">Chargement…</div>;
   if (!session?.success) return <div className="p-8 text-center text-pr-black-soft/50">Session expirée.</div>;
 
-  const nomValid = nom.trim().length >= 2;
+  const nomCheck = validateStaffName(nom);
+  const nomValid = nomCheck.ok;
 
   return (
     <div className="min-h-screen bg-pr-cream pb-28">
@@ -180,7 +182,11 @@ export default function MatchZoneStocks() {
             placeholder="NOM Prénom"
             className="min-h-[48px] w-full rounded-lg border border-pr-stone px-3 py-3 text-base focus:ring-2 focus:ring-amber-400"
           />
-          {!nomValid && <p className="mt-2 text-xs text-amber-700">Indiquez votre nom pour activer l'enregistrement automatique (RG-001).</p>}
+          {nom.trim().length > 0 && !nomValid ? (
+            <p className="mt-2 text-xs font-medium text-pr-rust">⚠️ {nomCheck.reason}</p>
+          ) : !nomValid ? (
+            <p className="mt-2 text-xs text-amber-700">Indiquez votre nom (pas le code d'accès) pour activer l'enregistrement automatique (RG-001).</p>
+          ) : null}
         </div>
 
         {ready === false && (

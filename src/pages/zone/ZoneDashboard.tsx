@@ -40,6 +40,7 @@ import {
   type ZoneStaffMember,
   type ZoneState,
 } from '@/lib/zoneApi';
+import { validateStaffName } from '@/lib/staffName';
 
 interface InitialForm {
   qty: string;
@@ -936,6 +937,11 @@ function ScheduleSection({ token, name, state, onDone, showToast }: ScheduleSect
   }, [state.arrival, state.departure]);
 
   async function save() {
+    const check = validateStaffName(staffName, token);
+    if (!check.ok) {
+      showToast(check.reason ?? 'Nom invalide.', 'warning');
+      return;
+    }
     setSaving(true);
     try {
       await submitSchedule(token, name, arrival || null, departure || null, staffName);
@@ -958,9 +964,15 @@ function ScheduleSection({ token, name, state, onDone, showToast }: ScheduleSect
           placeholder="NOM PRÉNOM"
           className="min-h-[44px] uppercase tracking-wide"
         />
-        <p className="mt-1 text-xs text-stone-400">
-          Ce nom apparaîtra dans les rapports horaires mensuels.
-        </p>
+        {staffName.trim().length > 0 && !validateStaffName(staffName, token).ok ? (
+          <p className="mt-1 text-xs font-medium text-pr-rust">
+            ⚠️ {validateStaffName(staffName, token).reason}
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-stone-400">
+            Ce nom apparaît dans les rapports horaires mensuels — saisissez votre nom, pas le code d’accès.
+          </p>
+        )}
       </div>
       <p className="text-sm text-pr-black-soft">
         Arrivée prévue : {state.planned_start ? state.planned_start.slice(0, 5) : '—'}
@@ -992,7 +1004,7 @@ function ScheduleSection({ token, name, state, onDone, showToast }: ScheduleSect
         variant="primary"
         fullWidth
         loading={saving}
-        disabled={!confirmed || staffName.trim().length < 2}
+        disabled={!confirmed || !validateStaffName(staffName, token).ok}
         onClick={save}
         className="min-h-[44px]"
       >
