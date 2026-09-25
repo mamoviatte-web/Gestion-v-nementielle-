@@ -153,12 +153,12 @@ export default function RhAnalytiquePage() {
       setSavingCircuit(null);
     }
   }
-  /** Supprimer les heures d'une personne sur le mois de paie affiché (saisie erronée, doublon, ligne sans nom). */
-  async function deleteStaff(name: string) {
-    if (!window.confirm(`Supprimer toutes les heures de « ${name} » sur ${payMonth} ?\n\nAction irréversible.`)) return;
+  /** Supprimer les heures d'une personne sur un mois (saisie erronée, doublon, ligne sans nom). */
+  async function deleteStaff(name: string, mois: string = payMonth) {
+    if (!window.confirm(`Supprimer toutes les heures de « ${name} » sur ${mois} ?\n\nAction irréversible.`)) return;
     setSavingCircuit(name);
     try {
-      const { data, error } = await supabase.rpc('rh_delete_staff', { p_name: name, p_mois: payMonth });
+      const { data, error } = await supabase.rpc('rh_delete_staff', { p_name: name, p_mois: mois });
       const r = data as { success?: boolean; error?: string; lignes?: number } | null;
       if (error || !r?.success) throw new Error(r?.error ?? error?.message ?? 'Échec');
       await loadPay();
@@ -551,6 +551,7 @@ export default function RhAnalytiquePage() {
                   <th className="px-3 py-2 text-right">Heures</th>
                   <th className="px-3 py-2 text-right">Coût HT</th>
                   <th className="px-3 py-2 text-right">Événements</th>
+                  <th className="px-3 py-2 text-right">Corriger</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-pr-stone/50">
@@ -562,6 +563,28 @@ export default function RhAnalytiquePage() {
                     <td className="px-3 py-2 text-right tabular-nums">{hrs(r.heures)}</td>
                     <td className="px-3 py-2 text-right font-semibold tabular-nums text-pr-black">{eur(r.cout_ht)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-pr-black-soft/50">{r.nb_evenements}</td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={savingCircuit === r.staff_name}
+                          onClick={() => void renameStaff(r.staff_name)}
+                          title="Renommer / attribuer un nom (ex. code ou « Nom non renseigné » → vrai nom)"
+                          className="rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700 disabled:opacity-40"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingCircuit === r.staff_name}
+                          onClick={() => void deleteStaff(r.staff_name, r.mois)}
+                          title={`Supprimer les heures de « ${r.staff_name} » sur ${moisLabel(r.mois)}`}
+                          className="rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
