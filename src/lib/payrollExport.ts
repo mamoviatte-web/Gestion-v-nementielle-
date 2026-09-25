@@ -9,6 +9,10 @@
  * Formules VIVANTES (jamais de valeurs figées) : « À verser » = Coût HT ; totaux
  * SUM ; sous-totaux SUMIF par type_paiement → recalcul automatique dans Excel.
  * Construit avec exceljs (styles + formules), là où un simple AOA ne suffit pas.
+ *
+ * 3 feuilles : « Paie » (synthèse/personne) · « Détail » (1 ligne/créneau =
+ * personne × jour × mission) · « Par événement » (mêmes créneaux groupés par
+ * événement). Règles de conception & habillage : voir docs/excel-rapport-rh.md.
  */
 
 import type * as ExcelJS from 'exceljs';
@@ -256,6 +260,7 @@ export async function downloadPayrollWorkbook(
   // ═══════════════════════════════════════════════════════════════════════
   if (detail.length > 0) {
     buildDetailSheet(wb, mois, rows, detail, arial, origin);
+    buildEventSheet(wb, mois, rows, detail, arial, origin);
   }
 
   download(await wb.xlsx.writeBuffer(), `Recap_paie_${mois}.xlsx`);
@@ -359,7 +364,8 @@ function buildDetailSheet(
     const nameCell = ws.getCell(`A${shRow}`);
     const pa5 = typeByName.get(name) ?? 'non défini';
     const nbEvts = new Set(lines.map((l) => l.event_id || l.event_name)).size;
-    nameCell.value = `▸ ${name}  —  ${pa5}  ·  ${nbEvts} événement${nbEvts > 1 ? 's' : ''} · ${lines.length} créneau${lines.length > 1 ? 'x' : ''}`;
+    const nbJours = new Set(lines.map((l) => l.jour || l.event_date)).size;
+    nameCell.value = `▸ ${name}  —  ${pa5}  ·  ${nbEvts} événement${nbEvts > 1 ? 's' : ''} · ${nbJours} jour${nbJours > 1 ? 's' : ''} travaillé${nbJours > 1 ? 's' : ''} · ${lines.length} créneau${lines.length > 1 ? 'x' : ''}`;
     nameCell.font = arial({ bold: true, size: 11, color: { argb: nameColor(pa5) } });
     nameCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT } };
     nameCell.alignment = { vertical: 'middle' };
@@ -462,4 +468,170 @@ function buildDetailSheet(
   // Impression : paysage, 1 page de large, en-tête répété (feuille détail = 8 col.)
   const lastRow = totalRow + 1 + present.length;
   applyPrintLayout(ws, 'H', lastRow);
+}
+
+/** Plage de jours d'un événement : « mer. 24/09 » ou « mar. 23/09 → mer. 24/09 ». */
+function frDayRange(lines: PayrollDetailRow[]): string {
+  const days = Array.from(new Set(lines.map((l) => l.jour || l.event_date))).filter(Boolean).sort();
+  if (days.length === 0) return '';
+  if (days.length === 1) return frJour(days[0]);
+  return `${frJour(days[0])} → ${frJour(days[days.length - 1])}`;
+}
+
+/**
+ * FEUILLE 3 — PAR ÉVÉNEMENT. Même donnée que le détail, regroupée par ÉVÉNEMENT :
+ * un bloc par événement (en-tête coloré par type + jour/plage + sous-total vivant),
+ * puis une ligne par créneau (jour, personne, poste, espace, horaire, heures, coût),
+ * triée par jour puis personne. Objectif : voir, événement par événement, les
+ * lignes précises des heures effectuées dans le mois. Colonnes homogènes avec le
+ * détail par personne (mêmes styles, mêmes formats).
+ */
+function buildEventSheet(
+  wb: ExcelJS.Workbook,
+  mois: string,
+  rows: PayrollRow[],
+  detail: PayrollDetailRow[],
+  arial: (extra?: Partial<ExcelJS.Font>) => Partial<ExcelJS.Font>,
+  origin: string,
+): void {
+  const ws = wb.addWorksheet(`Par événement ${mois}`, { views: [{ state: 'frozen', ySplit: 5 }] });
+
+  // Colonnes A..G : Jour · Personne · Poste/tâche · Espace · Horaire · Heures · Coût HT
+  [14, 26, 20, 20, 16, 9, 13].forEach((w, i) => (ws.getColumn(i + 1).width = w));
+  const typeByName = new Map(rows.map((r) => [r.staff_name, r.type_paiement]));
+  const base = origin.replace(/\/+$/, '');
+
+  // ── Bandeaux
+  ws.mergeCells('A1:G1');
+  const t = ws.getCell('A1');
+  t.value = 'PROVENCE RUGBY — Heures RH par événement';
+  t.font = arial({ size: 14, bold: true, color: { argb: 'FFFFFFFF' } });
+  t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+  t.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws.getRow(1).height = 26;
+
+  ws.mergeCells('A2:G2');
+  const st = ws.getCell('A2');
+  st.value = `Un bloc par événement · chaque ligne = un créneau (jour + horaires) · Mois : ${mois}`;
+  st.font = arial({ italic: true, color: { argb: 'FF334155' } });
+  st.alignment = { horizontal: 'center' };
+
+  ws.mergeCells('A3:G3');
+  const lg = ws.getCell('A3');
+  lg.value = 'Type : BLEU = Match · VIOLET = Séminaire · AMBRE = Opérationnel. '
+    + 'Nom coloré par circuit (ROUGE = franchise · VERT = contrat). Événement cliquable.';
+  lg.font = arial({ bold: true });
+  lg.alignment = { horizontal: 'center' };
+  ws.getRow(4).height = 4;
+
+  // ── En-tête colonnes (ligne 5)
+  const headers = ['Jour', 'Personne', 'Poste / tâche', 'Espace', 'Horaire', 'Heures', 'Coût HT (€)'];
+  const head = ws.getRow(5);
+  headers.forEach((h, i) => {
+    const c = head.getCell(i + 1);
+    c.value = h;
+    c.font = arial({ bold: true, color: { argb: 'FFFFFFFF' } });
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
+    c.alignment = { horizontal: i >= 5 ? 'right' : 'left', vertical: 'middle' };
+  });
+  head.height = 20;
+
+  // ── Groupement par événement, trié par 1er jour presté puis nom.
+  const byEvent = new Map<string, PayrollDetailRow[]>();
+  for (const d of detail) {
+    const key = d.event_id || d.event_name;
+    (byEvent.get(key) ?? byEvent.set(key, []).get(key)!).push(d);
+  }
+  const minDay = (ls: PayrollDetailRow[]) => ls.reduce((m, l) => {
+    const j = l.jour || l.event_date; return !m || j < m ? j : m;
+  }, '');
+  const events = [...byEvent.entries()].sort((a, b) => {
+    const da = minDay(a[1]); const db = minDay(b[1]);
+    if (da !== db) return da < db ? -1 : 1;
+    return (a[1][0].event_name || '').localeCompare(b[1][0].event_name || '');
+  });
+
+  const eventHeaderRows: number[] = [];
+  let r = 6;
+
+  for (const [, lines] of events) {
+    lines.sort((a, b) => {
+      const ja = a.jour || a.event_date; const jb = b.jour || b.event_date;
+      if (ja !== jb) return ja < jb ? -1 : 1;
+      return a.staff_name.localeCompare(b.staff_name);
+    });
+    const ev = lines[0];
+    const cat = ev.categorie;
+    const col = catColor(cat);
+
+    // ── En-tête d'événement (bloc coloré, fusion A:E) + sous-total vivant F/G
+    const hr = r;
+    eventHeaderRows.push(hr);
+    ws.mergeCells(`A${hr}:E${hr}`);
+    const hCell = ws.getCell(`A${hr}`);
+    const nbPers = new Set(lines.map((l) => l.staff_name)).size;
+    if (base && ev.event_id) {
+      hCell.value = { text: `▪ ${ev.event_name}  —  ${cat} · ${frDayRange(lines)} · ${nbPers} pers.`, hyperlink: `${base}/admin/events/${ev.event_id}` };
+    } else {
+      hCell.value = `▪ ${ev.event_name}  —  ${cat} · ${frDayRange(lines)} · ${nbPers} pers.`;
+    }
+    hCell.font = arial({ bold: true, size: 11, color: { argb: col } });
+    hCell.alignment = { vertical: 'middle' };
+    for (let c = 1; c <= 7; c++) {
+      ws.getCell(hr, c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT } };
+      ws.getCell(hr, c).border = { top: { style: 'thin', color: { argb: col } } };
+    }
+    const firstLine = hr + 1;
+    const lastLine = hr + lines.length;
+    const eH = ws.getCell(`F${hr}`);
+    eH.value = { formula: `SUM(F${firstLine}:F${lastLine})` };
+    eH.numFmt = H_FMT; eH.font = arial({ bold: true }); eH.alignment = { horizontal: 'right' };
+    const eC = ws.getCell(`G${hr}`);
+    eC.value = { formula: `SUM(G${firstLine}:G${lastLine})` };
+    eC.numFmt = EUR_FMT; eC.font = arial({ bold: true }); eC.alignment = { horizontal: 'right' };
+    r++;
+
+    // ── Lignes (un créneau chacune)
+    for (const l of lines) {
+      const pa = typeByName.get(l.staff_name) ?? 'non défini';
+      const row = ws.getRow(r);
+      row.getCell(1).value = frJour(l.jour || l.event_date);
+      row.getCell(1).font = arial({ color: { argb: GREY } });
+      row.getCell(2).value = l.staff_name;
+      row.getCell(2).font = arial({ bold: true, color: { argb: nameColor(pa) } });
+      row.getCell(3).value = l.nature;
+      row.getCell(3).font = arial({ color: { argb: GREY } });
+      row.getCell(4).value = l.espace;
+      row.getCell(4).font = arial({ color: { argb: GREY } });
+      row.getCell(5).value = frCreneau(l.arrivee, l.depart);
+      row.getCell(5).font = arial({ color: { argb: GREY } });
+      row.getCell(5).alignment = { horizontal: 'right' };
+      row.getCell(6).value = l.heures;
+      row.getCell(6).numFmt = H_FMT;
+      row.getCell(7).value = l.cout_ht;
+      row.getCell(7).numFmt = EUR_FMT;
+      for (let c = 1; c <= 7; c++) {
+        row.getCell(c).border = { bottom: { style: 'hair', color: { argb: 'FFE5E7EB' } } };
+        if (!row.getCell(c).font) row.getCell(c).font = arial();
+      }
+      r++;
+    }
+  }
+
+  // ── TOTAL GÉNÉRAL (somme des sous-totaux d'événement → pas de double compte)
+  const totalRow = r + 1;
+  const tg = ws.getRow(totalRow);
+  tg.getCell(1).value = 'TOTAL GÉNÉRAL';
+  const sumHdr = (col: string) => eventHeaderRows.map((n) => `${col}${n}`).join(',') || '0';
+  tg.getCell(6).value = { formula: eventHeaderRows.length ? `SUM(${sumHdr('F')})` : '0' };
+  tg.getCell(6).numFmt = H_FMT;
+  tg.getCell(7).value = { formula: eventHeaderRows.length ? `SUM(${sumHdr('G')})` : '0' };
+  tg.getCell(7).numFmt = EUR_FMT;
+  for (let c = 1; c <= 7; c++) {
+    tg.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT } };
+    tg.getCell(c).font = arial({ bold: true, size: 11 });
+    tg.getCell(c).alignment = { horizontal: c >= 6 ? 'right' : 'left' };
+  }
+
+  applyPrintLayout(ws, 'G', totalRow);
 }
