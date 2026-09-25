@@ -7,4 +7,4 @@
  * est `false`, aucun onglet, tuile ou section n'apparaît et rien n'est modifié
  * dans les parcours existants. Passer à `true` pour activer (puis redéployer).
  */
-export const PETIT_MATERIEL_ENABLED = false;
+export const PETIT_MATERIEL_ENABLED = true;

@@ -17,6 +17,9 @@ import { Button, Spinner, Select } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import { loadModule } from '@/lib/lazyModule';
 import { downloadRunnerWorkbook } from '@/lib/runnerExcel';
+import { PETIT_MATERIEL_ENABLED } from '@/lib/featureFlags';
+
+interface PmLine { code: string; label: string; qty: number }
 
 interface Card {
   space_id: string; space_name: string; family: string; service_type: string | null;
@@ -59,6 +62,21 @@ function buildLogeDetailHtml(blocks: LogeBlock[]): string {
   </div>`;
 }
 
+/** Bloc « Petit matériel » (lignes supplémentaires) pour le PDF de la fiche runner. */
+function buildPmHtml(lines: PmLine[]): string {
+  if (!lines.length) return '';
+  const tot = lines.reduce((a, x) => a + x.qty, 0);
+  const rows = lines.map((x) =>
+    `<tr><td style="padding:3px 6px;border:1px solid #ddd">${x.label}</td><td style="padding:3px 6px;border:1px solid #ddd;text-align:right;font-weight:700">${x.qty}</td></tr>`).join('');
+  return `<div style="margin-top:12px">
+    <p style="margin:0 0 5px;font-size:11px;font-weight:700;color:#0B1F3A">Petit matériel — besoins de l'espace (${lines.length} article(s) · ${tot} pièce(s))</p>
+    <table style="width:60%;border-collapse:collapse;font-size:11px">
+      <thead><tr style="background:#0B1F3A;color:#fff"><th style="padding:4px 6px;text-align:left">Article</th><th style="padding:4px 6px;text-align:right">Quantité</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
 // Ordre d'affichage des catégories sur la fiche runner (le vin en premier, bien visible).
 const CATEGORY_ORDER = ['Vins', 'Champagne', 'Bières', 'Soft', 'Softs', 'Spiritueux', 'Sirops', 'Gaz', 'Matériel'];
 const catRank = (c: string): number => {
@@ -87,6 +105,8 @@ export function UnifiedRunnerPanel({
   const [pdfBusy, setPdfBusy] = useState(false);
   const [xlsBusy, setXlsBusy] = useState(false);
   const [logeSheets, setLogeSheets] = useState<Record<string, LogeBlock[]>>({});
+  // Petit matériel déclaré par espace (lignes supplémentaires runner) — drapeau.
+  const [pmBySpace, setPmBySpace] = useState<Record<string, PmLine[]>>({});
   // Activation d'une zone de dernière minute (ex. Club 70 Sud/Nord).
   const [allSpaces, setAllSpaces] = useState<{ space_id: string; space_name: string; service_type: string | null }[]>([]);
   const [zoneToActivate, setZoneToActivate] = useState('');
@@ -120,6 +140,24 @@ export function UnifiedRunnerPanel({
       }));
     }));
     setLogeSheets(sheets);
+
+    // Petit matériel : besoins déclarés par espace (lignes supplémentaires runner).
+    if (PETIT_MATERIEL_ENABLED) {
+      const { data: pm } = await supabase
+        .from('petit_materiel_requests')
+        .select('space_id, qty, petit_materiel_items(code, label, sort_order)')
+        .eq('event_id', eventId)
+        .gt('qty', 0);
+      const rows = (pm as { space_id: string; qty: number; petit_materiel_items: { code: string; label: string; sort_order: number } | null }[] | null) ?? [];
+      const byS: Record<string, PmLine[]> = {};
+      for (const r of rows) {
+        if (!r.petit_materiel_items) continue;
+        (byS[r.space_id] ??= []).push({ code: r.petit_materiel_items.code, label: r.petit_materiel_items.label, qty: num(r.qty) });
+      }
+      for (const k in byS) byS[k].sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+      setPmBySpace(byS);
+    }
+
     setLoading(false);
   }, [eventId]);
 
@@ -215,6 +253,7 @@ export function UnifiedRunnerPanel({
       }).join('');
       const totMove = lines.reduce((s, l) => s + num(l.qty_to_move), 0);
       const logeDetail = LOGE_IDS.has(sid) ? buildLogeDetailHtml(logeSheets[sid] ?? []) : '';
+      const pmDetail = PETIT_MATERIEL_ENABLED ? buildPmHtml(pmBySpace[sid] ?? []) : '';
       return `<div style="${idx > 0 ? 'page-break-before:always;' : ''}font-family:Arial,sans-serif;padding:4px">
         <h2 style="margin:0 0 2px;color:#0B1F3A">${card?.space_name ?? ''} <span style="font-size:12px;color:#8A94A2">· ${card?.family ?? ''}</span></h2>
         <p style="margin:0 0 8px;font-size:11px;color:#8A94A2">${matchNom} · ${matchDate} · ${lines.length} produit(s) · ${totMove} à acheminer</p>
@@ -230,6 +269,7 @@ export function UnifiedRunnerPanel({
             <td style="padding:5px 6px;border:1px solid #ddd;text-align:right">${totMove}</td><td colspan="3" style="border:1px solid #ddd"></td></tr></tfoot>
         </table>
         ${logeDetail}
+        ${pmDetail}
       </div>`;
     }).join('');
     return `<div>${pages}</div>`;
@@ -408,6 +448,9 @@ export function UnifiedRunnerPanel({
                           onShortageClick={() => navigate('/admin/stock')}
                           onEditQty={(line, v) => void saveQty(line.space_id, line.product_id, num(line.qty_to_move), v)}
                         />
+                        {PETIT_MATERIEL_ENABLED && (pmBySpace[c.space_id]?.length ?? 0) > 0 && (
+                          <PetitMaterielRunnerBlock lines={pmBySpace[c.space_id]} />
+                        )}
                         <div className="mt-2 flex justify-end">
                           <Button size="sm" variant="secondary" loading={pdfBusy} onClick={() => void toPdf(buildHtml([c.space_id]), `Fiche_${c.space_name.replace(/\s+/g, '_')}_${slug}.pdf`)}>
                             <Download size={13} /> Télécharger cette fiche
@@ -422,6 +465,26 @@ export function UnifiedRunnerPanel({
           </section>
         );
       })}
+    </div>
+  );
+}
+
+/** Bloc « Petit matériel » (lignes supplémentaires) affiché sous les lignes F&B. */
+function PetitMaterielRunnerBlock({ lines }: { lines: PmLine[] }) {
+  const tot = lines.reduce((s, l) => s + l.qty, 0);
+  return (
+    <div className="mt-3 rounded-lg border border-pr-stone bg-pr-cream/40 p-2.5">
+      <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-pr-black-soft/55">
+        🧰 Petit matériel <span className="font-normal text-pr-black-soft/40">· {lines.length} article(s) · {tot} pièce(s)</span>
+      </p>
+      <div className="grid grid-cols-1 gap-x-6 gap-y-0.5 sm:grid-cols-2">
+        {lines.map((l) => (
+          <div key={l.code} className="flex items-center justify-between border-b border-pr-stone/50 py-1 text-sm">
+            <span className="min-w-0 truncate text-pr-black-soft/75">{l.label}</span>
+            <span className="shrink-0 font-semibold tabular-nums text-pr-black">{l.qty}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
