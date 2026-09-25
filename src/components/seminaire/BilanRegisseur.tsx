@@ -223,7 +223,7 @@ export function BilanRegisseur({ event, variant = 'full' }: { event: Event; vari
             </div>
             <div className="flex justify-between border-t border-pr-stone pt-2">
               <span className="font-medium text-pr-black">Coût total événement</span>
-              <span className="font-display text-lg font-black text-pr-black">{formatEuro(totalFB + totalRH)} HT</span>
+              <span className="font-display text-lg font-black text-pr-black">{formatEuro(totalFB + totalRH)}</span>
             </div>
             {pax > 0 && (
               <div className="flex justify-between text-xs text-pr-black-soft/50">
