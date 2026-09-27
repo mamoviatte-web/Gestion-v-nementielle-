@@ -11,8 +11,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Database, Sigma, ExternalLink, Search } from 'lucide-react';
+import { Database, Sigma, ExternalLink, Search, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { FactorsVizPanel } from '@/components/analytics/FactorsVizPanel';
+import { downloadFactorsWorkbook } from '@/lib/factorsExcel';
 
 interface FactorRow {
   space_name: string;
@@ -42,6 +44,7 @@ export default function DataPilotFacteursPage() {
   const [rows, setRows] = useState<FactorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  const [xls, setXls] = useState(false);
 
   useEffect(() => {
     void supabase.from('v_space_dotation_recommendations')
@@ -73,10 +76,19 @@ export default function DataPilotFacteursPage() {
             <p className="text-sm text-stone-400">Moyenne, écart-type, confiance, /100 pax — dérivés de l'historique, non éditables.</p>
           </div>
         </div>
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrer espace / produit…"
-            className="rounded-xl border border-stone-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-300" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrer espace / produit…"
+              className="rounded-xl border border-stone-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+          </div>
+          <button
+            onClick={() => { setXls(true); void downloadFactorsWorkbook(filtered, lastComputed).finally(() => setXls(false)); }}
+            disabled={xls || filtered.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-pr-black px-3 py-2 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            <FileSpreadsheet size={15} /> {xls ? 'Export…' : 'Export Excel'}
+          </button>
         </div>
       </div>
 
@@ -85,6 +97,8 @@ export default function DataPilotFacteursPage() {
         <p><b>D'où ça vient :</b> conso réelle des matchs clôturés → agrégée dans <code>space_product_coefficients</code>. <b>Ce que ça pilote :</b> quantités recommandées des dotations runner et analyse conso. <b>Non éditable</b> — le recalcul se déclenche dans <Link to="/admin/datapilot/coefficients" className="font-semibold underline">Coefficients</Link>.
         {lastComputed && <> Dernier calcul : {new Date(lastComputed).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}.</>}</p>
       </div>
+
+      {!loading && filtered.length > 0 && <FactorsVizPanel rows={filtered} />}
 
       <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white">
         <div className="flex items-center gap-2 border-b border-stone-100 bg-stone-50 px-4 py-2 text-sm font-bold text-stone-700">
