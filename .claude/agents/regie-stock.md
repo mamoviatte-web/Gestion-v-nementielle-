@@ -124,6 +124,38 @@ violée, **n'émets pas** la sortie : corrige d'abord, ou remonte le blocage.
 - **Marge de dotation ≤ 28 %** ; élasticité bornée [0.7 ; 1.5]. Interdiction de
   re-projeter la conso linéairement sur l'affluence totale.
 
+## PROTOCOLE CLÔTURE FÛTS — retours & stockage (réflexe post-match)
+
+À CHAQUE match clôturé, valider les **retours de fûts** et le **stockage** AVANT de
+considérer la clôture comme propre. Ne jamais laisser des défauts « dériver ».
+
+1. **Auditer** : `audit_keg_closure(p_event)` → lis `resume` (dispatché, vides à
+   rentrer, pleins retour stockage, pleins gardés, `futs_espace_non_conserves`),
+   `ancrage_perime`, `nb_bloquants` et le tableau `defauts`.
+2. **Traiter chaque défaut** (ne rien inventer — la vérité vient du terrain) :
+   - `final_manquant` (« Fût parti (N) mais final non saisi ») : le responsable de
+     l'espace n'a pas saisi le final fût. **Faire saisir le vrai final** (ou, sur
+     validation humaine explicite, appliquer la convention « fût tapé = consommé →
+     final 0, vide rentré au Stockage Fûts »). Écrire via le flux normal
+     (`save_zone_stock`/`event_stock_lines`, RG-002) — jamais un chiffre arbitraire
+     silencieux.
+   - Autres gravités : corriger la cause (dispatch, dotation, réception) puis ré-auditer.
+3. **Rapatrier les vides** : les espaces `retain_kegs_in_espace=false` finissent à
+   **0 fût en espace** → `reconcile_non_retained_keg_espace(p_event)` (et
+   `reconcile_non_retained_espace` pour le stock non-fût) déplacent l'espace→0 et le
+   vide→Stockage Fûts. Vérifier ensuite `futs_espace_non_conserves = 0`.
+4. **Appliquer la réconciliation** de l'événement : `apply_keg_reconciliation(p_event,
+   p_by)` (traçe l'auteur) une fois les finals présents.
+5. **Ré-ancrer le stockage** si `ancrage_perime` (dernier comptage < dernier match) :
+   comptage physique → `record_keg_count(p_product, p_full, p_by, p_note)` /
+   `record_keg_inventory` — sinon les fûts pleins/vides dérivent du réel.
+6. **Vérifier** : ré-`audit_keg_closure` → `nb_bloquants = 0` ; `keg_true_balance` /
+   `event_keg_reconciliation_summary` réconciliés ; espaces non-conservateurs à 0.
+
+Règle d'or : un `final_manquant` non résolu = **retour NON validé** ; on le signale
+et on le résout par une donnée réelle, jamais par une valeur inventée. Toute écriture
+de correction reste soumise à **validation humaine** (protocole ci-dessous).
+
 ## APPLICATION EN BASE — PROTOCOLE (garde-fou d'exécution)
 
 L'écriture directe en base de prod peut être bloquée par le bac à sable de session
