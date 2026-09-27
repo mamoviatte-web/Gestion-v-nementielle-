@@ -428,7 +428,12 @@ export function UnifiedRunnerPanel({
                         <p className="font-bold text-stone-800">{c.space_name}</p>
                         {open ? <ChevronDown size={16} className="text-stone-400" /> : <ChevronRight size={16} className="text-stone-400" />}
                       </div>
-                      <p className="mt-1 text-xs text-stone-500">{num(c.nb_lignes)} produits · {num(c.total_to_move)} à acheminer · {formatEuro(num(c.cost_ht))}</p>
+                      <p className="mt-1 text-xs text-stone-500">
+                        {num(c.nb_lignes)} produits · {num(c.total_to_move)} à acheminer · {formatEuro(num(c.cost_ht))}
+                        {PETIT_MATERIEL_ENABLED && (pmBySpace[c.space_id]?.length ?? 0) > 0 && (
+                          <span className="ml-1 font-medium text-pr-black-soft/60">· 🧰 {pmBySpace[c.space_id].length} art. matériel</span>
+                        )}
+                      </p>
                       <div className="mt-2">
                         {c.has_stock_alert ? (
                           <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700">
@@ -445,12 +450,10 @@ export function UnifiedRunnerPanel({
                       <div className="bg-white p-3">
                         <SpaceLines
                           lines={linesBySpace.get(c.space_id) ?? []}
+                          pmLines={PETIT_MATERIEL_ENABLED ? (pmBySpace[c.space_id] ?? []) : []}
                           onShortageClick={() => navigate('/admin/stock')}
                           onEditQty={(line, v) => void saveQty(line.space_id, line.product_id, num(line.qty_to_move), v)}
                         />
-                        {PETIT_MATERIEL_ENABLED && (pmBySpace[c.space_id]?.length ?? 0) > 0 && (
-                          <PetitMaterielRunnerBlock lines={pmBySpace[c.space_id]} />
-                        )}
                         <div className="mt-2 flex justify-end">
                           <Button size="sm" variant="secondary" loading={pdfBusy} onClick={() => void toPdf(buildHtml([c.space_id]), `Fiche_${c.space_name.replace(/\s+/g, '_')}_${slug}.pdf`)}>
                             <Download size={13} /> Télécharger cette fiche
@@ -465,26 +468,6 @@ export function UnifiedRunnerPanel({
           </section>
         );
       })}
-    </div>
-  );
-}
-
-/** Bloc « Petit matériel » (lignes supplémentaires) affiché sous les lignes F&B. */
-function PetitMaterielRunnerBlock({ lines }: { lines: PmLine[] }) {
-  const tot = lines.reduce((s, l) => s + l.qty, 0);
-  return (
-    <div className="mt-3 rounded-lg border border-pr-stone bg-pr-cream/40 p-2.5">
-      <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-pr-black-soft/55">
-        🧰 Petit matériel <span className="font-normal text-pr-black-soft/40">· {lines.length} article(s) · {tot} pièce(s)</span>
-      </p>
-      <div className="grid grid-cols-1 gap-x-6 gap-y-0.5 sm:grid-cols-2">
-        {lines.map((l) => (
-          <div key={l.code} className="flex items-center justify-between border-b border-pr-stone/50 py-1 text-sm">
-            <span className="min-w-0 truncate text-pr-black-soft/75">{l.label}</span>
-            <span className="shrink-0 font-semibold tabular-nums text-pr-black">{l.qty}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -517,15 +500,18 @@ function EditableQty({ value, onSave }: { value: number; onSave: (v: number) => 
 
 function SpaceLines({
   lines,
+  pmLines = [],
   onShortageClick,
   onEditQty,
 }: {
   lines: Line[];
+  pmLines?: PmLine[];
   onShortageClick: () => void;
   onEditQty: (line: Line, value: number) => void;
 }) {
   const totMove = lines.reduce((s, l) => s + num(l.qty_to_move), 0);
   const totCost = lines.reduce((s, l) => s + num(l.cost_ht), 0);
+  const pmTot = pmLines.reduce((s, l) => s + l.qty, 0);
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -577,15 +563,41 @@ function SpaceLines({
               </Fragment>
             );
           })}
+          {/* Petit matériel — intégré à la dotation runner (lignes supplémentaires). */}
+          {pmLines.length > 0 && (
+            <>
+              <tr className="bg-pr-cream/70">
+                <td colSpan={6} className="px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-pr-black-soft/60">
+                  🧰 Petit matériel
+                </td>
+              </tr>
+              {pmLines.map((pm) => (
+                <tr key={`pm-${pm.code}`}>
+                  <td className="px-2 py-1.5 font-medium text-pr-black-soft/80">{pm.label}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums text-stone-300">—</td>
+                  <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-pr-black">{pm.qty}</td>
+                  <td colSpan={3} />
+                </tr>
+              ))}
+            </>
+          )}
         </tbody>
         <tfoot>
           <tr className="border-t border-stone-200 font-bold text-stone-800">
-            <td className="px-2 py-1.5">TOTAL</td>
+            <td className="px-2 py-1.5">TOTAL {pmLines.length > 0 && <span className="font-normal text-pr-black-soft/45">F&amp;B</span>}</td>
             <td />
             <td className="px-2 py-1.5 text-right tabular-nums">{totMove}</td>
             <td colSpan={2} />
             <td className="px-2 py-1.5 text-right tabular-nums">{formatEuro(totCost)}</td>
           </tr>
+          {pmLines.length > 0 && (
+            <tr className="text-pr-black-soft/70">
+              <td className="px-2 py-1.5">🧰 Petit matériel</td>
+              <td />
+              <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{pmTot}</td>
+              <td colSpan={3} className="px-2 py-1.5 text-xs text-pr-black-soft/45">{pmLines.length} article(s)</td>
+            </tr>
+          )}
         </tfoot>
       </table>
     </div>
