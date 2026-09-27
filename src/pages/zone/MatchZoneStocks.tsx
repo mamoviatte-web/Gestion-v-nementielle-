@@ -54,10 +54,13 @@ export default function MatchZoneStocks() {
   const tokenRef = useRef(token); tokenRef.current = token;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Nom mémorisé sur l'appareil (moins de friction)
+  // Nom saisi UNE SEULE FOIS à la connexion (page principale) → hérité de la
+  // session : plus besoin de le re-saisir sur chaque onglet. Repli sur le nom
+  // mémorisé sur l'appareil si la session ne le porte pas encore.
   useEffect(() => {
+    if (session?.staff_name) { setNom(session.staff_name); return; }
     try { const saved = localStorage.getItem(NOM_KEY); if (saved) setNom(saved); } catch { /* stockage indispo */ }
-  }, []);
+  }, [session?.staff_name]);
 
   useEffect(() => {
     if (!token || !session?.success) return;
@@ -174,19 +177,11 @@ export default function MatchZoneStocks() {
           ))}
         </div>
 
-        <div className="rounded-xl border border-pr-stone bg-white p-4">
-          <label className="mb-2 block text-sm font-medium text-pr-black-soft/80">Votre nom *</label>
-          <input
-            value={nom}
-            onChange={(e) => setNom(e.target.value.toUpperCase())}
-            placeholder="NOM Prénom"
-            className="min-h-[48px] w-full rounded-lg border border-pr-stone px-3 py-3 text-base focus:ring-2 focus:ring-amber-400"
-          />
-          {nom.trim().length > 0 && !nomValid ? (
-            <p className="mt-2 text-xs font-medium text-pr-rust">⚠️ {nomCheck.reason}</p>
-          ) : !nomValid ? (
-            <p className="mt-2 text-xs text-amber-700">Indiquez votre nom (pas le code d'accès) pour activer l'enregistrement automatique (RG-001).</p>
-          ) : null}
+        {/* Nom hérité de la connexion (page principale) — plus de re-saisie ici. */}
+        <div className="flex items-center gap-2 rounded-xl border border-pr-stone bg-white px-4 py-3 text-sm">
+          <span className="text-pr-black-soft/50">Responsable</span>
+          <span className="font-semibold text-pr-black">{nom || '—'}</span>
+          <span className="ml-auto text-xs text-pr-black-soft/40">saisi à la connexion</span>
         </div>
 
         {ready === false && (

@@ -116,9 +116,10 @@ export default function MatchZoneDebrief() {
   const [draft, setDraft, clearDraft] = usePersistentDraft<{ nom: string; form: typeof EMPTY }>(
     `zonedebrief:${token}`, { nom: '', form: EMPTY },
   );
-  const nom = draft.nom;
+  // Nom hérité de la connexion (page principale) ; le brouillon prime s'il a déjà
+  // été saisi. Plus de champ nom à re-remplir sur cet onglet.
+  const nom = draft.nom || session?.staff_name || '';
   const form = draft.form;
-  const setNom = (v: string) => setDraft((d) => ({ ...d, nom: v }));
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -165,14 +166,11 @@ export default function MatchZoneDebrief() {
     <div className="min-h-screen bg-pr-cream pb-12">
       <MatchZoneHeader session={session} back />
       <div className="mx-auto max-w-lg space-y-3 p-4">
-        <div className="rounded-xl border border-pr-stone bg-white p-4">
-          <label className="mb-2 block text-sm font-medium text-pr-black-soft/80">Votre nom *</label>
-          <input
-            value={nom}
-            onChange={(e) => setNom(e.target.value.toUpperCase())}
-            placeholder="NOM Prénom"
-            className="min-h-[48px] w-full rounded-lg border border-pr-stone px-3 py-3 text-base focus:ring-2 focus:ring-amber-400"
-          />
+        {/* Nom hérité de la connexion (page principale) — plus de re-saisie ici. */}
+        <div className="flex items-center gap-2 rounded-xl border border-pr-stone bg-white px-4 py-3 text-sm">
+          <span className="text-pr-black-soft/50">Responsable</span>
+          <span className="font-semibold text-pr-black">{nom || '—'}</span>
+          <span className="ml-auto text-xs text-pr-black-soft/40">saisi à la connexion</span>
         </div>
 
         <Section icon="👥" title="Effectif & Organisation" open>

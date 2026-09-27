@@ -27,9 +27,11 @@ export default function MatchZonePetitMateriel() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState('');
 
+  // Nom hérité de la connexion (page principale) : aucune re-saisie sur cet onglet.
   useEffect(() => {
+    if (session?.staff_name) { setNom(session.staff_name); return; }
     try { const s = localStorage.getItem(NOM_KEY); if (s) setNom(s); } catch { /* stockage indispo */ }
-  }, []);
+  }, [session?.staff_name]);
 
   useEffect(() => {
     if (!token || !session?.success || !PETIT_MATERIEL_ENABLED) return;
@@ -77,15 +79,11 @@ export default function MatchZonePetitMateriel() {
           <p className="mt-0.5 text-sm text-pr-black-soft/50">Quantité nécessaire pour le prochain match — {total} pièce(s).</p>
         </div>
 
-        <div className="rounded-xl border border-pr-stone bg-white p-4">
-          <label className="mb-2 block text-sm font-medium text-pr-black-soft/80">Votre nom *</label>
-          <input
-            value={nom}
-            onChange={(e) => setNom(e.target.value.toUpperCase())}
-            placeholder="NOM Prénom"
-            className="min-h-[48px] w-full rounded-lg border border-pr-stone px-3 py-3 text-base focus:ring-2 focus:ring-amber-400"
-          />
-          {nom.trim().length > 0 && !nomValid && <p className="mt-2 text-xs font-medium text-pr-rust">⚠️ {nomCheck.reason}</p>}
+        {/* Nom hérité de la connexion (page principale) — plus de re-saisie ici. */}
+        <div className="flex items-center gap-2 rounded-xl border border-pr-stone bg-white px-4 py-3 text-sm">
+          <span className="text-pr-black-soft/50">Responsable</span>
+          <span className="font-semibold text-pr-black">{nom || '—'}</span>
+          <span className="ml-auto text-xs text-pr-black-soft/40">saisi à la connexion</span>
         </div>
 
         {ready === false && (
@@ -118,9 +116,9 @@ export default function MatchZonePetitMateriel() {
             {!nomValid ? (
               <span className="text-amber-700">✍️ Entrez votre nom pour enregistrer (RG-001).</span>
             ) : savedAt ? (
-              <span className="font-medium text-green-700">✓ Enregistré · {savedAt}</span>
+              <span className="font-medium text-green-700">✓ Besoins validés · {savedAt} — transmis au prochain match</span>
             ) : (
-              <span className="text-pr-black-soft/45">Saisissez vos besoins puis enregistrez.</span>
+              <span className="text-pr-black-soft/45">Saisissez vos besoins puis validez.</span>
             )}
           </span>
           <button
@@ -128,7 +126,7 @@ export default function MatchZonePetitMateriel() {
             disabled={!nomValid || saving}
             className="min-h-[48px] shrink-0 rounded-xl bg-pr-black px-5 py-2 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
+            {saving ? 'Validation…' : 'Valider mes besoins'}
           </button>
         </div>
       </div>
