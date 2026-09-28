@@ -256,6 +256,21 @@ jamais inventé. Le **rejeu** de la fonction sur des matchs passés (réparation
 partielle des retours manquants) et le **comptage physique** sont **mutuellement
 exclusifs** pour ré-ancrer : faire l'un OU l'autre, jamais additionner.
 
+### Anti sur-comptage du dispatch (depuis 20260929100000)
+
+`on_initial_entered` (trigger de dispatch) calcule `Δ = initial_qty − solde
+espace` et écrit une `sortie` de Δ (débit central). Comme la clôture remet le
+solde espace à 0, un **ré-enregistrement de la fiche à valeur inchangée** refaisait
+`Δ = initial entier` → **`sortie` fantôme dupliquée** (jamais reversée, 0/181 avec
+`reversal_of`) → sur-débit du central (BUD +124 fantôme, LEFFE +70…). **Garde
+durable posé** : sur `UPDATE` où `initial_qty IS NOT DISTINCT FROM OLD` → no-op
+(pas de re-dispatch). Le dispatch légitime (Δ réel ≠ 0, ou réassort) passe
+toujours. La détection `manque_constaté` (dépôt à sec) est **préservée**.
+Rattrapage historique disponible mais **dormant** : `neutralize_dispatch_phantom(
+event, by, dry_run)` crédite le fantôme postérieur au dernier comptage (idempotent,
+comptage physique prioritaire). Signal d'audit : `sortie` brute ≫ dispatch réel
+(`event_stock_lines.initial+réassort`) sur un couple event×espace×produit.
+
 ## APPLICATION EN BASE — PROTOCOLE (garde-fou d'exécution)
 
 L'écriture directe en base de prod peut être bloquée par le bac à sable de session
