@@ -271,6 +271,150 @@ event, by, dry_run)` crédite le fantôme postérieur au dernier comptage (idemp
 comptage physique prioritaire). Signal d'audit : `sortie` brute ≫ dispatch réel
 (`event_stock_lines.initial+réassort`) sur un couple event×espace×produit.
 
+## SÉMINAIRES — consommation & soustraction dépôt (simulations)
+
+Un séminaire NE passe PAS par le dispatch fûts (`on_initial_entered` fait
+`return NEW` si `event_type='séminaire'`). La saisie régisseur est
+**consommation seule** (`submit_zone_seminar_consumption` → efface puis réinsère
+les lignes de l'espace avec `initial=conso`, `reassort=0`, `final=0` →
+`consumed_qty=conso`, et `source_location_id` choisie par ligne).
+
+**Soustraction à la clôture** (`on_seminaire_closed`, SECURITY DEFINER, à la
+transition vers clôturé) : pour chaque ligne `consumed_qty>0` :
+- **source** = `coalesce(source_location_id, espace_location_of(space))` — dépôt
+  choisi (AUC / Stock EST / Stockage Fûts) sinon **fallback espace sur place** ;
+- `v_avail = solde source` ; **`short = max(0, consumed − avail)`** ;
+- `source.current_quantity = greatest(0, current − consumed)` (**plancher 0**) ;
+- mouvement `consommation` tracé (RG-002), `is_anomaly = (short>0)` ;
+- **idempotent** : garde `responsable_nom='Auto — pilote stock séminaire'`.
+
+**Simulations menées (données réelles) :**
+- *Clôturés* (Altrad ENDEL, SONEPAR, 24/09) : 25 lignes conso sur séminaires
+  clôturés → **0 orphelin** (tout `consumed_qty>0` a son mouvement). MAIS toutes
+  les sources étaient le **fallback « Salon Sud — Espace »** (`source_location_id`
+  NULL) → anomalies `short>0` sur les produits qui auraient dû venir d'un dépôt :
+  SONEPAR Fût BUD (conso 1, espace sans fût), Pepsi (6), San Pellegrino (4)
+  flaggés `is_anomaly=true`. Leçon : **un produit de dépôt (fût, soft) laissé en
+  source « sur place » short quasi systématiquement** — pousser à choisir la
+  vraie source (AUC softs / Stockage Fûts).
+- *À venir* (Pomona 02/10, Pernod RICARD 01/10, Dynamique Provencale 29/09,
+  AESIO 29/09) : **0 ligne conso saisie** à ce jour → rien à simuler tant que le
+  régisseur n'a pas saisi. Capacité d'**anticipation** à déclencher dès que les
+  lignes existent (requête ci-dessous). Réserves actuellement **à risque de
+  short** (négatives) : AUC Pepsi 50cl −186, Orangina −88, FADA Blanche btl −44 ;
+  Stock EST Mumm −67, Rouge Grand Boise −11 ; Stockage Fûts FADA Blonde −12,
+  IPA −7, Blanche −5 → toute conso séminaire sur ces couples produit×source
+  shortera (plancher 0 + anomalie).
+
+**Signaux d'audit séminaire (à froid) :**
+```sql
+-- Anticipation short AVANT clôture (séminaire préparé, lignes déjà saisies)
+select e.event_name, p.product_name, sl.name source, l.source_location_id is null fallback,
+  l.consumed_qty prevu, coalesce(sb.current_quantity::int,0) dispo,
+  greatest(0, l.consumed_qty - coalesce(sb.current_quantity::int,0)) short
+from event_stock_lines l join events e on e.event_id=l.event_id and e.event_type='séminaire'
+join products p on p.product_id=l.product_id
+left join stock_locations sl on sl.id=coalesce(l.source_location_id, espace_location_of(l.space_id))
+left join stock_balances sb on sb.product_id=l.product_id
+     and sb.location_id=coalesce(l.source_location_id, espace_location_of(l.space_id))
+where lower(e.status) in ('préparé','en_cours') and coalesce(l.consumed_qty,0)>0
+order by short desc;
+-- Conso séminaire clôturé SANS mouvement (orphelin) ; ou source NULL non résolue
+select l.* from event_stock_lines l join events e on e.event_id=l.event_id
+where e.event_type='séminaire' and lower(e.status) in ('clôturé','archivé')
+  and coalesce(l.consumed_qty,0)>0
+  and not exists (select 1 from stock_movements m where m.event_id=l.event_id
+    and m.product_id=l.product_id and m.space_id=l.space_id and m.movement_type='consommation');
+-- Anomalies short d'un séminaire (source insuffisante à la clôture)
+select * from stock_movements where movement_type='consommation'
+  and responsable_nom='Auto — pilote stock séminaire' and is_anomaly order by created_at desc;
+```
+Alternative/réponse : si short → **choisir la bonne source** (dépôt) et/ou
+**recompter/réapprovisionner** la source avant clôture ; ne jamais inventer un
+solde (le plancher 0 + anomalie sont le signal honnête à traiter).
+
+## POST-MORTEM CLÔTURES MATCHS — playbook pannes → alternatives
+
+Défauts réellement rencontrés cette session, avec **signal SQL** pour
+reconnaître à froid et **alternative** à proposer. Toujours : comptage physique
+= vérité ; réconciliation = convergence ; validation humaine avant écriture.
+
+**(a) Fûts finaux ne restaient pas dans l'espace attitré.** Cause :
+`retain_kegs_in_espace=false` sur des espaces qui gardent leur cave. Fix
+(20260928170000) : `retain_kegs_in_espace = retains_stock`. Signal :
+`select count(*) from spaces where coalesce(retain_kegs_in_espace,false) <> coalesce(retains_stock,false)`
+→ doit être **0** (vérifié = 0). Alternative si >0 : réaligner le drapeau, puis
+`reanchor_espace_live_to_last_match`.
+
+**(b) Retours pleins buvettes non crédités au central.** Cause : recalage
+espace→0 sans crédit « Stockage Fûts » ni mouvement. Fix (20260929090000) :
+`return_buvette_kegs_to_central` intégré à `reconcile_event_closure`. Signal :
+non-conservateurs, pleins `fermé` sans `retour_réutilisable` vers le central →
+```sql
+select e.event_name, p.product_name, sum(greatest(l.final_qty,0)) pleins
+from event_stock_lines l join spaces s on s.space_id=l.space_id and not coalesce(s.retain_kegs_in_espace,false)
+join products p on p.product_id=l.product_id and p.unit='fût' join events e on e.event_id=l.event_id
+where coalesce(l.product_state,'fermé')='fermé' and l.final_qty>0 group by 1,2;
+```
+vs mouvements `retour_réutilisable` to central. Alternative : rejouer
+`return_buvette_kegs_to_central(event, by, false)` (idempotent).
+
+**(c) Sur-comptage dispatch (sorties fantômes).** Cause : `on_initial_entered`
+re-dispatche à valeur inchangée après reset du solde espace. Fix (20260929100000)
+garde + `neutralize_dispatch_phantom`. Signal : `sortie` brute ≫ fiche —
+```sql
+select e.event_name, p.product_name, sum(m.qty) sortie_brute
+from stock_movements m join events e on e.event_id=m.event_id
+join products p on p.product_id=m.product_id and p.unit='fût'
+where m.from_location_id=(select id from stock_locations where name='Stockage Fûts')
+  and m.movement_type in ('sortie','réassort_événement') group by 1,2;
+```
+comparé à `Σ(initial+réassort)` par event×produit. Alternative : garde durable
+(déjà posée) + rattrapage dormant, ancré au dernier comptage physique.
+
+**(d) Dérivation d'un match antérieur régressait le live.** Cause : `on_stock_
+final_entered` écrasait le live avec un final d'un match plus ancien. Fix
+(20260928160000) : garde de récence + `reanchor_espace_live_to_last_match(null,
+null,false)`. Signal : `area_stocks` d'un couple ≠ final du **dernier** match
+clôturé. Alternative : lancer le reanchor (idempotent, scopé au footprint).
+
+**(e) Réserves centrales négatives.** Cause : ancrage d'ouverture manquant /
+réceptions sous-enregistrées. Signal :
+`select l.name, p.product_name, sb.current_quantity from stock_balances sb join stock_locations l on l.id=sb.location_id and l.location_type='reserve_centrale' join products p on p.product_id=sb.product_id where sb.current_quantity<0 order by 3`
+(état : AUC −321 dont Pepsi 50cl −186, Orangina −88, FADA Blanche −44 ; EST −79
+dont Mumm −67 ; Stockage Fûts −24). Alternative : **`record_keg_count` / comptage
+physique** (prime) ; en dernier recours plancher 0 marqué anomalie — jamais
+inventer.
+
+**(f) Ancrages fûts périmés** (dernier comptage < dernier match). Signal :
+`select * from keg_central_anchor_status() where ancrage_perime` (état : **6**
+fûts — FADA Abricot/Blanche/Blonde/IPA, Goose, Hoegaarden, comptés 21/09 <
+Aurillac 25/09). Alternative : **recompte physique** `record_keg_count(product,
+full, by, note)` post-match. Ce cluster (négatifs + fantôme + ancrage périmé) se
+résout d'UN recomptage.
+
+**(g) Divergence keg_summary (comptage) vs stock_balances (ledger).** Le
+comptage physique **prime** ; la réconciliation fait converger le ledger. Signal :
+`reserve_stock_divergence()` / comparer `keg_true_balance` vs
+`event_keg_reconciliation_summary`. Alternative : `record_keg_count` puis
+`reconcile_keg_inventory_to_truth` (registre s'aligne sur l'autorité).
+
+**(h) Finals manquants.** Cause : responsable n'a pas saisi le final.
+Fix : `derive_and_apply_espace_finals` (dispatché − conso attendue, borné
+[0,dispatché], marqué `final_is_derived`, **exclu des tendances**). Signal :
+```sql
+select e.event_name, s.space_name, p.product_name from event_stock_lines l
+join events e on e.event_id=l.event_id and e.event_type='match'
+  and lower(e.status) in ('clôturé','archivé')
+join spaces s on s.space_id=l.space_id join products p on p.product_id=l.product_id
+where l.final_qty is null and (coalesce(l.initial_qty,0)+coalesce(l.reassort_qty,0))>0;
+```
+Alternative : faire saisir le vrai final ; sinon dériver (validation humaine),
+et vérifier `final_is_derived` pour ne pas polluer les dotations.
+
+**Réflexe de contrôle post-clôture** : relire `event_closure_reconciliation_log`
+(`mode='error'`/`success=false` → rejouer), puis dérouler (a)→(h) ci-dessus.
+
 ## APPLICATION EN BASE — PROTOCOLE (garde-fou d'exécution)
 
 L'écriture directe en base de prod peut être bloquée par le bac à sable de session
