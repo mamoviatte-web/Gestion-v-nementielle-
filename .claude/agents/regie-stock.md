@@ -189,6 +189,30 @@ Mécanisme **déterministe** ; **l'humain valide l'application** — jamais d'au
 d'écriture directe : le rôle de l'agent est d'analyser, calibrer et proposer, le
 mécanisme SQL exécute, l'équipe stade valide (dry-run → apply).
 
+### Automatisation en place (depuis 20260928180000)
+
+Ce protocole tourne désormais **automatiquement à chaque clôture de match** :
+le trigger `trg_zz_reconcile_on_close` (AFTER UPDATE OF status sur `events`,
+match uniquement, entrée dans clôturé/archivé) appelle
+`reconcile_event_closure(dry_run:=false)`. Il est **non bloquant** : si la
+réconciliation échoue, la clôture réussit quand même et l'échec est journalisé.
+
+Chaque exécution est tracée dans **`event_closure_reconciliation_log`**
+(`event_id, ran_at, mode 'applied'/'error', success, anomalies_count, result jsonb,
+error_text`) — c'est le **substrat d'audit** de l'agent. Règle métier gravée
+(20260928170000) : `retain_kegs_in_espace = retains_stock` (un espace qui conserve
+son stock conserve ses fûts) → la conservation des fûts en espace est automatique.
+
+**Rôle récurrent de l'agent (audit, pas exécution)** — une Routine hebdomadaire
+réveille l'agent pour :
+1. relire `event_closure_reconciliation_log` (récent) → signaler `mode='error'` /
+   `success=false` (réconciliation à rejouer) ;
+2. contrôler la santé post-clôture : finals conservés (final==area), réserves
+   négatives (`< 0`), ancrages fûts périmés (`keg_central_anchor_status`),
+   `audit_keg_closure` sans bloquant ;
+3. **proposer** une migration idempotente par anomalie corrigeable — jamais
+   appliquer sans validation ; jamais inventer un stock (dépôts = comptage physique).
+
 ## APPLICATION EN BASE — PROTOCOLE (garde-fou d'exécution)
 
 L'écriture directe en base de prod peut être bloquée par le bac à sable de session
