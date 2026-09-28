@@ -23,6 +23,7 @@ import { PhotoGallery } from '@/components/debrief/PhotoGallery';
 import {
   editInitialStock,
   getZoneState,
+  getZoneProductDepots,
   getZoneStaff,
   upsertZoneStaff,
   deleteZoneStaff,
@@ -701,17 +702,32 @@ function SeminarConsumptionSection({ token, name, state, onDone, showToast }: Se
   const sources = useMemo(() => state.storage_sources ?? [], [state.storage_sources]);
   const defaultSource = sources[0]?.id ?? '';
 
-  // Source par défaut « intelligente » par famille (le régisseur peut changer).
+  // Dépôt routé EXACT par produit (product_depot_routing) = source de vérité.
+  const [depotByProduct, setDepotByProduct] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let alive = true;
+    void getZoneProductDepots(token)
+      .then((m) => { if (alive) setDepotByProduct(m); })
+      .catch(() => { /* pré-sélection = repli famille si indispo */ });
+    return () => { alive = false; };
+  }, [token]);
+
+  // Source pré-sélectionnée : dépôt routé du produit en priorité ; sinon repli
+  // par famille (fûts → Stockage Fûts, vins/spiritueux → cave EST, reste →
+  // réserve générale AUC — jamais « sur place » pour un produit de dépôt). Le
+  // régisseur peut toujours changer.
   const smartSource = useCallback(
-    (category: string, productName: string): string => {
+    (productId: string, category: string, productName: string): string => {
+      const exact = depotByProduct[productId];
+      if (exact && sources.some((s) => s.id === exact)) return exact;
       const byLabel = (frag: string) =>
         sources.find((s) => s.label.toLowerCase().includes(frag))?.id;
       if (/^f[uû]t/i.test(productName)) return byLabel('fût') ?? defaultSource;
-      if (category === 'Vins' || category === 'Spiritueux')
+      if (category === 'Vins' || category === 'Spiritueux' || category === 'Champagne')
         return byLabel('est') ?? byLabel('cave') ?? defaultSource;
-      return defaultSource; // sur place
+      return byLabel('auc') ?? byLabel('réserve') ?? byLabel('générale') ?? defaultSource;
     },
-    [sources, defaultSource],
+    [depotByProduct, sources, defaultSource],
   );
 
   const linesById = useMemo(() => {
@@ -729,7 +745,7 @@ function SeminarConsumptionSection({ token, name, state, onDone, showToast }: Se
       if (consumed && consumed > 0) {
         next[p.product_id] = {
           qty: String(consumed),
-          source: l?.source_location_id ?? smartSource(p.category, p.product_name),
+          source: l?.source_location_id ?? smartSource(p.product_id, p.category, p.product_name),
         };
       }
     }
@@ -738,7 +754,7 @@ function SeminarConsumptionSection({ token, name, state, onDone, showToast }: Se
 
   const setQty = (id: string, category: string, productName: string, qty: string) =>
     setRows((prev) => {
-      const cur = prev[id] ?? { qty: '', source: smartSource(category, productName) };
+      const cur = prev[id] ?? { qty: '', source: smartSource(id, category, productName) };
       return { ...prev, [id]: { ...cur, qty } };
     });
   const setSource = (id: string, source: string) =>

@@ -295,8 +295,13 @@ transition vers clôturé) : pour chaque ligne `consumed_qty>0` :
   NULL) → anomalies `short>0` sur les produits qui auraient dû venir d'un dépôt :
   SONEPAR Fût BUD (conso 1, espace sans fût), Pepsi (6), San Pellegrino (4)
   flaggés `is_anomaly=true`. Leçon : **un produit de dépôt (fût, soft) laissé en
-  source « sur place » short quasi systématiquement** — pousser à choisir la
-  vraie source (AUC softs / Stockage Fûts).
+  source « sur place » short quasi systématiquement**. → **CORRIGÉ**
+  (20260929110000) : la saisie **pré-sélectionne le dépôt routé exact par
+  produit** (`product_depot_routing` exposé par `zone_product_depots`), et un
+  filet backend (RPC saisie + `on_seminaire_closed`) route vers le dépôt même
+  sans source explicite (repli : source choisie → dépôt routé → espace). Le
+  régisseur peut toujours changer. Un short résiduel = vrai manque de la source
+  (à réapprovisionner/recompter), plus un artefact de source.
 - *À venir* (Pomona 02/10, Pernod RICARD 01/10, Dynamique Provencale 29/09,
   AESIO 29/09) : **0 ligne conso saisie** à ce jour → rien à simuler tant que le
   régisseur n'a pas saisi. Capacité d'**anticipation** à déclencher dès que les

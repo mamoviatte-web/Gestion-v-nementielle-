@@ -134,6 +134,20 @@ export function getZoneState(token: string): Promise<ZoneState> {
   return rpc<ZoneState>('get_zone_state', { p_token: token });
 }
 
+/**
+ * Dépôt routé (product_depot_routing) par produit → { product_id: depot_id }.
+ * Sert à pré-sélectionner la bonne source dépôt à la saisie de conso séminaire.
+ */
+export async function getZoneProductDepots(token: string): Promise<Record<string, string>> {
+  const rows = await rpc<{ product_id: string; depot_id: string | null }[]>(
+    'zone_product_depots',
+    { p_token: token },
+  );
+  const map: Record<string, string> = {};
+  for (const r of rows ?? []) if (r.depot_id) map[r.product_id] = r.depot_id;
+  return map;
+}
+
 export async function startZoneSession(token: string, name: string): Promise<void> {
   const r = await rpc<{ success: boolean; error?: string }>('start_zone_session', {
     p_token: token,
