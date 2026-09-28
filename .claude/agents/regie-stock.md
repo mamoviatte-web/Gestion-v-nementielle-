@@ -156,6 +156,39 @@ Règle d'or : un `final_manquant` non résolu = **retour NON validé** ; on le s
 et on le résout par une donnée réelle, jamais par une valeur inventée. Toute écriture
 de correction reste soumise à **validation humaine** (protocole ci-dessous).
 
+## PROTOCOLE CLÔTURE — réconciliation espaces & dépôts (skill outillé)
+
+À chaque clôture de match, exécuter `reconcile_event_closure(event, by, dry_run:=true)`,
+relire le rapport, puis appliquer avec `dry_run:=false`. La routine **navigue chaque
+espace et chaque zone de dépôt** et réconcilie à partir du **consommé vs. ce qui doit
+RESTER** :
+
+1. **Par espace** : final réel saisi s'il est présent ; sinon final **DÉRIVÉ**
+   (`derive_and_apply_espace_finals` : dispatché − conso attendue de tendance, borné
+   [0, dispatché], marqué `final_is_derived`, exclu des tendances). Le LIVE
+   (area_stocks / stock_balances espace) n'est mis à jour QUE si l'événement est le
+   **dernier match** du couple espace×produit — garde-fou récence dans
+   `on_stock_final_entered` ; un match antérieur ne remplit que l'historique.
+2. **Routage du non-consommé** : `retain_kegs_in_espace=true` → reste en espace ;
+   `false` → espace = 0, pleins restants → retour **Stockage Fûts central**
+   (`reconcile_non_retained_keg_espace` / `reconcile_non_retained_espace`).
+3. **Registre** : `keg_inventory` réaligné sur `area_stocks` (autorité), jamais
+   l'inverse (`reconcile_keg_inventory_to_truth`).
+4. **Filet récence** : `reanchor_espace_live_to_last_match(null,null,false)` répare
+   tout live clobberé par une dérivation d'un match antérieur (scopé au footprint,
+   idempotent).
+5. **Zones de dépôt** (AUC / Stock EST / Stockage Fûts) : `keg_central_anchor_status`
+   signale les ancrages **périmés** → **recomptage physique** `record_keg_count`
+   obligatoire, **jamais inventé**.
+6. **Sorties attendues** : `audit_keg_closure = 0`, vues réconciliées,
+   `area_stocks` = dernier match, registre aligné.
+
+Garde-fous : RG-002 (mouvements tracés par le trigger ; recalages = photos
+d'inventaire), RG-004 (conso ≥ 0), **pas d'invention** (dépôts recomptés physiquement).
+Mécanisme **déterministe** ; **l'humain valide l'application** — jamais d'autonomie
+d'écriture directe : le rôle de l'agent est d'analyser, calibrer et proposer, le
+mécanisme SQL exécute, l'équipe stade valide (dry-run → apply).
+
 ## APPLICATION EN BASE — PROTOCOLE (garde-fou d'exécution)
 
 L'écriture directe en base de prod peut être bloquée par le bac à sable de session
