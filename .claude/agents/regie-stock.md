@@ -213,6 +213,49 @@ réveille l'agent pour :
 3. **proposer** une migration idempotente par anomalie corrigeable — jamais
    appliquer sans validation ; jamais inventer un stock (dépôts = comptage physique).
 
+### Flux retour fûts buvettes → Stockage Fûts (depuis 20260929090000)
+
+Cycle de vie d'un fût d'un espace **non conservateur** (`retain_kegs_in_espace=
+false` : buvettes, tentes, VIP/bars sans cave) :
+
+1. **Dispatch** : fût sorti de « Stockage Fûts » central (`sortie` → **débit**
+   central) et acheminé en espace, tiré à la pression.
+2. **Match** : consommation en espace.
+3. **Clôture** (l'espace finit à **0 fût**) :
+   - fûts **VIDES / percutés** (`fût_vide`/`fût_percuté`) → **flux vides**
+     (`keg_inventory` statut 'vide') ; ils **ne créditent PAS** les pleins du
+     central ;
+   - fûts **PLEINS non consommés** (`final_qty`, `product_state` 'fermé'/NULL)
+     → **re-crédités** au « Stockage Fûts » central via un mouvement
+     `retour_réutilisable` from=espace to=Stockage Fûts (RG-002 : mouvement
+     AVANT compteur) + `stock_balances` central += pleins.
+
+**Automatique à la clôture** : `return_buvette_kegs_to_central(event, by,
+dry_run)` est appelée par `reconcile_event_closure` en **ÉTAPE B**, juste après
+`reconcile_non_retained_keg_espace` (espace→0) — donc exécutée par le trigger
+`trg_zz_reconcile_on_close` à chaque futur match. Elle comble le GAP historique :
+`reconcile_non_retained_keg_espace` zéroait l'espace **sans** créditer le central
+ni tracer de mouvement → central débité au dispatch mais jamais re-crédité →
+soldes négatifs (BUD −46, LEFFE −30, etc.). Elle rétablit la **symétrie** déjà
+présente côté non-fût dans `on_stock_final_entered` (branche 'fermé' → dépôt).
+
+**Garde-fou idempotent** : la fonction ne crédite que le **complément** =
+`pleins_owed − retour_réutilisable déjà tracés` pour le couple event×espace×
+produit vers le central. Rejouée → complément 0 → aucun double compte. La
+correction d'un final par le responsable est reversée par `on_stock_final_
+entered` (supprime les `retour_réutilisable` du couple + décrémente le central),
+un ré-appel recrédite proprement.
+
+**Cohérence ledger** : on écrit le **mouvement** (flux_in central de
+`v_stock_ledger_balance`) ET on incrémente le **compteur** `stock_balances` du
+même montant → dérivé et compteur avancent ensemble, pas de divergence.
+
+**Vérité finale = comptage physique** : `record_keg_count(product, full, by,
+note)` ré-ancre le central en **absolu** et **prime** sur tout crédit calculé —
+jamais inventé. Le **rejeu** de la fonction sur des matchs passés (réparation
+partielle des retours manquants) et le **comptage physique** sont **mutuellement
+exclusifs** pour ré-ancrer : faire l'un OU l'autre, jamais additionner.
+
 ## APPLICATION EN BASE — PROTOCOLE (garde-fou d'exécution)
 
 L'écriture directe en base de prod peut être bloquée par le bac à sable de session
