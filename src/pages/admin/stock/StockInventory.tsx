@@ -237,77 +237,172 @@ export default function StockInventory() {
           </Alert>
         )}
 
-        <Table>
-          <THead>
-            <TR>
-              <TH>Produit</TH>
-              <TH className="text-right">Théorique</TH>
-              <TH className="text-right">Réel</TH>
-              <TH className="text-right">Écart</TH>
-              <TH>Commentaire</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {lines.map((l, idx) => {
-              const variance = computeInventoryVariance(l.real, l.theoretical);
-              const needsComment = variance !== 0;
-              const showFamily = idx === 0 || lines[idx - 1].category !== l.category;
-              return (
-                <Fragment key={l.productId}>
-                {showFamily && (
-                  <tr className="bg-pr-cream/70">
-                    <td
-                      colSpan={5}
-                      className="px-3 py-2 font-display text-xs font-bold uppercase tracking-wide text-pr-black-soft/60"
-                    >
-                      {FAMILY_LABEL[l.category] ?? l.category}
-                    </td>
-                  </tr>
-                )}
-                <TR>
-                  <TD className="font-medium text-pr-black">{l.productName}</TD>
-                  <TD className="text-right tabular-nums">{l.theoretical}</TD>
-                  <TD className="text-right">
-                    <Input
-                      type="number"
-                      value={String(l.real)}
-                      onChange={(e) =>
-                        updateLine(l.productId, {
-                          real: Number(e.target.value) || 0,
-                        })
-                      }
-                      className="w-24 text-right"
-                    />
-                  </TD>
-                  <TD className={`text-right tabular-nums ${varianceClass(variance)}`}>
-                    {variance > 0 ? `+${variance}` : variance}
-                  </TD>
-                  <TD>
-                    <Textarea
-                      value={l.comment}
-                      onChange={(e) =>
-                        updateLine(l.productId, { comment: e.target.value })
-                      }
-                      rows={1}
-                      placeholder={
-                        needsComment ? 'Justification requise…' : 'Optionnel'
-                      }
-                      error={
-                        needsComment && l.comment.trim().length === 0
-                          ? 'Requis'
-                          : undefined
-                      }
-                    />
-                  </TD>
-                </TR>
-                </Fragment>
-              );
-            })}
-          </TBody>
-        </Table>
+        {/* Desktop : tableau dense (inchangé) */}
+        <div className="hidden md:block">
+          <Table>
+            <THead>
+              <TR>
+                <TH>Produit</TH>
+                <TH className="text-right">Théorique</TH>
+                <TH className="text-right">Réel</TH>
+                <TH className="text-right">Écart</TH>
+                <TH>Commentaire</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {lines.map((l, idx) => {
+                const variance = computeInventoryVariance(l.real, l.theoretical);
+                const needsComment = variance !== 0;
+                const showFamily = idx === 0 || lines[idx - 1].category !== l.category;
+                return (
+                  <Fragment key={l.productId}>
+                  {showFamily && (
+                    <tr className="bg-pr-cream/70">
+                      <td
+                        colSpan={5}
+                        className="px-3 py-2 font-display text-xs font-bold uppercase tracking-wide text-pr-black-soft/60"
+                      >
+                        {FAMILY_LABEL[l.category] ?? l.category}
+                      </td>
+                    </tr>
+                  )}
+                  <TR>
+                    <TD className="font-medium text-pr-black">{l.productName}</TD>
+                    <TD className="text-right tabular-nums">{l.theoretical}</TD>
+                    <TD className="text-right">
+                      <Input
+                        type="number"
+                        value={String(l.real)}
+                        onChange={(e) =>
+                          updateLine(l.productId, {
+                            real: Number(e.target.value) || 0,
+                          })
+                        }
+                        className="w-24 text-right"
+                      />
+                    </TD>
+                    <TD className={`text-right tabular-nums ${varianceClass(variance)}`}>
+                      {variance > 0 ? `+${variance}` : variance}
+                    </TD>
+                    <TD>
+                      <Textarea
+                        value={l.comment}
+                        onChange={(e) =>
+                          updateLine(l.productId, { comment: e.target.value })
+                        }
+                        rows={1}
+                        placeholder={
+                          needsComment ? 'Justification requise…' : 'Optionnel'
+                        }
+                        error={
+                          needsComment && l.comment.trim().length === 0
+                            ? 'Requis'
+                            : undefined
+                        }
+                      />
+                    </TD>
+                  </TR>
+                  </Fragment>
+                );
+              })}
+            </TBody>
+          </Table>
+        </div>
 
-        <div className="flex justify-end gap-3">
-          <Button variant="ghost" onClick={resetToIdle} disabled={saving}>
+        {/* Mobile : cartes tactiles — zéro scroll horizontal, saisie confortable */}
+        <div className="space-y-3 md:hidden">
+          {lines.map((l, idx) => {
+            const variance = computeInventoryVariance(l.real, l.theoretical);
+            const needsComment = variance !== 0;
+            const showFamily = idx === 0 || lines[idx - 1].category !== l.category;
+            return (
+              <Fragment key={l.productId}>
+                {showFamily && (
+                  <div className="px-1 pt-1 font-display text-xs font-bold uppercase tracking-wide text-pr-black-soft/60">
+                    {FAMILY_LABEL[l.category] ?? l.category}
+                  </div>
+                )}
+                <div
+                  className={`rounded-2xl border bg-pr-white p-3.5 shadow-sm ${
+                    needsComment && l.comment.trim().length === 0
+                      ? 'border-pr-rust/50'
+                      : 'border-pr-stone/40'
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-medium leading-tight text-pr-black">
+                      {l.productName}
+                    </span>
+                    <span className="shrink-0 text-xs text-pr-black-soft">
+                      Théorique{' '}
+                      <b className="tabular-nums text-pr-black">{l.theoretical}</b>
+                      {l.unit ? ` ${l.unit}` : ''}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex items-end gap-3">
+                    <div className="flex-1">
+                      <label className="mb-1 block text-xs font-medium text-pr-black-soft">
+                        Réel compté
+                      </label>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        value={String(l.real)}
+                        onChange={(e) =>
+                          updateLine(l.productId, {
+                            real: Number(e.target.value) || 0,
+                          })
+                        }
+                        className="min-h-[48px] w-full text-center text-lg font-semibold"
+                      />
+                    </div>
+                    <div className="shrink-0 text-center">
+                      <div className="mb-1 text-xs font-medium text-pr-black-soft">
+                        Écart
+                      </div>
+                      <div
+                        className={`flex min-h-[48px] min-w-[68px] items-center justify-center rounded-xl bg-pr-cream/70 px-3 text-lg tabular-nums ${varianceClass(
+                          variance,
+                        )}`}
+                      >
+                        {variance > 0 ? `+${variance}` : variance}
+                      </div>
+                    </div>
+                  </div>
+                  {(needsComment || l.comment.trim().length > 0) && (
+                    <div className="mt-3">
+                      <Textarea
+                        value={l.comment}
+                        onChange={(e) =>
+                          updateLine(l.productId, { comment: e.target.value })
+                        }
+                        rows={2}
+                        placeholder={
+                          needsComment
+                            ? 'Justification de l’écart requise (RG-004)…'
+                            : 'Commentaire (optionnel)'
+                        }
+                        error={
+                          needsComment && l.comment.trim().length === 0
+                            ? 'Requis'
+                            : undefined
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+              </Fragment>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button
+            variant="ghost"
+            onClick={resetToIdle}
+            disabled={saving}
+            className="min-h-[48px] w-full sm:w-auto"
+          >
             Annuler
           </Button>
           <Button
@@ -315,6 +410,7 @@ export default function StockInventory() {
             onClick={handleValidate}
             loading={saving}
             disabled={!canValidate}
+            className="min-h-[48px] w-full sm:w-auto"
           >
             Valider l'inventaire
           </Button>
@@ -466,45 +562,93 @@ export default function StockInventory() {
 
                 {isOpen && (
                   <div className="border-t border-pr-stone/40 px-4 py-3">
-                    <Table>
-                      <THead>
-                        <TR>
-                          <TH>Produit</TH>
-                          <TH className="text-right">Théorique</TH>
-                          <TH className="text-right">Réel</TH>
-                          <TH className="text-right">Écart</TH>
-                          <TH>Commentaire</TH>
-                        </TR>
-                      </THead>
-                      <TBody>
-                        {sessionLines.map((l) => {
-                          const variance = l.variance ?? 0;
-                          return (
-                            <TR key={l.id}>
-                              <TD className="font-medium text-pr-black">
+                    {/* Desktop : tableau (inchangé) */}
+                    <div className="hidden md:block">
+                      <Table>
+                        <THead>
+                          <TR>
+                            <TH>Produit</TH>
+                            <TH className="text-right">Théorique</TH>
+                            <TH className="text-right">Réel</TH>
+                            <TH className="text-right">Écart</TH>
+                            <TH>Commentaire</TH>
+                          </TR>
+                        </THead>
+                        <TBody>
+                          {sessionLines.map((l) => {
+                            const variance = l.variance ?? 0;
+                            return (
+                              <TR key={l.id}>
+                                <TD className="font-medium text-pr-black">
+                                  {l.product?.product_name ?? '—'}
+                                </TD>
+                                <TD className="text-right tabular-nums">
+                                  {l.theoretical_qty ?? '—'}
+                                </TD>
+                                <TD className="text-right tabular-nums">
+                                  {l.real_qty ?? '—'}
+                                </TD>
+                                <TD
+                                  className={`text-right tabular-nums ${varianceClass(
+                                    variance,
+                                  )}`}
+                                >
+                                  {variance > 0 ? `+${variance}` : variance}
+                                </TD>
+                                <TD className="text-pr-black-soft">
+                                  {l.comment ?? '—'}
+                                </TD>
+                              </TR>
+                            );
+                          })}
+                        </TBody>
+                      </Table>
+                    </div>
+
+                    {/* Mobile : cartes lisibles (lecture seule) */}
+                    <div className="space-y-2 md:hidden">
+                      {sessionLines.map((l) => {
+                        const variance = l.variance ?? 0;
+                        return (
+                          <div
+                            key={l.id}
+                            className="rounded-xl border border-pr-stone/30 bg-pr-cream/30 p-3"
+                          >
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="font-medium text-pr-black">
                                 {l.product?.product_name ?? '—'}
-                              </TD>
-                              <TD className="text-right tabular-nums">
-                                {l.theoretical_qty ?? '—'}
-                              </TD>
-                              <TD className="text-right tabular-nums">
-                                {l.real_qty ?? '—'}
-                              </TD>
-                              <TD
-                                className={`text-right tabular-nums ${varianceClass(
+                              </span>
+                              <span
+                                className={`text-sm tabular-nums ${varianceClass(
                                   variance,
                                 )}`}
                               >
                                 {variance > 0 ? `+${variance}` : variance}
-                              </TD>
-                              <TD className="text-pr-black-soft">
-                                {l.comment ?? '—'}
-                              </TD>
-                            </TR>
-                          );
-                        })}
-                      </TBody>
-                    </Table>
+                              </span>
+                            </div>
+                            <div className="mt-1 flex gap-4 text-xs text-pr-black-soft">
+                              <span>
+                                Théo.{' '}
+                                <b className="tabular-nums text-pr-black">
+                                  {l.theoretical_qty ?? '—'}
+                                </b>
+                              </span>
+                              <span>
+                                Réel{' '}
+                                <b className="tabular-nums text-pr-black">
+                                  {l.real_qty ?? '—'}
+                                </b>
+                              </span>
+                            </div>
+                            {l.comment && (
+                              <p className="mt-1.5 text-xs text-pr-black-soft">
+                                💬 {l.comment}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
