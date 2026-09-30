@@ -248,8 +248,48 @@ export async function downloadPayrollWorkbook(
   co.getCell(8).numFmt = EUR_FMT;
   co.getCell(8).font = arial({ bold: true, color: { argb: GREEN } });
 
+  // ── Sous-totaux des AUTRES circuits (mixte, non défini…) pour que la
+  //    ventilation soit EXHAUSTIVE : Franchise + Contrat + autres = TOTAL
+  //    GÉNÉRAL. Sans ces lignes, un profil « contrat/franchise » n'apparaît
+  //    dans aucun bloc et les sous-totaux ne réconcilient pas le grand total.
+  const others = [...new Set(rows.map((r) => r.type_paiement))].filter(
+    (t) => t !== 'franchise' && t !== 'contrat',
+  );
+  const otherLabel = (t: string): string =>
+    t === 'contrat/franchise'
+      ? 'Total MIXTE (contrat/franchise) — à ventiler'
+      : t === 'non défini' || t === ''
+        ? 'Total NON DÉFINI'
+        : `Total ${t.toUpperCase()}`;
+  let lastSubtotalRow = contratRow;
+  others.forEach((t, i) => {
+    const rr = contratRow + 1 + i;
+    const ro = ws.getRow(rr);
+    // Échappe les guillemets pour rester robuste dans la formule SUMIF.
+    const crit = t.replace(/"/g, '""');
+    ro.getCell(1).value = otherLabel(t);
+    ro.getCell(1).font = arial({ bold: true, color: { argb: GREY } });
+    ro.getCell(6).value = { formula: `SUMIF($B:$B,"${crit}",$F:$F)` };
+    ro.getCell(6).numFmt = EUR_FMT;
+    ro.getCell(6).font = arial({ bold: true, color: { argb: GREY } });
+    ro.getCell(8).value = { formula: `SUMIF($B:$B,"${crit}",$H:$H)` };
+    ro.getCell(8).numFmt = EUR_FMT;
+    ro.getCell(8).font = arial({ bold: true, color: { argb: GREY } });
+    lastSubtotalRow = rr;
+  });
+
+  // ── Contrôle de réconciliation : Σ des sous-totaux circuit doit égaler le
+  //    TOTAL GÉNÉRAL (colonne H). Ligne d'auto-vérification visible.
+  const checkRow = lastSubtotalRow + 1;
+  const ck = ws.getRow(checkRow);
+  ck.getCell(1).value = 'Contrôle ventilation (= TOTAL GÉNÉRAL)';
+  ck.getCell(1).font = arial({ italic: true, color: { argb: GREY } });
+  ck.getCell(8).value = { formula: `SUM(H${franchiseRow}:H${lastSubtotalRow})` };
+  ck.getCell(8).numFmt = EUR_FMT;
+  ck.getCell(8).font = arial({ italic: true, color: { argb: GREY } });
+
   // Impression : paysage, 1 page de large, en-tête répété (feuille récap = 8 col.)
-  applyPrintLayout(ws, 'H', contratRow);
+  applyPrintLayout(ws, 'H', checkRow);
 
   // ═══════════════════════════════════════════════════════════════════════
   // FEUILLE 2 — DÉTAIL PAR ÉVÉNEMENT (justification des charges de paie)
@@ -715,10 +755,11 @@ export async function downloadHoursReportWorkbook(
     byPers.set(r.staff_name, a);
   }
   const persons = [...byPers.values()].sort((a, b) => a.staff_name.localeCompare(b.staff_name));
-  let totFranchise = 0, totContrat = 0;
+  let totFranchise = 0, totContrat = 0, totAutre = 0;
   for (const r of monthRows) {
     if (r.type_paiement === 'franchise') totFranchise += r.cout_ht;
     else if (r.type_paiement === 'contrat') totContrat += r.cout_ht;
+    else totAutre += r.cout_ht; // 'non défini' et autres → résiduel réconciliant
   }
 
   // ═══ Feuille 1 — SYNTHÈSE (qui payer) ═══
@@ -760,7 +801,17 @@ export async function downloadHoursReportWorkbook(
   coRow.getCell(1).value = 'Total CONTRAT (à intégrer en paie)';
   coRow.getCell(1).font = arial({ bold: true, color: { argb: GREEN } });
   coRow.getCell(4).value = Math.round(totContrat * 100) / 100; coRow.getCell(4).numFmt = EUR_FMT; coRow.getCell(4).font = arial({ bold: true, color: { argb: GREEN } });
-  applyPrintLayout(s, 'E', totalRow + 3);
+  // Résiduel (non défini / autres) pour que Franchise + Contrat + Autres = TOTAL
+  // GÉNÉRAL. N'apparaît que s'il existe des lignes hors franchise/contrat.
+  let lastRecap = totalRow + 3;
+  if (Math.round(totAutre * 100) !== 0) {
+    const auRow = s.getRow(totalRow + 4);
+    auRow.getCell(1).value = 'Total NON DÉFINI / autres';
+    auRow.getCell(1).font = arial({ bold: true, color: { argb: GREY } });
+    auRow.getCell(4).value = Math.round(totAutre * 100) / 100; auRow.getCell(4).numFmt = EUR_FMT; auRow.getCell(4).font = arial({ bold: true, color: { argb: GREY } });
+    lastRecap = totalRow + 4;
+  }
+  applyPrintLayout(s, 'E', lastRecap);
 
   // ═══ Feuille 2 — PAR ÉVÉNEMENT (noms + heures) ═══
   const nameRows: PayrollRow[] = persons.map((p) => ({
