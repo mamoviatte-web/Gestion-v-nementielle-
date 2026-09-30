@@ -19,10 +19,12 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
+import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Download, TrendingUp } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Card, SectionTitle } from '@/components/ui';
 import { TrendChart, type TrendPoint } from '@/components/ui/charts/TrendChart';
+import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { EUR, INT, PCT, type ColumnStyle } from '@/lib/excelTheme';
 
 type Tab = 'fb' | 'external' | 'traiteur';
 type EventType = 'tous' | 'match' | 'seminaire' | 'autre';
@@ -143,6 +145,38 @@ function KPICard({ label, value, sub, color = 'stone' }: { label: string; value:
   );
 }
 
+/** En-tête repliable pour les longues tables de détail nominatif (le détail
+ *  ligne-à-ligne complet part dans l'export Excel — cf. downloadAoaWorkbook). */
+function DetailToggle({ open, onToggle, label, count }: { open: boolean; onToggle: () => void; label: string; count: number }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex w-full items-center justify-between gap-2 text-left"
+    >
+      <span className="flex items-center gap-2 font-bold text-stone-800">
+        {open ? <ChevronDown size={16} className="text-stone-400" /> : <ChevronRight size={16} className="text-stone-400" />}
+        {label}
+        <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-semibold text-stone-500">
+          {count} ligne{count > 1 ? 's' : ''}
+        </span>
+      </span>
+      <span className="hidden text-xs font-medium text-stone-400 sm:inline">
+        {open ? 'Masquer' : 'Afficher'} · détail complet dans l’export Excel
+      </span>
+    </button>
+  );
+}
+
+/* Styles de colonnes Excel réutilisés (charte excelTheme). */
+const colEur: ColumnStyle = { numFmt: EUR, align: 'right' };
+const colInt: ColumnStyle = { numFmt: INT, align: 'right' };
+const colPart: ColumnStyle = { numFmt: PCT }; // fraction 0–1 ; texte laissé à gauche
+const colPctNum: ColumnStyle = { numFmt: '0.0" %"', align: 'right' }; // pourcentage déjà en 0–100
+const colLeft: ColumnStyle = { align: 'left' };
+const colCenter: ColumnStyle = { align: 'center' };
+const r2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
+
 function EventComparisonTable({ events, showExternal = false }: { events: FbEventRow[]; showExternal?: boolean }) {
   const [sort, setSort] = useState<{ key: keyof FbEventRow; dir: 'asc' | 'desc' }>({ key: 'event_date', dir: 'desc' });
   const sorted = [...events].sort((a, b) => {
@@ -234,6 +268,12 @@ export default function CostControlPage() {
   const [traiteurs, setTraiteurs] = useState<TraiteurRow[]>([]);
   const [costDetails, setCostDetails] = useState<CostDetailRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  // Replis des longues tables détail (défaut : masqué → priorité synthèse/graphes).
+  const [showFbDetail, setShowFbDetail] = useState(false);
+  const [showExtDetail, setShowExtDetail] = useState(false);
+  const [showPnl, setShowPnl] = useState(false);
+  const [showTraiteurDetail, setShowTraiteurDetail] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -351,6 +391,167 @@ export default function CostControlPage() {
       .sort((a, b) => b.value - a.value);
   }, [extCharges]);
 
+  const hasData = fbEvents.length > 0 || extCharges.length > 0 || traiteurs.length > 0;
+
+  /**
+   * Export Excel complet et habillé (charte excelTheme via downloadAoaWorkbook) :
+   *  - feuille « Synthèse » : KPIs + ventilations coûts (F&B par catégorie,
+   *    charges externes par type) ;
+   *  - feuilles détail : F&B par événement, produits, prestataires, traiteurs —
+   *    toutes les lignes/colonnes + ligne TOTAL. Le détail nominatif ligne-à-ligne
+   *    masqué à l'écran est donc intégralement récupérable ici.
+   */
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      const typeLabel = (t: string): string =>
+        t === 'match' ? 'Match' : SEMINAR_TYPES.includes(t) ? 'Séminaire' : 'Autre';
+
+      // ── Ventilation F&B par catégorie (tous événements clôturés) ──
+      const catDefs: { key: keyof FbEventRow; label: string }[] = [
+        { key: 'vins_ht', label: 'Vins' },
+        { key: 'bieres_ht', label: 'Bières' },
+        { key: 'soft_ht', label: 'Soft' },
+        { key: 'sirops_ht', label: 'Sirops' },
+        { key: 'spiritueux_ht', label: 'Spiritueux' },
+        { key: 'materiel_ht', label: 'Matériel' },
+      ];
+      const catTotals = catDefs.map((c) => ({
+        label: c.label,
+        total: fbEvents.reduce((s, e) => s + (Number(e[c.key]) || 0), 0),
+      }));
+      const fbSum = catTotals.reduce((s, c) => s + c.total, 0);
+      const extTotal = extByType.reduce((s, x) => s + x.value, 0);
+
+      // ── Feuille SYNTHÈSE ──
+      const synthAoa: AoaCell[][] = [
+        ['Contrôle de charges — Provence Rugby · Stade Maurice-David'],
+        [],
+        ['Indicateur', 'Montant HT', 'Part / commentaire'],
+        ['F&B moyen / match', r2(kpis.avgFbMatch), 'par match clôturé'],
+        ['F&B moyen / séminaire', r2(kpis.avgFbSemi), 'par séminaire clôturé'],
+        ['Marge moyenne', `${kpis.avgMarge.toFixed(1)} %`, 'événements avec CA'],
+        ['Charges externes totales', r2(kpis.totalExt), 'traiteurs + prestataires'],
+        ['Total traiteurs HT', r2(kpis.totalTrait), `${traiteurs.length} événement(s)`],
+        [],
+        ['Ventilation F&B par catégorie', 'Coût HT', 'Part'],
+        ...catTotals.map((c): AoaCell[] => [c.label, r2(c.total), fbSum > 0 ? c.total / fbSum : 0]),
+        ['Total', r2(fbSum), fbSum > 0 ? 1 : 0],
+        [],
+        ['Charges externes par type', 'Coût HT', 'Part'],
+        ...extByType.map((x): AoaCell[] => [x.name, r2(x.value), extTotal > 0 ? x.value / extTotal : 0]),
+        ['Total', r2(extTotal), extTotal > 0 ? 1 : 0],
+      ];
+      const sheets: AoaSheetOut[] = [
+        { name: 'Synthèse', aoa: synthAoa, widths: [36, 16, 24], columns: [colLeft, colEur, colPart] },
+      ];
+
+      // ── Feuille DÉTAIL F&B par événement (toutes colonnes) ──
+      if (fbEvents.length) {
+        const header = ['Événement', 'Date', 'Type', 'PAX', 'Vins', 'Bières', 'Soft', 'Sirops', 'Spiritueux', 'Matériel', 'F&B HT', 'RH HT', 'Externes HT', 'Total charges', 'CA HT', 'Gain net', 'Marge %', '€/PAX'];
+        const rows: AoaCell[][] = fbEvents.map((e) => [
+          e.event_name,
+          new Date(e.event_date).toLocaleDateString('fr-FR'),
+          typeLabel(e.event_type),
+          e.pax || 0,
+          r2(e.vins_ht), r2(e.bieres_ht), r2(e.soft_ht), r2(e.sirops_ht), r2(e.spiritueux_ht), r2(e.materiel_ht),
+          r2(e.total_fb_ht), r2(e.rh_ht), r2(e.external_ht), r2(e.total_charges_ht), r2(e.ca_ht), r2(e.gain_net_ht),
+          r2(e.marge_pct), r2(e.fb_per_pax),
+        ]);
+        const sc = (k: keyof FbEventRow) => r2(fbEvents.reduce((s, e) => s + (Number(e[k]) || 0), 0));
+        const total: AoaCell[] = [
+          'Total', '', '', fbEvents.reduce((s, e) => s + (e.pax || 0), 0),
+          sc('vins_ht'), sc('bieres_ht'), sc('soft_ht'), sc('sirops_ht'), sc('spiritueux_ht'), sc('materiel_ht'),
+          sc('total_fb_ht'), sc('rh_ht'), sc('external_ht'), sc('total_charges_ht'), sc('ca_ht'), sc('gain_net_ht'),
+          '', '',
+        ];
+        sheets.push({
+          name: 'F&B par événement',
+          aoa: [['F&B — Consommations par événement'], [], header, ...rows, total],
+          widths: [26, 11, 11, 7, 10, 10, 9, 9, 11, 10, 11, 10, 12, 13, 11, 11, 9, 9],
+          columns: [colLeft, colCenter, colLeft, colInt, colEur, colEur, colEur, colEur, colEur, colEur, colEur, colEur, colEur, colEur, colEur, colEur, colPctNum, colEur],
+        });
+      }
+
+      // ── Feuille DÉTAIL Produits les plus coûteux (classement complet) ──
+      const prodAgg = new Map<string, { name: string; category: string; total: number; events: Set<string> }>();
+      for (const d of costDetails) {
+        const cost = Number(d.line_cost_ht ?? 0);
+        if (cost <= 0) continue;
+        const a = prodAgg.get(d.product_id) ?? { name: d.product_name, category: d.category, total: 0, events: new Set<string>() };
+        a.total += cost;
+        a.events.add(d.event_id);
+        prodAgg.set(d.product_id, a);
+      }
+      const prodList = [...prodAgg.values()].sort((a, b) => b.total - a.total);
+      if (prodList.length) {
+        const rows: AoaCell[][] = prodList.map((p, i) => [
+          i + 1, p.name, p.category, p.events.size, r2(p.total), r2(p.total / p.events.size),
+        ]);
+        const total: AoaCell[] = ['Total', '', '', '', r2(prodList.reduce((s, p) => s + p.total, 0)), ''];
+        sheets.push({
+          name: 'Produits coûteux',
+          aoa: [['Produits les plus coûteux — tous événements'], [], ['Rang', 'Produit', 'Catégorie', 'Nb évts', 'Coût HT total', 'Coût moyen / évt'], ...rows, total],
+          widths: [7, 28, 14, 9, 15, 15],
+          columns: [colInt, colLeft, colLeft, colInt, colEur, colEur],
+        });
+      }
+
+      // ── Feuille DÉTAIL Prestataires externes ──
+      if (extCharges.length) {
+        const rows: AoaCell[][] = extCharges.map((c) => [
+          c.event_name,
+          new Date(c.event_date).toLocaleDateString('fr-FR'),
+          c.provider_name,
+          CHARGE_TYPE_CONFIG[c.charge_type]?.label ?? c.charge_type,
+          r2(c.total_ht),
+          c.cost_per_pax > 0 ? r2(c.cost_per_pax) : '',
+          c.all_confirmed ? 'Confirmé' : 'En attente',
+        ]);
+        const total: AoaCell[] = ['Total', '', '', '', r2(extCharges.reduce((s, c) => s + c.total_ht, 0)), '', ''];
+        sheets.push({
+          name: 'Prestataires externes',
+          aoa: [['Prestataires externes par événement'], [], ['Événement', 'Date', 'Prestataire', 'Type', 'Montant HT', '€/PAX', 'Statut'], ...rows, total],
+          widths: [26, 11, 22, 16, 13, 10, 13],
+          columns: [colLeft, colCenter, colLeft, colLeft, colEur, colEur, colCenter],
+        });
+      }
+
+      // ── Feuille DÉTAIL Traiteurs ──
+      if (traiteurs.length) {
+        const rows: AoaCell[][] = traiteurs.map((t) => [
+          t.event_name,
+          new Date(t.event_date).toLocaleDateString('fr-FR'),
+          t.traiteur_name,
+          t.pax || 0,
+          r2(t.traiteur_ht),
+          t.traiteur_per_pax > 0 ? r2(t.traiteur_per_pax) : '',
+          r2(t.fb_cost_ht),
+          r2(t.ca_ht),
+          r2(t.pct_ca),
+          t.facture_confirmee ? 'Confirmée' : 'En attente',
+        ]);
+        const total: AoaCell[] = [
+          'Total', '', '', traiteurs.reduce((s, t) => s + (t.pax || 0), 0),
+          r2(traiteurs.reduce((s, t) => s + t.traiteur_ht, 0)), '',
+          r2(traiteurs.reduce((s, t) => s + t.fb_cost_ht, 0)),
+          r2(traiteurs.reduce((s, t) => s + t.ca_ht, 0)), '', '',
+        ];
+        sheets.push({
+          name: 'Traiteurs',
+          aoa: [['Traiteurs par événement'], [], ['Événement', 'Date', 'Traiteur', 'PAX', 'Traiteur HT', '€/PAX', 'F&B HT', 'CA HT', '% CA', 'Facture'], ...rows, total],
+          widths: [26, 11, 22, 7, 13, 10, 11, 12, 9, 13],
+          columns: [colLeft, colCenter, colLeft, colInt, colEur, colEur, colEur, colEur, colPctNum, colCenter],
+        });
+      }
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      await downloadAoaWorkbook(sheets, `Controle-charges_Provence-Rugby_${dateStr}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-4 p-8">
@@ -369,16 +570,26 @@ export default function CostControlPage() {
           <h1 className="text-2xl font-bold text-stone-900">Contrôle de charges</h1>
           <p className="mt-1 text-sm text-stone-500">Provence Rugby · Stade Maurice-David — coûts réels liés aux clôtures d'événements</p>
         </div>
-        <div className="flex overflow-hidden rounded-lg border border-stone-200 bg-white text-sm">
-          {(['tous', 'match', 'seminaire', 'autre'] as EventType[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setEventType(t)}
-              className={`px-3 py-2 transition-colors ${eventType === t ? 'bg-stone-900 font-medium text-white' : 'text-stone-600 hover:bg-stone-50'}`}
-            >
-              {t === 'tous' ? 'Tous' : t === 'match' ? '🏉 Match' : t === 'seminaire' ? '📋 Séminaire' : 'Autre'}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex overflow-hidden rounded-lg border border-stone-200 bg-white text-sm">
+            {(['tous', 'match', 'seminaire', 'autre'] as EventType[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setEventType(t)}
+                className={`px-3 py-2 transition-colors ${eventType === t ? 'bg-stone-900 font-medium text-white' : 'text-stone-600 hover:bg-stone-50'}`}
+              >
+                {t === 'tous' ? 'Tous' : t === 'match' ? '🏉 Match' : t === 'seminaire' ? '📋 Séminaire' : 'Autre'}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => void exportExcel()}
+            disabled={!hasData || exporting}
+            className="flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-stone-700 disabled:opacity-40"
+          >
+            <Download size={15} />
+            {exporting ? 'Génération…' : 'Exporter Excel'}
+          </button>
         </div>
       </div>
 
@@ -480,10 +691,12 @@ export default function CostControlPage() {
           </div>
 
           <div className="rounded-xl border border-stone-200 bg-white p-5">
-            <h3 className="mb-4 font-bold text-stone-800">
-              Comparatif événements <span className="ml-2 text-sm font-normal text-stone-400">({filtered.length})</span>
-            </h3>
-            <EventComparisonTable events={filtered} />
+            <DetailToggle open={showFbDetail} onToggle={() => setShowFbDetail((v) => !v)} label="Comparatif événements" count={filtered.length} />
+            {showFbDetail && (
+              <div className="mt-4">
+                <EventComparisonTable events={filtered} />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -545,8 +758,9 @@ export default function CostControlPage() {
           </div>
 
           <div className="rounded-xl border border-stone-200 bg-white p-5">
-            <h3 className="mb-4 font-bold text-stone-800">Détail par événement</h3>
-            <div className="overflow-x-auto">
+            <DetailToggle open={showExtDetail} onToggle={() => setShowExtDetail((v) => !v)} label="Détail par événement" count={extCharges.length} />
+            {showExtDetail && (
+            <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="border-b border-stone-200 bg-stone-50">
                   <tr>
@@ -594,11 +808,16 @@ export default function CostControlPage() {
               </table>
               {extCharges.length === 0 && <p className="py-8 text-center text-sm text-stone-400">Aucune charge externe sur les événements clôturés.</p>}
             </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-stone-200 bg-white p-5">
-            <h3 className="mb-4 font-bold text-stone-800">P&L complet par événement</h3>
-            <EventComparisonTable events={filtered} showExternal />
+            <DetailToggle open={showPnl} onToggle={() => setShowPnl((v) => !v)} label="P&L complet par événement" count={filtered.length} />
+            {showPnl && (
+              <div className="mt-4">
+                <EventComparisonTable events={filtered} showExternal />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -620,8 +839,9 @@ export default function CostControlPage() {
           </div>
 
           <div className="rounded-xl border border-stone-200 bg-white p-5">
-            <h3 className="mb-4 font-bold text-stone-800">Détail par événement</h3>
-            <div className="overflow-x-auto">
+            <DetailToggle open={showTraiteurDetail} onToggle={() => setShowTraiteurDetail((v) => !v)} label="Détail par événement" count={traiteurs.length} />
+            {showTraiteurDetail && (
+            <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="border-b border-stone-200 bg-stone-50">
                   <tr>
@@ -674,6 +894,7 @@ export default function CostControlPage() {
                 </p>
               )}
             </div>
+            )}
           </div>
         </div>
       )}

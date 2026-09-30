@@ -11,11 +11,13 @@ import { useNavigate } from 'react-router-dom';
 import {
   Bar, Cell, ComposedChart, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { AlertTriangle, Calendar, CheckCircle, Download, Users } from 'lucide-react';
+import { AlertTriangle, Calendar, CheckCircle, ChevronDown, ChevronRight, Download, FileSpreadsheet, Users } from 'lucide-react';
 import { PeriodSelector, buildPeriod, type Period } from '@/components/rh/PeriodSelector';
 import { HorsEventSection } from '@/components/rh/HorsEventSection';
 import { useRhData, type EventKpi } from '@/hooks/useRhData';
 import { supabase } from '@/lib/supabase';
+import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { EUR0, HOURS, INT, type ColumnStyle } from '@/lib/excelTheme';
 
 const OR_PR = '#C9A646';
 const BLEU_NUIT = '#1A1A2E';
@@ -52,6 +54,8 @@ export default function StaffRHPage() {
   const [tab, setTab] = useState<ActiveTab>('synthese');
   const [period, setPeriod] = useState<Period>(() => buildPeriod('annee'));
   const [horsCount, setHorsCount] = useState(0);
+  const [showAgents, setShowAgents] = useState(false);
+  const [excelLoading, setExcelLoading] = useState(false);
 
   const { kpis, espaces, agents, unified, byMonth, globalKpis, matchCount, semiCount, loading } = useRhData(eventTab, period);
 
@@ -94,6 +98,148 @@ export default function StaffRHPage() {
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [unified]);
 
+  // ── Export Excel complet et habillé (downloadAoaWorkbook) ──────────────
+  const typeLabel = eventTab === 'match' ? 'Matchs' : 'Séminaires';
+  const PCT_INT = '0"%"'; // taux stockés en entier 0-100 (≠ fraction PCT)
+  const round1 = (n: number) => Number(n.toFixed(1));
+  const frDate = (d: string) => (d ? new Date(d).toLocaleDateString('fr-FR') : '');
+  const slug = (s: string) =>
+    s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const excelFilename = `RH-Staff_${typeLabel}_${slug(period.label)}.xlsx`;
+
+  function buildExcelSheets(): AoaSheetOut[] {
+    const g = globalKpis;
+    if (!g) return [];
+    const L: (s: ColumnStyle) => ColumnStyle = (s) => s;
+    const tauxSup = g.totalHeures > 0 ? (g.totalHSup / g.totalHeures) * 100 : 0;
+
+    // Ventilation par rôle (tri décroissant).
+    const roleSorted = [...chartRoles].sort((a, b) => b.value - a.value);
+    // Ventilation par espace (agrégée sur la période, tri décroissant par coût).
+    const espaceMap = new Map<string, { agents: number; cout: number }>();
+    espaces.forEach((e) => {
+      const cur = espaceMap.get(e.space_name) ?? { agents: 0, cout: 0 };
+      cur.agents += e.nb_agents;
+      cur.cout += e.cout_rh;
+      espaceMap.set(e.space_name, cur);
+    });
+    const espaceSorted = [...espaceMap.entries()]
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.cout - a.cout);
+
+    // ── Feuille 1 : SYNTHÈSE (KPIs + ventilations) ──
+    const synth: AoaCell[][] = [
+      [`Staff & RH — Synthèse — ${period.label} · ${typeLabel}`],
+      [],
+      ['Indicateur', 'Valeur', 'Coût RH (€ HT)'],
+      ['Événements', g.totalEvts, null],
+      ['Agents / événement (moy.)', round1(g.avgAgents), null],
+      ['Heures / agent (moy.)', round1(g.avgHeures), null],
+      ['Heures totales', round1(g.totalHeures), null],
+      ['Heures supplémentaires', round1(g.totalHSup), null],
+      ['Taux heures sup (%)', round1(tauxSup), null],
+      ['Coût RH total', null, Math.round(g.totalCout)],
+      [],
+      ['Répartition par rôle', 'Interventions', 'Coût RH (€ HT)'],
+      ...roleSorted.map((r): AoaCell[] => [r.name, r.value, null]),
+      [],
+      ['Répartition par espace', 'Agents', 'Coût RH (€ HT)'],
+      ...espaceSorted.map((e): AoaCell[] => [e.name, e.agents, Math.round(e.cout)]),
+      ['TOTAL', espaceSorted.reduce((s, e) => s + e.agents, 0), Math.round(espaceSorted.reduce((s, e) => s + e.cout, 0))],
+    ];
+
+    // ── Feuille 2 : PAR AGENT (détail nominatif) ──
+    const agentHeader = ['Agent', 'Rôle', 'Événements', 'Moy. h/evt', 'Heures sup', 'Confirmation', 'Coût total'];
+    const parAgent: AoaCell[][] = [
+      [`Staff & RH — Par agent — ${period.label} · ${typeLabel}`],
+      [],
+      agentHeader,
+      ...agents.map((a): AoaCell[] => [
+        a.agent_nom, a.agent_role, a.nb_evenements, round1(a.moy_heures_par_evt),
+        round1(a.total_heures_sup), a.taux_confirmation_pct, Math.round(a.total_cout_cumul),
+      ]),
+      ['TOTAL', '', agents.reduce((s, a) => s + a.nb_evenements, 0), null,
+        round1(agents.reduce((s, a) => s + a.total_heures_sup, 0)), null,
+        Math.round(agents.reduce((s, a) => s + a.total_cout_cumul, 0))],
+    ];
+
+    // ── Feuille 3 : CUMUL AGENTS (classement) ──
+    const cumul: AoaCell[][] = [
+      [`Staff & RH — Cumul agents — ${period.label} · ${typeLabel}`],
+      [],
+      ['Rang', 'Agent', 'Rôle', 'Événements', 'Heures cumulées', 'Heures sup', 'Coût cumulé', 'Confirmation'],
+      ...agents.map((a, i): AoaCell[] => [
+        i + 1, a.agent_nom, a.agent_role, a.nb_evenements, round1(a.total_heures_cumul),
+        round1(a.total_heures_sup), Math.round(a.total_cout_cumul), a.taux_confirmation_pct,
+      ]),
+      ['TOTAL', '', '', agents.reduce((s, a) => s + a.nb_evenements, 0),
+        round1(agents.reduce((s, a) => s + a.total_heures_cumul, 0)),
+        round1(agents.reduce((s, a) => s + a.total_heures_sup, 0)),
+        Math.round(agents.reduce((s, a) => s + a.total_cout_cumul, 0)), null],
+    ];
+
+    // ── Feuille 4 : PAR ÉVÉNEMENT ──
+    const parEvt: AoaCell[][] = [
+      [`Staff & RH — Par événement — ${period.label} · ${typeLabel}`],
+      [],
+      ['Événement', 'Date', 'Type', 'Pax', 'Agents', 'Espaces', 'Moy. h/agent', 'Heures totales', 'Heures sup', 'Coût RH', 'Confirmation'],
+      ...kpis.map((k): AoaCell[] => [
+        k.event_name, frDate(k.event_date), k.event_type, k.pax_count, k.nb_agents, k.nb_espaces,
+        round1(k.moy_heures_agent), round1(k.total_heures), round1(k.total_heures_sup),
+        Math.round(k.total_cout_rh), k.taux_confirmation_pct,
+      ]),
+      ['TOTAL', '', '', kpis.reduce((s, k) => s + k.pax_count, 0), kpis.reduce((s, k) => s + k.nb_agents, 0),
+        null, null, round1(kpis.reduce((s, k) => s + k.total_heures, 0)),
+        round1(kpis.reduce((s, k) => s + k.total_heures_sup, 0)),
+        Math.round(kpis.reduce((s, k) => s + k.total_cout_rh, 0)), null],
+    ];
+
+    // ── Feuille 5 : PAR ESPACE (détail par ligne événement × espace) ──
+    const espacesSorted = [...espaces].sort((a, b) => a.event_date.localeCompare(b.event_date));
+    const parEspace: AoaCell[][] = [
+      [`Staff & RH — Par espace — ${period.label} · ${typeLabel}`],
+      [],
+      ['Date', 'Espace', 'Service', 'Agents', 'Moy. h/agent', 'Coût RH'],
+      ...espacesSorted.map((e): AoaCell[] => [
+        frDate(e.event_date), e.space_name, e.service_type, e.nb_agents, round1(e.moy_heures), Math.round(e.cout_rh),
+      ]),
+      ['TOTAL', '', '', espacesSorted.reduce((s, e) => s + e.nb_agents, 0), null,
+        Math.round(espacesSorted.reduce((s, e) => s + e.cout_rh, 0))],
+    ];
+
+    // ── Feuille 6 : INTERVENTIONS (ligne-à-ligne agent × événement) ──
+    const evName = new Map(kpis.map((k) => [k.event_id, k.event_name]));
+    const interventions: AoaCell[][] = [
+      [`Staff & RH — Interventions — ${period.label} · ${typeLabel}`],
+      [],
+      ['Agent', 'Rôle', 'Événement', 'Heures', 'Confirmé'],
+      ...unified.map((u): AoaCell[] => [
+        u.agent_nom, u.agent_role, evName.get(u.event_id) ?? u.event_id,
+        u.heures_travaillees == null ? null : round1(u.heures_travaillees), u.confirme_agent ? 'Oui' : 'Non',
+      ]),
+      ['TOTAL', '', '', round1(unified.reduce((s, u) => s + (u.heures_travaillees ?? 0), 0)), ''],
+    ];
+
+    return [
+      { name: 'Synthèse', aoa: synth, widths: [34, 16, 18], columns: [L({ align: 'left' }), L({ align: 'right' }), L({ numFmt: EUR0, align: 'right' })] },
+      { name: 'Par agent', aoa: parAgent, widths: [26, 18, 12, 12, 12, 14, 14], columns: [L({ align: 'left' }), L({ align: 'left' }), L({ numFmt: INT, align: 'right' }), L({ numFmt: HOURS, align: 'right' }), L({ numFmt: HOURS, align: 'right' }), L({ numFmt: PCT_INT, align: 'right' }), L({ numFmt: EUR0, align: 'right' })] },
+      { name: 'Cumul agents', aoa: cumul, widths: [8, 26, 18, 12, 15, 12, 14, 13], columns: [L({ numFmt: INT, align: 'center' }), L({ align: 'left' }), L({ align: 'left' }), L({ numFmt: INT, align: 'right' }), L({ numFmt: HOURS, align: 'right' }), L({ numFmt: HOURS, align: 'right' }), L({ numFmt: EUR0, align: 'right' }), L({ numFmt: PCT_INT, align: 'right' })] },
+      { name: 'Par événement', aoa: parEvt, widths: [28, 12, 13, 8, 9, 9, 13, 14, 11, 13, 13], columns: [L({ align: 'left' }), L({ align: 'center' }), L({ align: 'center' }), L({ numFmt: INT, align: 'right' }), L({ numFmt: INT, align: 'right' }), L({ numFmt: INT, align: 'right' }), L({ numFmt: HOURS, align: 'right' }), L({ numFmt: HOURS, align: 'right' }), L({ numFmt: HOURS, align: 'right' }), L({ numFmt: EUR0, align: 'right' }), L({ numFmt: PCT_INT, align: 'right' })] },
+      { name: 'Par espace', aoa: parEspace, widths: [12, 24, 16, 10, 13, 13], columns: [L({ align: 'center' }), L({ align: 'left' }), L({ align: 'left' }), L({ numFmt: INT, align: 'right' }), L({ numFmt: HOURS, align: 'right' }), L({ numFmt: EUR0, align: 'right' })] },
+      { name: 'Interventions', aoa: interventions, widths: [24, 18, 28, 11, 11], columns: [L({ align: 'left' }), L({ align: 'left' }), L({ align: 'left' }), L({ numFmt: HOURS, align: 'right' }), L({ align: 'center' })] },
+    ];
+  }
+
+  async function handleExportExcel() {
+    if (!globalKpis) return;
+    setExcelLoading(true);
+    try {
+      await downloadAoaWorkbook(buildExcelSheets(), excelFilename);
+    } finally {
+      setExcelLoading(false);
+    }
+  }
+
   const TABS: { key: ActiveTab; label: string }[] = [
     { key: 'synthese', label: 'Synthèse' },
     { key: 'par_agent', label: 'Par agent' },
@@ -115,9 +261,20 @@ export default function StaffRHPage() {
             </div>
             <p className="ml-3.5 mt-1 text-sm text-stone-400">Dimensionnement · heures supplémentaires · efficacité</p>
           </div>
-          <button onClick={() => navigate('/admin/analytics/staff/monthly')} className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50">
-            <Calendar size={15} /> Rapports mensuels
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {!isHorsEvent && (
+              <button
+                onClick={() => void handleExportExcel()}
+                disabled={!globalKpis || loading || excelLoading}
+                className="flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2 text-sm font-bold text-white hover:bg-stone-700 disabled:opacity-40"
+              >
+                <Download size={15} /> {excelLoading ? 'Génération…' : 'Exporter Excel'}
+              </button>
+            )}
+            <button onClick={() => navigate('/admin/analytics/staff/monthly')} className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50">
+              <Calendar size={15} /> Rapports mensuels
+            </button>
+          </div>
         </div>
 
         {/* Toggle Matchs / Séminaires / Hors événement */}
@@ -215,6 +372,23 @@ export default function StaffRHPage() {
 
             {tab === 'par_agent' && (
               <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setShowAgents((v) => !v)}
+                  className="flex w-full items-center justify-between gap-2 border-b border-stone-200 bg-stone-50 px-5 py-3 text-left transition-colors hover:bg-stone-100"
+                >
+                  <span className="flex items-center gap-2 text-sm font-bold text-stone-700">
+                    {showAgents ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    Détail nominatif par agent
+                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-stone-500">
+                      {agents.length} agent{agents.length > 1 ? 's' : ''}
+                    </span>
+                  </span>
+                  <span className="hidden text-xs font-medium text-stone-400 sm:inline">
+                    {showAgents ? 'Masquer' : 'Afficher'} · détail complet dans l'export Excel ↑
+                  </span>
+                </button>
+                {showAgents && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -237,6 +411,7 @@ export default function StaffRHPage() {
                     </tbody>
                   </table>
                 </div>
+                )}
               </div>
             )}
 
@@ -337,6 +512,24 @@ export default function StaffRHPage() {
             {tab === 'export' && (
               <div className="space-y-4 rounded-2xl border border-stone-100 bg-white p-6">
                 <h3 className="font-bold text-stone-800">📥 Export des données RH — <span className="capitalize">{period.label}</span></h3>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-900 bg-stone-900 p-4">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-2 text-sm font-bold text-white">
+                      <FileSpreadsheet size={16} className="text-emerald-400" /> Classeur Excel complet et habillé
+                    </p>
+                    <p className="mt-0.5 text-xs text-stone-300">
+                      6 feuilles : Synthèse (KPIs + ventilations), Par agent, Cumul agents, Par événement, Par espace, Interventions (détail ligne-à-ligne).
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => void handleExportExcel()}
+                    disabled={!globalKpis || excelLoading}
+                    className="flex shrink-0 items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-bold text-stone-900 hover:bg-stone-100 disabled:opacity-40"
+                  >
+                    <Download size={14} /> {excelLoading ? 'Génération…' : 'Exporter Excel'}
+                  </button>
+                </div>
+                <p className="pt-1 text-xs font-semibold uppercase tracking-wide text-stone-400">Exports rapides (CSV)</p>
                 {[
                   { label: 'Synthèse par événement (CSV)', rows: () => kpis.map((k) => ({ evenement: k.event_name, date: k.event_date, agents: k.nb_agents, moy_heures: k.moy_heures_agent, cout_rh: k.total_cout_rh, confirmation_pct: k.taux_confirmation_pct })), file: 'rh_evenements' },
                   { label: 'Cumul par agent (CSV)', rows: () => agents.map((a) => ({ agent: a.agent_nom, role: a.agent_role, evenements: a.nb_evenements, heures_cumul: a.total_heures_cumul, heures_sup: a.total_heures_sup, cout_cumul: a.total_cout_cumul, confirmation_pct: a.taux_confirmation_pct })), file: 'rh_agents' },

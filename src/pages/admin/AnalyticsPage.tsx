@@ -10,9 +10,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { ChevronRight, RefreshCw, Zap } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, RefreshCw, Zap } from 'lucide-react';
 import { AnalyseSeminaire } from '@/components/analytics/AnalyseSeminaire';
 import { SuiviFuts } from '@/components/analytics/SuiviFuts';
+import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { DEC1, EUR, INT, PCT } from '@/lib/excelTheme';
 
 /* ─── Constantes visuelles ──────────────────────────────────────────────── */
 
@@ -324,6 +326,8 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalc] = useState(false);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const isSemi = filter === 'seminaire';
 
@@ -426,6 +430,212 @@ export default function AnalyticsPage() {
   const filterLabel: Record<EventFilter, string> = { tous: 'Tout', match: '🏉 Match', seminaire: '📋 Séminaire' };
   const aggLabel = isSemi ? 'Tous les séminaires' : 'Tous les matchs';
 
+  // Libellé de la sélection courante (pour titres de feuilles + nom de fichier).
+  const scopeLabel =
+    scope === 'all' ? aggLabel : events.find((e) => e.event_id === scope)?.event_name ?? 'Événement';
+
+  // Export vide si aucune donnée exploitable sur la sélection.
+  const hasExportData = !!data && (classement.length > 0 || donutData.length > 0 || heatmap.length > 0);
+
+  /**
+   * Export Excel complet et habillé (charte excelTheme via downloadAoaWorkbook) :
+   *  - Synthèse : KPIs de la sélection.
+   *  - Par catégorie / Par buvette : ventilations avec ligne TOTAL.
+   *  - Classement produits : détail ligne-à-ligne COMPLET (toutes lignes/colonnes).
+   *  - Suggestions : reco prochain match (si historique disponible).
+   * L'écran ne montre que la synthèse + le top ; le détail complet part ici.
+   */
+  async function handleExport() {
+    if (!data) return;
+    setExporting(true);
+    try {
+      const kpi = data.kpis;
+      const label = scopeLabel;
+
+      // Feuille 1 — Synthèse (KPIs, valeurs pré-formatées FR).
+      const synthese: AoaCell[][] = [
+        [`Analyses — ${label} — Synthèse`],
+        [],
+        ['Indicateur', 'Valeur', 'Commentaire'],
+        [
+          'Unités consommées',
+          kpi.unites_consommees.toLocaleString('fr-FR'),
+          `${kpi.produits_actifs} produit(s) actif(s)`,
+        ],
+        [
+          'Coût consommations HT',
+          kpi.cout_ht.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €',
+          'F&B consommé',
+        ],
+        [
+          'Taux de retour moyen',
+          kpi.taux_retour_moyen.toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' %',
+          kpi.taux_retour_moyen > 20 ? 'À optimiser' : 'Bon niveau',
+        ],
+        [
+          'Buvette la plus active',
+          kpi.buvette_active?.code ?? '—',
+          kpi.buvette_active ? `${kpi.buvette_active.unites} unités` : 'Pas encore de données',
+        ],
+        ['Événements analysés', data.nb_matchs, label],
+      ];
+
+      // Feuille 2 — Ventilation par catégorie (tri décroissant + TOTAL).
+      const catRows = [...data.categories].sort((a, b) => b.unites - a.unites);
+      const catTotal = catRows.reduce((s, c) => s + c.unites, 0);
+      const parCategorie: AoaCell[][] = [
+        [`Ventilation par catégorie — ${label}`],
+        [],
+        ['Catégorie', 'Unités consommées', 'Part'],
+        ...catRows.map((c): AoaCell[] => [c.categorie, Math.round(c.unites), catTotal > 0 ? c.unites / catTotal : 0]),
+        ['Total', Math.round(catTotal), catTotal > 0 ? 1 : 0],
+      ];
+
+      // Feuille 3 — Consommation par buvette (tri décroissant + TOTAL).
+      const buvRows = [...data.buvettes].sort((a, b) => b.total_consumed - a.total_consumed);
+      const parBuvette: AoaCell[][] = [
+        [`Consommation par buvette — ${label}`],
+        [],
+        ['Buvette', 'Unités consommées', 'Coût HT', 'Événements', 'Top produit'],
+        ...buvRows.map((b): AoaCell[] => [
+          b.code,
+          Math.round(b.total_consumed),
+          b.total_cost,
+          b.nb_events,
+          b.top_produit ?? '—',
+        ]),
+        [
+          'Total',
+          Math.round(buvRows.reduce((s, b) => s + b.total_consumed, 0)),
+          buvRows.reduce((s, b) => s + b.total_cost, 0),
+          '',
+          '',
+        ],
+      ];
+
+      // Feuille 4 — Classement produits : DÉTAIL COMPLET ligne-à-ligne.
+      const clRows = [...classement].sort((a, b) => b.total_consumed - a.total_consumed);
+      const totalUnits = clRows.reduce((s, p) => s + p.total_consumed, 0);
+      const totalCost = clRows.reduce(
+        (s, p) => s + (p.cout_unitaire != null ? p.total_consumed * p.cout_unitaire : 0),
+        0,
+      );
+      const classementSheet: AoaCell[][] = [
+        [`Classement produits — ${label}`],
+        [],
+        [
+          'Rang',
+          'Produit',
+          'Catégorie',
+          'Unités consommées',
+          'Taux de retour',
+          'Coût unitaire HT',
+          'Nb événements',
+          'Coût total estimé HT',
+        ],
+        ...clRows.map((p, i): AoaCell[] => [
+          i + 1,
+          p.product_name,
+          p.category,
+          Math.round(p.total_consumed),
+          p.taux_retour / 100,
+          p.cout_unitaire,
+          p.nb_events,
+          p.cout_unitaire != null ? p.total_consumed * p.cout_unitaire : null,
+        ]),
+        ['Total', '', '', Math.round(totalUnits), '', '', '', totalCost],
+      ];
+
+      const sheets: AoaSheetOut[] = [
+        {
+          name: 'Synthèse',
+          aoa: synthese,
+          widths: [28, 20, 34],
+          columns: [{ align: 'left' }, { align: 'left' }, { align: 'left' }],
+        },
+        {
+          name: 'Par catégorie',
+          aoa: parCategorie,
+          widths: [20, 20, 12],
+          columns: [undefined, { numFmt: INT, align: 'right' }, { numFmt: PCT, align: 'right' }],
+        },
+        {
+          name: 'Par buvette',
+          aoa: parBuvette,
+          widths: [16, 20, 16, 14, 28],
+          columns: [
+            undefined,
+            { numFmt: INT, align: 'right' },
+            { numFmt: EUR, align: 'right' },
+            { numFmt: INT, align: 'right' },
+            undefined,
+          ],
+        },
+        {
+          name: 'Classement produits',
+          aoa: classementSheet,
+          widths: [7, 32, 16, 18, 14, 16, 14, 20],
+          columns: [
+            { numFmt: INT, align: 'center' },
+            undefined,
+            undefined,
+            { numFmt: INT, align: 'right' },
+            { numFmt: PCT, align: 'right' },
+            { numFmt: EUR, align: 'right' },
+            { numFmt: INT, align: 'right' },
+            { numFmt: EUR, align: 'right' },
+          ],
+        },
+      ];
+
+      // Feuille 5 — Suggestions (seulement si un historique existe).
+      const sug = suggestions
+        .filter((p) => p.avg_conso_match > 0)
+        .sort((a, b) => b.avg_conso_match - a.avg_conso_match);
+      if (sug.length > 0) {
+        const sugSheet: AoaCell[][] = [
+          ['Suggestions prochain match — moyenne historique + 20 % de marge'],
+          [],
+          ['Produit', 'Catégorie', 'Unité', 'Moyenne / match', 'Qté suggérée', 'Taux de retour'],
+          ...sug.map((p): AoaCell[] => [
+            p.product_name,
+            p.category,
+            p.unit,
+            p.avg_conso_match,
+            Math.ceil(p.avg_conso_match * 1.2),
+            p.taux_retour_pct / 100,
+          ]),
+        ];
+        sheets.push({
+          name: 'Suggestions',
+          aoa: sugSheet,
+          widths: [30, 16, 10, 16, 14, 14],
+          columns: [
+            undefined,
+            undefined,
+            undefined,
+            { numFmt: DEC1, align: 'right' },
+            { numFmt: INT, align: 'right' },
+            { numFmt: PCT, align: 'right' },
+          ],
+        });
+      }
+
+      const now = new Date();
+      const dstr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+        now.getDate(),
+      ).padStart(2, '0')}`;
+      const slug = label
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      await downloadAoaWorkbook(sheets, `Analyses_${slug}_${dstr}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="min-h-screen" style={{ background: '#FAFAF8' }}>
       <div className="mx-auto max-w-7xl space-y-6 p-6">
@@ -476,6 +686,17 @@ export default function AnalyticsPage() {
               <RefreshCw size={14} className={recalculating ? 'animate-spin' : ''} />
               Recalculer
             </button>
+            {!isSemi && (
+              <button
+                onClick={() => void handleExport()}
+                disabled={exporting || loading || !hasExportData}
+                className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-40"
+                style={{ background: BLEU_NUIT }}
+              >
+                <Download size={14} className={exporting ? 'animate-pulse' : ''} />
+                {exporting ? 'Génération…' : 'Exporter Excel'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -554,21 +775,21 @@ export default function AnalyticsPage() {
             {/* Suivi des fûts (masqué si aucun fût, ex. scope séminaire) */}
             <SuiviFuts scope={scope} />
 
-            {/* Classement produits */}
+            {/* Classement produits — top visible, détail complet replié → export Excel */}
             <div className="rounded-2xl border border-stone-100 bg-white shadow-sm">
               <div className="flex items-center justify-between px-5 pb-3 pt-5">
                 <div>
                   <h3 className="text-lg font-bold text-stone-900">🏅 Classement produits</h3>
                   <p className="mt-0.5 text-xs text-stone-400">
-                    {classement.length} produit(s) · triés par consommation
+                    {classement.length} produit(s) · triés par consommation décroissante
                   </p>
                 </div>
               </div>
-              <div className="divide-y divide-stone-50 px-3 pb-4">
+              <div className="divide-y divide-stone-50 px-3 pb-1">
                 {classement.length === 0 ? (
                   <p className="py-12 text-center text-sm text-stone-400">Aucun produit consommé sur cette sélection.</p>
                 ) : (
-                  classement.slice(0, 25).map((p, i) => (
+                  classement.slice(0, 8).map((p, i) => (
                     <ProductBar
                       key={`${p.product_name}-${i}`}
                       rank={i + 1}
@@ -583,6 +804,43 @@ export default function AnalyticsPage() {
                   ))
                 )}
               </div>
+
+              {classement.length > 8 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowDetail((v) => !v)}
+                    className="flex w-full items-center justify-between gap-2 border-t border-stone-100 px-5 py-3 text-left transition-colors hover:bg-stone-50"
+                  >
+                    <span className="flex items-center gap-2 text-sm font-semibold text-stone-600">
+                      {showDetail ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      {showDetail
+                        ? 'Masquer le détail complet'
+                        : `Afficher les ${classement.length - 8} autres produits`}
+                    </span>
+                    <span className="hidden text-xs text-stone-400 sm:inline">
+                      détail complet dans l'export Excel ↑
+                    </span>
+                  </button>
+                  {showDetail && (
+                    <div className="divide-y divide-stone-50 border-t border-stone-100 px-3 pb-4">
+                      {classement.slice(8).map((p, i) => (
+                        <ProductBar
+                          key={`${p.product_name}-${i + 8}`}
+                          rank={i + 9}
+                          name={p.product_name}
+                          category={p.category}
+                          value={p.total_consumed}
+                          max={maxConso}
+                          taux_retour={p.taux_retour}
+                          unit_price={p.cout_unitaire}
+                          nb_events={p.nb_events}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {/* Suggestions prochain match (agrégées, indépendantes du scope) */}
