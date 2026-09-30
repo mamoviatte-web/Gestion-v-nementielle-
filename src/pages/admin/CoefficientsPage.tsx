@@ -8,20 +8,37 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { RefreshCw, RotateCcw, AlertTriangle } from 'lucide-react';
+import { RefreshCw, RotateCcw, AlertTriangle, ChevronDown, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { INT, DEC1, PCT, type ColumnStyle } from '@/lib/excelTheme';
 
 interface Row {
   space_name: string; service_type: string | null; product_name: string; category: string; unit: string;
-  moy_historique: number; coeff_espace: number; qte_recommandee: number | null; nb_matchs_historique: number;
+  moy_historique: number; std_deviation: number; coeff_espace: number; qte_recommandee: number | null; nb_matchs_historique: number;
   confidence_level: string; min_consumption: number; max_consumption: number;
-  conso_per_100_pax: number; pax_normalized: boolean; avg_pax_match: number;
+  conso_per_100_pax: number; pax_normalized: boolean; avg_pax_match: number; last_computed_at: string | null;
 }
 
 const num = (v: unknown): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
+
+/* Niveaux de confiance : ordre + palette (identiques à FactorsVizPanel). */
+const CONF_ORDER = ['très élevé', 'élevé', 'moyen', 'faible'];
+const CONF_COLOR: Record<string, string> = {
+  'très élevé': '#1D7A46', 'élevé': '#4FA96B', 'moyen': '#C98A1E', 'faible': '#B03A2E',
+};
+
+/* Styles de colonnes Excel (charte excelTheme). */
+const colLeft: ColumnStyle = { align: 'left' };
+const colCenter: ColumnStyle = { align: 'center' };
+const colDec1: ColumnStyle = { numFmt: DEC1, align: 'right' };
+const colCoeff: ColumnStyle = { numFmt: '0.00', align: 'right' };
+const colInt: ColumnStyle = { numFmt: INT, align: 'right' };
+const colIntC: ColumnStyle = { numFmt: INT, align: 'center' };
+const colPart: ColumnStyle = { numFmt: PCT };
 
 const coeffStyle = (c: number) =>
   c >= 1.5 ? { color: '#DC2626', bg: 'bg-red-50', label: '🔺 Forte' }
@@ -58,6 +75,8 @@ export default function CoefficientsPage() {
   const [filterCat, setFilterCat] = useState('');
   const [sortBy, setSortBy] = useState<'coeff_desc' | 'coeff_asc' | 'moy'>('coeff_desc');
   const [simulPax, setSimulPax] = useState<number>(0);
+  const [showTable, setShowTable] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   async function fetchData() {
     setLoading(true);
@@ -65,12 +84,12 @@ export default function CoefficientsPage() {
     setData((rows ?? []).map((r): Row => ({
       space_name: String(r.space_name), service_type: r.service_type == null ? null : String(r.service_type),
       product_name: String(r.product_name), category: String(r.category), unit: String(r.unit ?? ''),
-      moy_historique: num(r.moy_historique), coeff_espace: num(r.coeff_espace),
+      moy_historique: num(r.moy_historique), std_deviation: num(r.std_deviation), coeff_espace: num(r.coeff_espace),
       qte_recommandee: r.qte_recommandee == null ? null : num(r.qte_recommandee),
       nb_matchs_historique: num(r.nb_matchs_historique), confidence_level: String(r.confidence_level ?? 'faible'),
       min_consumption: num(r.min_consumption), max_consumption: num(r.max_consumption),
       conso_per_100_pax: num(r.conso_per_100_pax), pax_normalized: r.pax_normalized === true,
-      avg_pax_match: num(r.avg_pax_match),
+      avg_pax_match: num(r.avg_pax_match), last_computed_at: r.last_computed_at == null ? null : String(r.last_computed_at),
     })));
     setLoading(false);
   }
@@ -115,6 +134,95 @@ export default function CoefficientsPage() {
   const highDemand = data.filter((d) => d.coeff_espace >= 1.3).length;
   const lowDemand = data.filter((d) => d.coeff_espace <= 0.7).length;
 
+  // Dernier recalcul (max des dates de calcul).
+  const lastComputed = useMemo(() => {
+    const ds = data.map((d) => d.last_computed_at).filter(Boolean) as string[];
+    return ds.length ? ds.sort().slice(-1)[0] : null;
+  }, [data]);
+  const lastComputedLabel = lastComputed
+    ? new Date(lastComputed).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+    : '—';
+
+  // Répartition par niveau de confiance.
+  const confDist = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of data) m.set(d.confidence_level, (m.get(d.confidence_level) ?? 0) + 1);
+    const total = [...m.values()].reduce((s, v) => s + v, 0) || 1;
+    return CONF_ORDER.filter((c) => m.has(c)).map((c) => ({ level: c, n: m.get(c) ?? 0, pct: Math.round(((m.get(c) ?? 0) / total) * 100) }));
+  }, [data]);
+
+  // Top coefficients (demande la plus forte), triés décroissant.
+  const topCoeffs = useMemo(() => [...data].sort((a, b) => b.coeff_espace - a.coeff_espace).slice(0, 12), [data]);
+  const coeffMax = useMemo(() => Math.max(1, ...topCoeffs.map((r) => r.coeff_espace)), [topCoeffs]);
+
+  /**
+   * Export Excel complet et habillé (charte excelTheme via downloadAoaWorkbook) :
+   *  - feuille « Synthèse » : KPIs + répartition de confiance + top coefficients ;
+   *  - feuille « Coefficients » : détail ligne-à-ligne complet (toutes colonnes,
+   *    tous les couples espace × produit, hors filtre écran).
+   */
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      const totalConf = confDist.reduce((s, c) => s + c.n, 0);
+      const synthAoa: AoaCell[][] = [
+        ['Coefficients de consommation — Provence Rugby · Stade Maurice-David'],
+        [],
+        ['Indicateur', 'Valeur', 'Détail'],
+        ['Combinaisons espace × produit', data.length, 'couples analysés'],
+        ['Anomalies (×1.5 ou ÷2)', anomalies, 'coefficient extrême'],
+        ['Forte demande (coeff > 1.3)', highDemand, ''],
+        ['Faible demande (coeff < 0.7)', lowDemand, ''],
+        ['Dernier recalcul', lastComputedLabel, ''],
+        [],
+        ['Répartition par niveau de confiance', 'Nb couples', 'Part'],
+        ...confDist.map((c): AoaCell[] => [c.level, c.n, totalConf > 0 ? c.n / totalConf : 0]),
+        ['Total', totalConf, totalConf > 0 ? 1 : 0],
+        [],
+        ['Top coefficients', 'Coefficient', 'Espace — Produit'],
+        ...topCoeffs.map((r): AoaCell[] => [`${r.space_name} — ${r.product_name}`, r.coeff_espace, r.category]),
+      ];
+
+      const detail = [...data].sort(
+        (a, b) => a.space_name.localeCompare(b.space_name, 'fr') || b.coeff_espace - a.coeff_espace,
+      );
+      const detailAoa: AoaCell[][] = [
+        ['Détail des coefficients — espace × produit'],
+        [],
+        ['Espace', 'Service', 'Produit', 'Catégorie', 'Moy./match', 'Écart-type', 'Coefficient', 'Signal', '/100 pax', 'Nb matchs', 'Confiance', 'Recommandé', 'Min', 'Max'],
+        ...detail.map((r): AoaCell[] => [
+          r.space_name,
+          r.service_type ?? '',
+          r.product_name,
+          r.category,
+          r.moy_historique,
+          r.std_deviation,
+          r.coeff_espace,
+          coeffStyle(r.coeff_espace).label,
+          r.pax_normalized ? r.conso_per_100_pax : '—',
+          r.nb_matchs_historique,
+          r.confidence_level,
+          r.qte_recommandee ?? '—',
+          r.min_consumption,
+          r.max_consumption,
+        ]),
+      ];
+
+      const sheets: AoaSheetOut[] = [
+        { name: 'Synthèse', aoa: synthAoa, widths: [40, 16, 30], columns: [colLeft, { align: 'right' }, colPart] },
+        {
+          name: 'Coefficients',
+          aoa: detailAoa,
+          widths: [22, 12, 26, 13, 12, 11, 12, 12, 10, 10, 13, 12, 8, 8],
+          columns: [colLeft, colCenter, colLeft, colLeft, colDec1, colDec1, colCoeff, colCenter, colDec1, colIntC, colCenter, colInt, colInt, colInt],
+        },
+      ];
+      await downloadAoaWorkbook(sheets, `Coefficients-consommation_Provence-Rugby_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-6" style={{ background: '#FAFAF8' }}>
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -126,6 +234,9 @@ export default function CoefficientsPage() {
           <p className="ml-3.5 mt-1 text-sm text-stone-400">Dotations intelligentes par espace spécifique · historique des matchs clôturés</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => void exportExcel()} disabled={exporting || data.length === 0} className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">
+            <FileSpreadsheet size={14} /> {exporting ? 'Export…' : 'Exporter Excel'}
+          </button>
           <button onClick={() => void recompute()} disabled={computing || resetting} className="flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">
             <RefreshCw size={14} className={computing ? 'animate-spin' : ''} /> {computing ? 'Recalcul…' : 'Recalculer'}
           </button>
@@ -178,6 +289,59 @@ export default function CoefficientsPage() {
             <p className="text-3xl font-black text-stone-900">{k.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* ── Synthèse & graphes ── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Répartition des niveaux de confiance + dernier recalcul */}
+        <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-bold text-stone-700">🎯 Fiabilité — niveaux de confiance</h3>
+            <span className="text-xs text-stone-400">Dernier recalcul : {lastComputedLabel}</span>
+          </div>
+          {confDist.length > 0 ? (
+            <>
+              <div className="flex h-4 w-full overflow-hidden rounded-full bg-stone-100">
+                {confDist.map((c) => (
+                  <div key={c.level} className="h-full" style={{ width: `${c.pct}%`, background: CONF_COLOR[c.level] ?? '#94A2B3' }} title={`${c.level} : ${c.n} couple(s) (${c.pct} %)`} />
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
+                {confDist.map((c) => (
+                  <span key={c.level} className="flex items-center gap-1.5 text-xs text-stone-600">
+                    <span className="h-2.5 w-2.5 rounded-sm" style={{ background: CONF_COLOR[c.level] ?? '#94A2B3' }} />
+                    {c.level} · <span className="font-semibold tabular-nums">{c.n}</span> <span className="text-stone-400">({c.pct} %)</span>
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="py-6 text-center text-sm text-stone-400">Aucun coefficient calculé.</p>
+          )}
+        </div>
+
+        {/* Top coefficients (demande la plus forte) — barres décroissantes */}
+        <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
+          <h3 className="mb-3 text-sm font-bold text-stone-700">🔝 Top coefficients (demande la plus forte)</h3>
+          {topCoeffs.length > 0 ? (
+            <div className="space-y-1.5">
+              {topCoeffs.map((r) => {
+                const s = coeffStyle(r.coeff_espace);
+                return (
+                  <div key={`${r.space_name}-${r.product_name}`} className="flex items-center gap-2" title={`${r.space_name} — ${r.product_name} · ×${r.coeff_espace.toFixed(2)}`}>
+                    <span className="w-36 shrink-0 truncate text-xs font-medium text-stone-600 sm:w-44">{r.product_name}</span>
+                    <div className="h-4 flex-1 overflow-hidden rounded bg-stone-100">
+                      <div className="h-full rounded" style={{ width: `${(r.coeff_espace / coeffMax) * 100}%`, background: s.color }} />
+                    </div>
+                    <span className="w-12 shrink-0 text-right text-xs font-bold tabular-nums" style={{ color: s.color }}>×{r.coeff_espace.toFixed(2)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="py-6 text-center text-sm text-stone-400">Aucun coefficient calculé.</p>
+          )}
+        </div>
       </div>
 
       <div className="rounded-2xl border border-stone-100 bg-white p-5 shadow-sm">
@@ -239,6 +403,23 @@ export default function CoefficientsPage() {
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm">
+        <button
+          type="button"
+          onClick={() => setShowTable((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 border-b border-stone-100 bg-stone-50 px-4 py-3 text-left transition-colors hover:bg-stone-100"
+        >
+          <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-stone-500">
+            {showTable ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+            Détail des coefficients ligne-à-ligne
+            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-stone-500">
+              {filtered.length} ligne{filtered.length > 1 ? 's' : ''}
+            </span>
+          </span>
+          <span className="hidden text-[11px] font-medium normal-case tracking-normal text-stone-400 sm:inline">
+            {showTable ? 'Masquer' : 'Afficher'} · détail complet dans l'export Excel ↑
+          </span>
+        </button>
+        {showTable && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -300,6 +481,7 @@ export default function CoefficientsPage() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   );

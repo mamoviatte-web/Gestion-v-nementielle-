@@ -1,6 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CalendarDays, ChevronRight, Plus, FileText, Trash2, CheckSquare } from 'lucide-react';
+import {
+  CalendarDays,
+  ChevronRight,
+  Plus,
+  FileText,
+  Trash2,
+  CheckSquare,
+  Download,
+} from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEventsList } from '@/hooks/useEvents';
 import { useEventsRiskMap } from '@/hooks/useEventDeletion';
@@ -21,9 +29,11 @@ import {
 import { CreateEventModal } from '@/components/events/CreateEventModal';
 import { ConfirmDeleteModal, BulkDeleteModal } from '@/components/events/DeleteEventModals';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Alert, Badge, Button, EmptyState, Input, Select, Spinner } from '@/components/ui';
+import { Alert, Badge, Button, EmptyState, Input, Select, Spinner, StatTile } from '@/components/ui';
+import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { INT, PCT, type ColumnStyle } from '@/lib/excelTheme';
 import { clsx } from 'clsx';
-import type { Event, EventStatus } from '@/lib/types';
+import type { Event, EventStatus, EventType } from '@/lib/types';
 
 function useEventsWithFeuilles() {
   return useQuery({
@@ -39,6 +49,23 @@ function useEventsWithFeuilles() {
   });
 }
 
+/** Nombre d'espaces activés par événement (pour la synthèse + l'export). */
+function useEventSpaceCounts() {
+  return useQuery({
+    queryKey: ['eventSpaceCounts'],
+    staleTime: 30_000,
+    queryFn: async (): Promise<Record<string, number>> => {
+      const { data, error } = await supabase.from('event_spaces').select('event_id');
+      if (error) return {};
+      const counts: Record<string, number> = {};
+      for (const r of (data ?? []) as { event_id: string }[]) {
+        counts[r.event_id] = (counts[r.event_id] ?? 0) + 1;
+      }
+      return counts;
+    },
+  });
+}
+
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Tous les statuts' },
   ...(Object.keys(EVENT_STATUS_META) as EventStatus[]).map((value) => ({
@@ -47,9 +74,29 @@ const STATUS_OPTIONS = [
   })),
 ];
 
+/* Styles de colonnes Excel (charte excelTheme) réutilisés par l'export. */
+const colLeft: ColumnStyle = { align: 'left' };
+const colCenter: ColumnStyle = { align: 'center' };
+const colInt: ColumnStyle = { numFmt: INT, align: 'right' };
+const colPart: ColumnStyle = { numFmt: PCT };
+
+/** Libellé lisible d'un type d'événement (null → « Non défini »). */
+function typeLabel(type: EventType | null): string {
+  return type ? EVENT_TYPE_META[type].label : 'Non défini';
+}
+
+/** Date FR courte, sûre même si la date est absente/invalide. */
+function frDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('fr-FR');
+}
+
 export default function EventsPage() {
   const { data: events, isLoading, error } = useEventsList();
   const { data: feuilleEvents } = useEventsWithFeuilles();
+  const { data: spaceCounts } = useEventSpaceCounts();
+  const [exporting, setExporting] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Event | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -64,6 +111,122 @@ export default function EventsPage() {
   const list = useMemo(() => events ?? [], [events]);
   const riskMapQuery = useEventsRiskMap(list.map((e) => e.event_id));
   const riskMap = riskMapQuery.data ?? {};
+  const counts_ = spaceCounts ?? {};
+
+  /**
+   * Synthèse globale (toute la liste, hors filtres) : compteurs par statut / type,
+   * prochain événement à venir, pax cumulés. Base des KPIs et des mini-graphes.
+   */
+  const summary = useMemo(() => {
+    const byStatus = new Map<EventStatus, number>();
+    const byType = new Map<string, number>();
+    let totalPax = 0;
+    for (const e of list) {
+      byStatus.set(e.status, (byStatus.get(e.status) ?? 0) + 1);
+      const tl = typeLabel(e.event_type);
+      byType.set(tl, (byType.get(tl) ?? 0) + 1);
+      totalPax += e.expected_attendees ?? 0;
+    }
+    // Statuts dans l'ordre du cycle de vie (compteur toujours affiché, même à 0).
+    const statusRows = (Object.keys(EVENT_STATUS_META) as EventStatus[]).map((s) => ({
+      key: s,
+      label: EVENT_STATUS_META[s].label,
+      count: byStatus.get(s) ?? 0,
+    }));
+    const typeRows = [...byType.entries()]
+      .map(([label, count]) => ({ key: label, label, count }))
+      .sort((a, b) => b.count - a.count);
+    const matchsCount = list.filter((e) => tabForEventType(e.event_type) === 'matchs').length;
+
+    // Prochain événement à venir (date ≥ aujourd'hui, la plus proche).
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const upcoming = list
+      .filter((e) => {
+        const d = new Date(e.event_date);
+        return !Number.isNaN(d.getTime()) && d >= today;
+      })
+      .sort((a, b) => a.event_date.localeCompare(b.event_date));
+
+    return {
+      total: list.length,
+      totalPax,
+      matchsCount,
+      clotures: byStatus.get('clôturé') ?? 0,
+      statusRows,
+      typeRows,
+      next: upcoming[0] ?? null,
+    };
+  }, [list]);
+
+  /** Export Excel complet et habillé de la liste des événements (charte excelTheme). */
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      // ── Feuille SYNTHÈSE : compteurs par statut / type + KPIs ──
+      const total = summary.total;
+      const synthAoa: AoaCell[][] = [
+        ['Événements — Provence Rugby · Stade Maurice-David'],
+        [],
+        ['Indicateur', 'Valeur'],
+        ['Total événements', total],
+        ['Prochain événement', summary.next ? `${summary.next.event_name} (${frDate(summary.next.event_date)})` : '—'],
+        ['Matchs', summary.matchsCount],
+        ['Clôturés', summary.clotures],
+        ['Pax attendus cumulés', summary.totalPax],
+        [],
+        ['Répartition par statut', 'Nombre', 'Part'],
+        ...summary.statusRows.map((r): AoaCell[] => [r.label, r.count, total > 0 ? r.count / total : 0]),
+        ['Total', total, total > 0 ? 1 : 0],
+        [],
+        ['Répartition par type', 'Nombre', 'Part'],
+        ...summary.typeRows.map((r): AoaCell[] => [r.label, r.count, total > 0 ? r.count / total : 0]),
+        ['Total', total, total > 0 ? 1 : 0],
+      ];
+
+      // ── Feuille ÉVÉNEMENTS : toutes les colonnes + ligne TOTAL ──
+      const header: AoaCell[] = [
+        'Événement', 'Type', 'Date', 'Début', 'Fin', 'Pax attendus', 'Statut', 'Espaces', 'Saison',
+      ];
+      const rows: AoaCell[][] = [...list]
+        .sort((a, b) => b.event_date.localeCompare(a.event_date))
+        .map((e) => [
+          e.event_name,
+          typeLabel(e.event_type),
+          frDate(e.event_date),
+          e.start_time ? e.start_time.slice(0, 5) : '',
+          e.end_time ? e.end_time.slice(0, 5) : '',
+          e.expected_attendees ?? 0,
+          EVENT_STATUS_META[e.status].label,
+          counts_[e.event_id] ?? 0,
+          seasonKey(e.event_date),
+        ]);
+      const totalSpaces = list.reduce((s, e) => s + (counts_[e.event_id] ?? 0), 0);
+      const totalRow: AoaCell[] = [
+        'Total', '', '', '', '', summary.totalPax, `${total} événement(s)`, totalSpaces, '',
+      ];
+
+      const sheets: AoaSheetOut[] = [
+        {
+          name: 'Synthèse',
+          aoa: synthAoa,
+          widths: [34, 16, 12],
+          columns: [colLeft, colInt, colPart],
+        },
+        {
+          name: 'Événements',
+          aoa: [['Liste des événements — Provence Rugby'], [], header, ...rows, totalRow],
+          widths: [30, 18, 13, 8, 8, 13, 18, 9, 12],
+          columns: [colLeft, colLeft, colCenter, colCenter, colCenter, colInt, colLeft, colInt, colCenter],
+        },
+      ];
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      await downloadAoaWorkbook(sheets, `Evenements_Provence-Rugby_${dateStr}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const seasons = useMemo(() => getAvailableSeasons(list), [list]);
   const seasonOptions = [
@@ -123,6 +286,14 @@ export default function EventsPage() {
             <Button
               size="sm"
               variant="secondary"
+              disabled={list.length === 0 || exporting}
+              onClick={() => void exportExcel()}
+            >
+              <Download className="h-4 w-4" /> {exporting ? 'Génération…' : 'Exporter Excel'}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
               onClick={() => (selectionMode ? resetSelection() : setSelectionMode(true))}
             >
               <CheckSquare className="h-4 w-4" /> {selectionMode ? 'Annuler' : 'Mode sélection'}
@@ -159,6 +330,31 @@ export default function EventsPage() {
             resetSelection();
           }}
         />
+      )}
+
+      {/* Bande de synthèse (KPIs + mini-graphes) — vue d'ensemble globale. */}
+      {!isLoading && list.length > 0 && (
+        <div className="mb-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <StatTile label="Total événements" value={summary.total} sub={`${summary.totalPax.toLocaleString('fr-FR')} pax attendus`} />
+            <StatTile label="Matchs" value={summary.matchsCount} sub="saison(s) en cours" />
+            <StatTile label="Clôturés" value={summary.clotures} tone="good" sub={`${summary.total - summary.clotures} en cours`} />
+            <StatTile
+              label="Prochain événement"
+              value={summary.next ? <span className="block truncate text-sm">{summary.next.event_name}</span> : '—'}
+              sub={summary.next ? frDate(summary.next.event_date) : 'aucun à venir'}
+            />
+            <StatTile
+              label="Répartition"
+              value={summary.typeRows.length}
+              sub={`${summary.typeRows.length} type(s) · ${summary.statusRows.filter((s) => s.count > 0).length} statut(s)`}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <CountBreakdown title="Répartition par statut" items={summary.statusRows} total={summary.total} />
+            <CountBreakdown title="Répartition par type" items={summary.typeRows} total={summary.total} />
+          </div>
+        </div>
       )}
 
       {/* Barre d'actions de sélection multiple */}
@@ -311,6 +507,49 @@ function EventTabs({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** Mini-graphe : barres horizontales de comptage (tri décroissant, zéros masqués). */
+function CountBreakdown({
+  title,
+  items,
+  total,
+}: {
+  title: string;
+  items: { key: string; label: string; count: number }[];
+  total: number;
+}) {
+  const visible = items.filter((i) => i.count > 0).sort((a, b) => b.count - a.count);
+  const max = Math.max(1, ...visible.map((i) => i.count));
+  return (
+    <div className="overflow-hidden rounded-2xl border border-pr-stone bg-white">
+      <div className="border-b border-pr-stone bg-pr-cream px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-pr-black-soft/50">
+        {title}
+      </div>
+      {visible.length === 0 ? (
+        <p className="px-4 py-6 text-center text-sm text-pr-black-soft/40">Aucune donnée.</p>
+      ) : (
+        <div className="divide-y divide-pr-stone/50">
+          {visible.map((r) => (
+            <div key={r.key} className="px-4 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-sm font-medium text-pr-black-soft/80">{r.label}</span>
+                <span className="shrink-0 text-sm font-bold tabular-nums text-pr-olive-dark">
+                  {r.count}
+                  <span className="ml-1 text-[11px] font-normal text-pr-black-soft/40">
+                    {total > 0 ? `${Math.round((r.count / total) * 100)} %` : ''}
+                  </span>
+                </span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-pr-stone/50">
+                <div className="h-full rounded-full bg-pr-olive" style={{ width: `${(r.count / max) * 100}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
