@@ -13,7 +13,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { ChevronDown, ChevronRight, Download, RefreshCw, Zap } from 'lucide-react';
 import { AnalyseSeminaire } from '@/components/analytics/AnalyseSeminaire';
 import { SuiviFuts } from '@/components/analytics/SuiviFuts';
-import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, sumFormula, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
 import { DEC1, EUR, INT, PCT } from '@/lib/excelTheme';
 
 /* ─── Constantes visuelles ──────────────────────────────────────────────── */
@@ -483,16 +483,19 @@ export default function AnalyticsPage() {
       // Feuille 2 — Ventilation par catégorie (tri décroissant + TOTAL).
       const catRows = [...data.categories].sort((a, b) => b.unites - a.unites);
       const catTotal = catRows.reduce((s, c) => s + c.unites, 0);
+      const catN = catRows.length;
       const parCategorie: AoaCell[][] = [
         [`Ventilation par catégorie — ${label}`],
         [],
         ['Catégorie', 'Unités consommées', 'Part'],
         ...catRows.map((c): AoaCell[] => [c.categorie, Math.round(c.unites), catTotal > 0 ? c.unites / catTotal : 0]),
-        ['Total', Math.round(catTotal), catTotal > 0 ? 1 : 0],
+        // TOTAL auto-vérifiant : =SUM des unités (lignes Excel 4..3+n). Part = ratio → statique.
+        ['Total', catN > 0 ? sumFormula(1, 4, 3 + catN) : Math.round(catTotal), catTotal > 0 ? 1 : 0],
       ];
 
       // Feuille 3 — Consommation par buvette (tri décroissant + TOTAL).
       const buvRows = [...data.buvettes].sort((a, b) => b.total_consumed - a.total_consumed);
+      const buvN = buvRows.length;
       const parBuvette: AoaCell[][] = [
         [`Consommation par buvette — ${label}`],
         [],
@@ -504,10 +507,12 @@ export default function AnalyticsPage() {
           b.nb_events,
           b.top_produit ?? '—',
         ]),
+        // TOTAL auto-vérifiant : =SUM des unités et des coûts € (lignes Excel 4..3+n).
+        // « Événements » laissé vide : sommer un compteur d'évts par buvette double-compte.
         [
           'Total',
-          Math.round(buvRows.reduce((s, b) => s + b.total_consumed, 0)),
-          buvRows.reduce((s, b) => s + b.total_cost, 0),
+          buvN > 0 ? sumFormula(1, 4, 3 + buvN) : Math.round(buvRows.reduce((s, b) => s + b.total_consumed, 0)),
+          buvN > 0 ? sumFormula(2, 4, 3 + buvN) : buvRows.reduce((s, b) => s + b.total_cost, 0),
           '',
           '',
         ],
@@ -515,6 +520,7 @@ export default function AnalyticsPage() {
 
       // Feuille 4 — Classement produits : DÉTAIL COMPLET ligne-à-ligne.
       const clRows = [...classement].sort((a, b) => b.total_consumed - a.total_consumed);
+      const clN = clRows.length;
       const totalUnits = clRows.reduce((s, p) => s + p.total_consumed, 0);
       const totalCost = clRows.reduce(
         (s, p) => s + (p.cout_unitaire != null ? p.total_consumed * p.cout_unitaire : 0),
@@ -543,7 +549,19 @@ export default function AnalyticsPage() {
           p.nb_events,
           p.cout_unitaire != null ? p.total_consumed * p.cout_unitaire : null,
         ]),
-        ['Total', '', '', Math.round(totalUnits), '', '', '', totalCost],
+        // TOTAL auto-vérifiant : =SUM des unités (col D) et du coût total € (col H),
+        // lignes Excel 4..3+n. Taux de retour / coût unitaire (prix par unité) / nb
+        // événements : non additifs → laissés vides.
+        [
+          'Total',
+          '',
+          '',
+          clN > 0 ? sumFormula(3, 4, 3 + clN) : Math.round(totalUnits),
+          '',
+          '',
+          '',
+          clN > 0 ? sumFormula(7, 4, 3 + clN) : totalCost,
+        ],
       ];
 
       const sheets: AoaSheetOut[] = [
