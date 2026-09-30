@@ -38,6 +38,28 @@ export interface AoaSheetOut {
 const isFormula = (v: AoaCell): v is AoaFormula =>
   v != null && typeof v === 'object' && typeof (v as AoaFormula).f === 'string';
 
+/** Lettre(s) de colonne Excel pour un index 0-based (0→A, 25→Z, 26→AA…). */
+export function colLetter(index0: number): string {
+  let n = index0;
+  let s = '';
+  do {
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return s;
+}
+
+/**
+ * Total AUTO-VÉRIFIANT : formule Excel `=SUM(col firstRow:col lastRow)` pour la
+ * colonne d'index 0-based donnée. Garantit que le total affiché est exactement
+ * la somme des lignes du tableau (recalcul à l'ouverture) — « sûreté qualité ».
+ * `firstRow`/`lastRow` sont des numéros de ligne Excel (1-based) des données.
+ */
+export function sumFormula(colIndex0: number, firstRow: number, lastRow: number): AoaFormula {
+  const c = colLetter(colIndex0);
+  return { f: `=SUM(${c}${firstRow}:${c}${lastRow})` };
+}
+
 function download(buf: ExcelJS.Buffer, name: string): void {
   const b = new Blob([buf], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

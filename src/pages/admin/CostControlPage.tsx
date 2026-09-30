@@ -23,7 +23,7 @@ import { AlertCircle, CheckCircle, ChevronDown, ChevronRight, Download, Trending
 import { supabase } from '@/lib/supabase';
 import { Card, SectionTitle } from '@/components/ui';
 import { TrendChart, type TrendPoint } from '@/components/ui/charts/TrendChart';
-import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, sumFormula, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
 import { EUR, INT, PCT, type ColumnStyle } from '@/lib/excelTheme';
 
 type Tab = 'fb' | 'external' | 'traiteur';
@@ -458,11 +458,13 @@ export default function CostControlPage() {
           r2(e.total_fb_ht), r2(e.rh_ht), r2(e.external_ht), r2(e.total_charges_ht), r2(e.ca_ht), r2(e.gain_net_ht),
           r2(e.marge_pct), r2(e.fb_per_pax),
         ]);
-        const sc = (k: keyof FbEventRow) => r2(fbEvents.reduce((s, e) => s + (Number(e[k]) || 0), 0));
+        // Totaux auto-vérifiants : =SUM sur les lignes de données (4 → 3+n).
+        const R2 = 3 + fbEvents.length;
+        const SUM = (ci: number) => sumFormula(ci, 4, R2);
         const total: AoaCell[] = [
-          'Total', '', '', fbEvents.reduce((s, e) => s + (e.pax || 0), 0),
-          sc('vins_ht'), sc('bieres_ht'), sc('soft_ht'), sc('sirops_ht'), sc('spiritueux_ht'), sc('materiel_ht'),
-          sc('total_fb_ht'), sc('rh_ht'), sc('external_ht'), sc('total_charges_ht'), sc('ca_ht'), sc('gain_net_ht'),
+          'Total', '', '', SUM(3),
+          SUM(4), SUM(5), SUM(6), SUM(7), SUM(8), SUM(9),
+          SUM(10), SUM(11), SUM(12), SUM(13), SUM(14), SUM(15),
           '', '',
         ];
         sheets.push({
@@ -488,7 +490,7 @@ export default function CostControlPage() {
         const rows: AoaCell[][] = prodList.map((p, i) => [
           i + 1, p.name, p.category, p.events.size, r2(p.total), r2(p.total / p.events.size),
         ]);
-        const total: AoaCell[] = ['Total', '', '', '', r2(prodList.reduce((s, p) => s + p.total, 0)), ''];
+        const total: AoaCell[] = ['Total', '', '', '', sumFormula(4, 4, 3 + prodList.length), ''];
         sheets.push({
           name: 'Produits coûteux',
           aoa: [['Produits les plus coûteux — tous événements'], [], ['Rang', 'Produit', 'Catégorie', 'Nb évts', 'Coût HT total', 'Coût moyen / évt'], ...rows, total],
@@ -508,7 +510,7 @@ export default function CostControlPage() {
           c.cost_per_pax > 0 ? r2(c.cost_per_pax) : '',
           c.all_confirmed ? 'Confirmé' : 'En attente',
         ]);
-        const total: AoaCell[] = ['Total', '', '', '', r2(extCharges.reduce((s, c) => s + c.total_ht, 0)), '', ''];
+        const total: AoaCell[] = ['Total', '', '', '', sumFormula(4, 4, 3 + extCharges.length), '', ''];
         sheets.push({
           name: 'Prestataires externes',
           aoa: [['Prestataires externes par événement'], [], ['Événement', 'Date', 'Prestataire', 'Type', 'Montant HT', '€/PAX', 'Statut'], ...rows, total],
@@ -531,11 +533,12 @@ export default function CostControlPage() {
           r2(t.pct_ca),
           t.facture_confirmee ? 'Confirmée' : 'En attente',
         ]);
+        const Rt = 3 + traiteurs.length;
         const total: AoaCell[] = [
-          'Total', '', '', traiteurs.reduce((s, t) => s + (t.pax || 0), 0),
-          r2(traiteurs.reduce((s, t) => s + t.traiteur_ht, 0)), '',
-          r2(traiteurs.reduce((s, t) => s + t.fb_cost_ht, 0)),
-          r2(traiteurs.reduce((s, t) => s + t.ca_ht, 0)), '', '',
+          'Total', '', '', sumFormula(3, 4, Rt),
+          sumFormula(4, 4, Rt), '',
+          sumFormula(6, 4, Rt),
+          sumFormula(7, 4, Rt), '', '',
         ];
         sheets.push({
           name: 'Traiteurs',
