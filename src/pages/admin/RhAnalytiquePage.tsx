@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Download, AlertTriangle, FileSpreadsheet, LineChart, Pencil, Trash2 } from 'lucide-react';
+import { Download, AlertTriangle, FileSpreadsheet, LineChart, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Card, SectionTitle, StatTile } from '@/components/ui';
 import { TrendChart } from '@/components/ui/charts/TrendChart';
@@ -300,6 +300,7 @@ export default function RhAnalytiquePage() {
   }, [rows]);
 
   const [exportingHours, setExportingHours] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
   /**
    * Export RH sur la plage — classeur DAF habillé (payrollExport) :
    * Synthèse (qui payer + circuit), Par événement (noms + heures), Par mois.
@@ -533,8 +534,25 @@ export default function RhAnalytiquePage() {
 
       {/* Détail par personne × mois */}
       <div className="overflow-hidden rounded-2xl border border-pr-stone bg-white">
-        <div className="border-b border-pr-stone bg-pr-cream px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-pr-black-soft/50">Détail par personne × mois</div>
-        {loading ? (
+        <button
+          type="button"
+          onClick={() => setShowDetail((v) => !v)}
+          className="flex w-full items-center justify-between gap-2 border-b border-pr-stone bg-pr-cream px-4 py-2.5 text-left transition-colors hover:bg-pr-stone/20"
+        >
+          <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-pr-black-soft/60">
+            {showDetail ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            Détail nominatif par personne × mois
+            {rows.length > 0 && (
+              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-pr-black-soft/50">
+                {rows.length} ligne{rows.length > 1 ? 's' : ''}
+              </span>
+            )}
+          </span>
+          <span className="hidden text-[11px] font-medium normal-case tracking-normal text-pr-black-soft/40 sm:inline">
+            {showDetail ? 'Masquer' : 'Afficher'} · détail complet dans l’export Excel ↑
+          </span>
+        </button>
+        {showDetail && (loading ? (
           <div className="h-40 animate-pulse bg-pr-cream" />
         ) : rows.length === 0 ? (
           <p className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-pr-black-soft/40">
@@ -590,7 +608,7 @@ export default function RhAnalytiquePage() {
               </tbody>
             </table>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );
