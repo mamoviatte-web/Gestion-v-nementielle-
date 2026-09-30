@@ -17,10 +17,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Boxes, Plus, Trash2, Info, Building2, CalendarCheck, X, Pencil, Power, RotateCcw, Check } from 'lucide-react';
+import { Boxes, Plus, Trash2, Info, Building2, CalendarCheck, X, Pencil, Power, RotateCcw, Check, Download, ChevronDown, ChevronRight, BarChart3 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/context/ToastContext';
-import { Button, Spinner, Select, Input } from '@/components/ui';
+import { Button, Spinner, Select, Input, StatTile } from '@/components/ui';
+import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { INT, type ColumnStyle } from '@/lib/excelTheme';
 
 type ServiceType = 'vip' | 'bar' | 'buvette' | 'bodega';
 interface Space { space_id: string; space_name: string; service_type: ServiceType | null; user_created?: boolean }
@@ -45,6 +47,33 @@ const TYPE_LABEL: Record<string, string> = { vip: 'VIP / Salons', bar: 'Bars', b
 const TYPE_ORDER: ServiceType[] = ['vip', 'bar', 'bodega', 'buvette'];
 const CATEGORY_ORDER = ['Bières', 'Soft', 'Sirops', 'Spiritueux', 'Vins', 'Matériel'];
 const catRank = (c: string) => { const i = CATEGORY_ORDER.indexOf(c); return i === -1 ? CATEGORY_ORDER.length : i; };
+const typeRank = (t: ServiceType | null) => { const i = TYPE_ORDER.indexOf((t ?? 'bar') as ServiceType); return i === -1 ? TYPE_ORDER.length : i; };
+const nf1 = (v: number) => v.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+
+/* Styles de colonnes Excel (charte excelTheme). */
+const colLeft: ColumnStyle = { align: 'left' };
+const colInt: ColumnStyle = { numFmt: INT, align: 'right' };
+
+/** Barre horizontale « nb produits par espace » (synthèse visuelle triée). */
+function AssortBar({ name, typeLabel, count, max }: { name: string; typeLabel: string; count: number; max: number }) {
+  const pct = Math.round((count / Math.max(max, 1)) * 100);
+  return (
+    <div className="flex items-center gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex items-baseline justify-between gap-2">
+          <span className="truncate text-sm font-medium text-stone-800">{name}</span>
+          <span className="shrink-0 text-xs text-stone-400">{typeLabel}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-100">
+            <div className="h-full rounded-full bg-amber-500" style={{ width: `${pct}%` }} />
+          </div>
+          <span className="w-8 shrink-0 text-right text-sm font-bold tabular-nums text-stone-900">{count}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function EspaceAssortmentPage() {
   const { showToast } = useToast();
@@ -68,6 +97,9 @@ export default function EspaceAssortmentPage() {
   const [renaming, setRenaming] = useState(false);
   const [renameVal, setRenameVal] = useState('');
   const [inactive, setInactive] = useState<InactiveSpace[]>([]);
+  // Synthèse + export
+  const [exporting, setExporting] = useState(false);
+  const [showAllDetail, setShowAllDetail] = useState(false);
 
   const load = useCallback(async () => {
     const [sp, pr, apr, ev, inact] = await Promise.all([
@@ -118,6 +150,124 @@ export default function EspaceAssortmentPage() {
     for (const s of spaces) { const t = (s.service_type ?? 'bar') as ServiceType; if (!g.has(t)) g.set(t, []); g.get(t)!.push(s); }
     return TYPE_ORDER.filter((t) => g.has(t)).map((t) => ({ type: t, spaces: g.get(t)! }));
   }, [spaces]);
+
+  // ── Synthèse chiffrée ──
+  const spaceByArea = useMemo(() => {
+    const m = new Map<string, Space>();
+    for (const s of spaces) m.set(s.space_name.trim().toUpperCase(), s);
+    return m;
+  }, [spaces]);
+
+  const parEspace = useMemo(
+    () => spaces
+      .map((s) => ({ space: s, count: countByArea.get(s.space_name.toUpperCase()) ?? 0 }))
+      .sort((a, b) => b.count - a.count || a.space.space_name.localeCompare(b.space.space_name, 'fr')),
+    [spaces, countByArea],
+  );
+
+  const parCategorie = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of socle) m.set(r.category, (m.get(r.category) ?? 0) + 1);
+    return [...m.entries()]
+      .map(([category, count]) => ({ category, count }))
+      .sort((a, b) => catRank(a.category) - catRank(b.category));
+  }, [socle]);
+
+  const stats = useMemo(() => {
+    const nbEspaces = spaces.length;
+    const totalLignes = socle.length;
+    const produitsDistincts = new Set(socle.map((r) => r.product_id)).size;
+    const espacesVides = parEspace.filter((e) => e.count === 0).length;
+    const moyenne = nbEspaces > 0 ? totalLignes / nbEspaces : 0;
+    return { nbEspaces, totalLignes, produitsDistincts, espacesVides, moyenne };
+  }, [spaces, socle, parEspace]);
+
+  const maxCount = useMemo(() => Math.max(1, ...parEspace.map((e) => e.count)), [parEspace]);
+
+  // Assortiment complet ligne-à-ligne (tous espaces) — trié type → espace → catégorie → produit.
+  const fullDetail = useMemo(
+    () => socle
+      .map((r) => {
+        const sp = spaceByArea.get(r.area_name.trim().toUpperCase());
+        return {
+          id: r.id,
+          space: sp?.space_name ?? r.area_name,
+          type: sp?.service_type ?? null,
+          category: r.category,
+          product: r.product_name,
+        };
+      })
+      .sort(
+        (a, b) =>
+          typeRank(a.type) - typeRank(b.type)
+          || a.space.localeCompare(b.space, 'fr', { numeric: true })
+          || catRank(a.category) - catRank(b.category)
+          || a.product.localeCompare(b.product, 'fr'),
+      ),
+    [socle, spaceByArea],
+  );
+
+  /**
+   * Export Excel complet et habillé (charte excelTheme via downloadAoaWorkbook) :
+   *  - feuille « Synthèse » : KPIs + nb produits par espace + répartition par
+   *    catégorie, avec lignes TOTAL ;
+   *  - feuille « Assortiment détail » : toutes les associations espace × produit
+   *    ligne-à-ligne (Espace, Type, Catégorie, Produit). Le détail complet masqué
+   *    à l'écran est donc intégralement récupérable ici.
+   */
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      const synthAoa: AoaCell[][] = [
+        ['Assortiment des espaces — Provence Rugby · Stade Maurice-David'],
+        [],
+        ['Indicateur', 'Valeur', 'Commentaire'],
+        ['Espaces éditables', String(stats.nbEspaces), 'hors Loges (dotation dédiée)'],
+        ['Produits assortis (associations)', String(stats.totalLignes), 'lignes espace × produit'],
+        ['Produits distincts utilisés', String(stats.produitsDistincts), `sur ${products.length} au catalogue`],
+        ['Moyenne produits / espace', nf1(stats.moyenne), ''],
+        ['Espaces sans assortiment', String(stats.espacesVides), stats.espacesVides > 0 ? 'à compléter' : 'tous assortis'],
+        [],
+        ['Nb produits par espace', 'Type', 'Nb produits'],
+        ...parEspace.map((e): AoaCell[] => [e.space.space_name, e.space.service_type ? TYPE_LABEL[e.space.service_type] : '—', e.count]),
+        ['Total', '', stats.totalLignes],
+        [],
+        ['Répartition par catégorie', '', 'Nb produits'],
+        ...parCategorie.map((c): AoaCell[] => [c.category, '', c.count]),
+        ['Total', '', stats.totalLignes],
+      ];
+
+      const sheets: AoaSheetOut[] = [
+        { name: 'Synthèse', aoa: synthAoa, widths: [34, 18, 22], columns: [colLeft, colLeft, colInt] },
+      ];
+
+      if (fullDetail.length) {
+        const rows: AoaCell[][] = fullDetail.map((d) => [
+          d.space,
+          d.type ? TYPE_LABEL[d.type] : '—',
+          d.category,
+          d.product,
+        ]);
+        sheets.push({
+          name: 'Assortiment détail',
+          aoa: [
+            ['Assortiment complet par espace'],
+            [],
+            ['Espace', 'Type', 'Catégorie', 'Produit'],
+            ...rows,
+            ['Total', '', '', stats.totalLignes],
+          ],
+          widths: [26, 16, 16, 34],
+          columns: [colLeft, colLeft, colLeft, colInt],
+        });
+      }
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      await downloadAoaWorkbook(sheets, `Assortiment-espaces_Provence-Rugby_${dateStr}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function addProduct() {
     const p = products.find((x) => x.product_id === toAdd);
@@ -230,14 +380,73 @@ export default function EspaceAssortmentPage() {
 
   return (
     <div className="mx-auto max-w-5xl p-4 sm:p-6">
-      <div className="mb-4">
-        <h1 className="flex items-center gap-2 text-xl font-black text-stone-900"><Boxes className="text-amber-600" /> Assortiment des espaces</h1>
-        <p className="mt-1 text-sm text-stone-500">
-          Socle (niveau S) de chaque espace. Ajoutez ou retirez les produits voulus — utile pour une prestation
-          différente dans un espace. C'est le référentiel, pas l'historique, qui pilote l'assortiment.
-          Régénérez ensuite les fiches runner de l'événement pour appliquer.
-        </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-xl font-black text-stone-900"><Boxes className="text-amber-600" /> Assortiment des espaces</h1>
+          <p className="mt-1 text-sm text-stone-500">
+            Socle (niveau S) de chaque espace. Ajoutez ou retirez les produits voulus — utile pour une prestation
+            différente dans un espace. C'est le référentiel, pas l'historique, qui pilote l'assortiment.
+            Régénérez ensuite les fiches runner de l'événement pour appliquer.
+          </p>
+        </div>
+        <button
+          onClick={() => void exportExcel()}
+          disabled={exporting || socle.length === 0}
+          className="flex shrink-0 items-center gap-2 rounded-xl bg-stone-900 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-stone-700 disabled:opacity-40"
+          title="Synthèse + assortiment complet ligne-à-ligne"
+        >
+          <Download size={15} />
+          {exporting ? 'Génération…' : 'Exporter Excel'}
+        </button>
       </div>
+
+      {/* ── Synthèse chiffrée ── */}
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile label="Espaces éditables" value={stats.nbEspaces} sub="hors Loges" />
+        <StatTile label="Produits assortis" value={stats.totalLignes} sub={`${stats.produitsDistincts} distinct${stats.produitsDistincts > 1 ? 's' : ''}`} />
+        <StatTile label="Moyenne / espace" value={nf1(stats.moyenne)} sub="produits" />
+        <StatTile label="Espaces sans assortiment" value={stats.espacesVides} tone={stats.espacesVides > 0 ? 'warn' : 'good'} sub={stats.espacesVides > 0 ? 'à compléter' : 'tous assortis'} />
+      </div>
+
+      {parEspace.length > 0 && (
+        <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_260px]">
+          <div className="rounded-2xl border border-stone-200 bg-white p-4">
+            <p className="mb-3 flex items-center gap-2 text-sm font-bold text-stone-800">
+              <BarChart3 size={16} className="text-amber-600" /> Produits par espace
+            </p>
+            <div className="space-y-2.5">
+              {parEspace.map((e) => (
+                <AssortBar
+                  key={e.space.space_id}
+                  name={e.space.space_name}
+                  typeLabel={e.space.service_type ? TYPE_LABEL[e.space.service_type] : '—'}
+                  count={e.count}
+                  max={maxCount}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-stone-200 bg-white p-4">
+            <p className="mb-3 text-sm font-bold text-stone-800">Par catégorie</p>
+            {parCategorie.length === 0 ? (
+              <p className="py-6 text-center text-sm text-stone-400">Aucun produit assorti.</p>
+            ) : (
+              <div className="space-y-2">
+                {parCategorie.map((c) => (
+                  <div key={c.category} className="flex items-center justify-between text-sm">
+                    <span className="text-stone-600">{c.category}</span>
+                    <span className="font-bold tabular-nums text-stone-900">{c.count}</span>
+                  </div>
+                ))}
+                <div className="mt-1 flex items-center justify-between border-t border-stone-100 pt-2 text-sm">
+                  <span className="font-bold text-stone-700">Total</span>
+                  <span className="font-black tabular-nums text-stone-900">{stats.totalLignes}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="mb-4 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
         <Info size={16} className="mt-0.5 shrink-0" />
@@ -447,6 +656,52 @@ export default function EspaceAssortmentPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Assortiment complet (tous espaces) — replié par défaut, détail dans l'export */}
+      {fullDetail.length > 0 && (
+        <div className="mt-4 overflow-hidden rounded-2xl border border-stone-200 bg-white">
+          <button
+            type="button"
+            onClick={() => setShowAllDetail((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-stone-50"
+          >
+            <span className="flex items-center gap-2 text-sm font-bold text-stone-800">
+              {showAllDetail ? <ChevronDown size={16} className="text-stone-400" /> : <ChevronRight size={16} className="text-stone-400" />}
+              Assortiment complet (tous espaces)
+              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-semibold text-stone-500">
+                {fullDetail.length} ligne{fullDetail.length > 1 ? 's' : ''}
+              </span>
+            </span>
+            <span className="hidden text-xs font-medium text-stone-400 sm:inline">
+              {showAllDetail ? 'Masquer' : 'Afficher'} · détail complet dans l'export Excel ↑
+            </span>
+          </button>
+          {showAllDetail && (
+            <div className="overflow-x-auto border-t border-stone-100">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-stone-100 bg-stone-50 text-left text-xs uppercase tracking-wide text-stone-400">
+                    <th className="px-3 py-2">Espace</th>
+                    <th className="px-3 py-2">Type</th>
+                    <th className="px-3 py-2">Catégorie</th>
+                    <th className="px-3 py-2">Produit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-50">
+                  {fullDetail.map((d) => (
+                    <tr key={d.id} className="text-stone-800">
+                      <td className="px-3 py-2 font-medium">{d.space}</td>
+                      <td className="px-3 py-2 text-stone-500">{d.type ? TYPE_LABEL[d.type] : '—'}</td>
+                      <td className="px-3 py-2 text-stone-500">{d.category}</td>
+                      <td className="px-3 py-2">{d.product}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

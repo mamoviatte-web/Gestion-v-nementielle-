@@ -8,9 +8,10 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Printer, Download, Boxes, LayoutGrid, Lock } from 'lucide-react';
+import { Printer, Download, Boxes, LayoutGrid, Lock, BarChart3, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { downloadAoaWorkbook, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { INT, type ColumnStyle } from '@/lib/excelTheme';
 
 const LOGE_SPACES = [
   { id: 'a96044d1-9ab0-45d0-85eb-73672df6ab82', name: 'Loge Est' },
@@ -26,6 +27,46 @@ const num = (v: unknown): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
+
+/** Entier lisible « 1 234 » (séparateur français). */
+const nf = (v: number): string => v.toLocaleString('fr-FR');
+
+/* Styles de colonnes Excel (charte commune excelTheme). */
+const colLeft: ColumnStyle = { align: 'left' };
+const colInt: ColumnStyle = { numFmt: INT, align: 'right' };
+
+interface BreakItem { key: string; label: string; value: number; sub?: string }
+
+/**
+ * Barres de synthèse (part relative au max) — permet de lire l'essentiel sans
+ * dérouler les tables. Barre ambre = « à monter », comme la charte de la page.
+ */
+function Breakdown({ title, items, barClass = 'bg-amber-400' }: { title: string; items: BreakItem[]; barClass?: string }) {
+  const max = Math.max(1, ...items.map((i) => i.value));
+  return (
+    <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm">
+      <div className="border-b border-stone-100 bg-stone-50 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-stone-400">{title}</div>
+      <div className="divide-y divide-stone-50">
+        {items.length === 0 ? (
+          <div className="px-4 py-6 text-center text-xs text-stone-400">Aucune donnée.</div>
+        ) : items.map((r) => (
+          <div key={r.key} className="px-4 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-sm font-medium text-stone-700">{r.label}</span>
+              <span className="shrink-0 text-sm font-bold tabular-nums text-amber-700">{nf(r.value)}</span>
+            </div>
+            <div className="mt-1 flex items-center gap-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-100">
+                <div className={`h-full rounded-full ${barClass}`} style={{ width: `${(r.value / max) * 100}%` }} />
+              </div>
+              {r.sub != null && <span className="shrink-0 text-[11px] text-stone-400">{r.sub}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Barre empilée : part déjà en stock (vert) + part à monter (ambre) sur la
@@ -47,6 +88,7 @@ export default function LogeRunnerPage() {
   const [spaceId, setSpaceId] = useState(LOGE_SPACES[0].id);
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showLoges, setShowLoges] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -72,6 +114,25 @@ export default function LogeRunnerPage() {
     return { total: s.reduce((a, r) => a + r.total, 0), office: s.reduce((a, r) => a + r.en_office, 0), monter: s.reduce((a, r) => a + r.a_monter, 0) };
   }, [sheet]);
 
+  /** Taux de couverture = part déjà en stock sur la dotation fixe. */
+  const coverage = totals.total > 0 ? totals.office / totals.total : 0;
+  const nbLignes = useMemo(() => (sheet?.loges ?? []).reduce((a, l) => a + l.lignes.length, 0), [sheet]);
+
+  /** À monter par produit (décroissant) — priorité de chargement du runner. */
+  const parProduit = useMemo<BreakItem[]>(() =>
+    (sheet?.synthese ?? [])
+      .filter((r) => r.a_monter > 0)
+      .sort((a, b) => b.a_monter - a.a_monter)
+      .map((r) => ({ key: r.produit, label: r.produit, value: r.a_monter, sub: `${nf(r.en_office)} en stock` })),
+  [sheet]);
+
+  /** Dotation fixe totale par loge (décroissant) — poids relatif des loges. */
+  const parLoge = useMemo<BreakItem[]>(() =>
+    (sheet?.loges ?? [])
+      .map((l) => ({ key: l.loge, label: l.loge, value: l.lignes.reduce((a, x) => a + x.qte, 0), sub: `${l.lignes.length} réf.` }))
+      .sort((a, b) => b.value - a.value),
+  [sheet]);
+
   function exportExcel() {
     if (!sheet) return;
     const synth: AoaSheetOut = {
@@ -80,11 +141,26 @@ export default function LogeRunnerPage() {
         [`Fiche Runner — ${sheet.space_name}`],
         ['Dotation fixe (ne bouge jamais) − Déjà en stock = À monter'],
         ['Produit', 'Dotation fixe', 'Déjà en stock', 'À monter'],
-        ...sheet.synthese.map((r) => [r.produit, r.total, r.en_office, r.a_monter]),
+        ...sheet.synthese.map((r): AoaCell[] => [r.produit, r.total, r.en_office, r.a_monter]),
         [],
         ['TOTAL', totals.total, totals.office, totals.monter],
       ],
       widths: [26, 14, 14, 12],
+      columns: [colLeft, colInt, colInt, colInt],
+    };
+    // Feuille « Détail complet » : une ligne par loge × produit (toutes colonnes),
+    // le détail exhaustif reste dans l'export tandis que l'écran est synthétique.
+    const detail: AoaSheetOut = {
+      name: 'Détail complet',
+      aoa: [
+        [`Détail dotation par loge — ${sheet.space_name}`],
+        ['Loge', 'Produit', 'Quantité'],
+        ...sheet.loges.flatMap((l) => l.lignes.map((x): AoaCell[] => [l.loge, x.produit, x.qte])),
+        [],
+        ['TOTAL', '', sheet.loges.reduce((a, l) => a + l.lignes.reduce((s, x) => s + x.qte, 0), 0)],
+      ],
+      widths: [22, 30, 12],
+      columns: [colLeft, colLeft, colInt],
     };
     // Une feuille « prête à l'emploi » par loge (nom d'onglet Excel assaini/unique).
     const used = new Set<string>();
@@ -101,13 +177,14 @@ export default function LogeRunnerPage() {
         [`${sheet.space_name} — ${l.loge}`],
         ['Dotation fixe (ne bouge jamais)'],
         ['Produit', 'Quantité'],
-        ...l.lignes.map((x) => [x.produit, x.qte]),
+        ...l.lignes.map((x): AoaCell[] => [x.produit, x.qte]),
         [],
         ['TOTAL', l.lignes.reduce((a, x) => a + x.qte, 0)],
       ],
       widths: [30, 10],
+      columns: [colLeft, colInt],
     }));
-    void downloadAoaWorkbook([synth, ...perLoge], `fiche_runner_${sheet.space_name.replace(/\s+/g, '_')}.xlsx`);
+    void downloadAoaWorkbook([synth, detail, ...perLoge], `fiche_runner_${sheet.space_name.replace(/\s+/g, '_')}.xlsx`);
   }
 
   return (
@@ -152,6 +229,46 @@ export default function LogeRunnerPage() {
             <span className="ml-auto text-xs text-stone-400">La dotation par loge ne bouge jamais — seul le manquant est remonté.</span>
           </div>
 
+          {/* KPIs de synthèse — l'essentiel sans dérouler les tables */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 print:grid-cols-5">
+            <div className="rounded-xl border border-stone-100 bg-white px-3.5 py-2.5 shadow-sm">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Dotation fixe</p>
+              <p className="text-lg font-black tabular-nums text-stone-900">{nf(totals.total)}</p>
+              <p className="mt-0.5 text-xs text-stone-400">unités</p>
+            </div>
+            <div className="rounded-xl border border-stone-100 bg-white px-3.5 py-2.5 shadow-sm">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Déjà en stock</p>
+              <p className="text-lg font-black tabular-nums text-emerald-600">{nf(totals.office)}</p>
+              <p className="mt-0.5 text-xs text-stone-400">en office</p>
+            </div>
+            <div className="rounded-xl border border-stone-100 bg-white px-3.5 py-2.5 shadow-sm">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">À monter</p>
+              <p className="text-lg font-black tabular-nums text-amber-700">{nf(totals.monter)}</p>
+              <p className="mt-0.5 text-xs text-stone-400">complément runner</p>
+            </div>
+            <div className="rounded-xl border border-stone-100 bg-white px-3.5 py-2.5 shadow-sm">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Couverture</p>
+              <p className="text-lg font-black tabular-nums text-stone-900">{(coverage * 100).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} %</p>
+              <p className="mt-0.5 text-xs text-stone-400">déjà présent</p>
+            </div>
+            <div className="rounded-xl border border-stone-100 bg-white px-3.5 py-2.5 shadow-sm">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Loges</p>
+              <p className="text-lg font-black tabular-nums text-stone-900">{nf(sheet.nb_loges)}</p>
+              <p className="mt-0.5 text-xs text-stone-400">{nf(nbLignes)} lignes</p>
+            </div>
+          </div>
+
+          {/* Graphiques de synthèse — à monter par produit & poids des loges */}
+          <div className="print:hidden">
+            <div className="mb-2 flex items-center gap-2 text-sm font-bold text-stone-700">
+              <BarChart3 size={16} />Synthèse graphique
+            </div>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <Breakdown title="À monter par produit (décroissant)" items={parProduit} />
+              <Breakdown title="Dotation fixe par loge (décroissant)" items={parLoge} barClass="bg-stone-400" />
+            </div>
+          </div>
+
           {/* Synthèse : à monter */}
           <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm">
             <div className="flex items-center gap-2 border-b border-stone-100 bg-stone-50 px-4 py-2 text-sm font-bold text-stone-700">
@@ -192,14 +309,25 @@ export default function LogeRunnerPage() {
             </div>
           </div>
 
-          {/* Détail par loge — dotation fixe de référence */}
-          <div className="flex items-center gap-2 text-sm font-bold text-stone-700">
+          {/* Détail par loge — dotation fixe de référence (repliable) */}
+          <button
+            type="button"
+            onClick={() => setShowLoges((v) => !v)}
+            className="flex w-full items-center gap-2 rounded-2xl border border-stone-100 bg-white px-4 py-2.5 text-left text-sm font-bold text-stone-700 shadow-sm transition-colors hover:bg-stone-50 print:hidden"
+          >
+            {showLoges ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
             <LayoutGrid size={16} />Dotation par loge individuelle
             <span className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-stone-500">
               <Lock size={11} />Fixe — ne bouge jamais
             </span>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-3">
+            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+              {sheet.nb_loges} loge{sheet.nb_loges > 1 ? 's' : ''} · {nbLignes} ligne{nbLignes > 1 ? 's' : ''}
+            </span>
+            <span className="ml-auto hidden text-[11px] font-medium normal-case text-stone-400 sm:inline">
+              {showLoges ? 'Masquer' : 'Afficher'} · détail complet dans l’export Excel ↑
+            </span>
+          </button>
+          <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 print:grid print:grid-cols-3 ${showLoges ? '' : 'hidden'}`}>
             {sheet.loges.map((l) => {
               const sub = l.lignes.reduce((a, x) => a + x.qte, 0);
               return (
