@@ -16,7 +16,7 @@ import { Link } from 'react-router-dom';
 import { Building2, Database, ExternalLink, Download } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { StatTile } from '@/components/ui';
-import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, sumFormula, colLetter, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
 import { INT, type ColumnStyle } from '@/lib/excelTheme';
 
 interface SpaceRow {
@@ -90,28 +90,44 @@ export default function DataPilotCapacitesPage() {
     try {
       const header: AoaCell[] = ['Espace', 'Type', 'Service', 'Capacité', 'Pax de référence'];
 
-      // Corps : espaces regroupés par type avec un sous-total par groupe.
+      // Corps : espaces regroupés par type avec un sous-total par groupe. Chaque
+      // sous-total « Capacité »/« Pax » = =SUM sur la plage de lignes du groupe
+      // (auto-vérifiant). Le titre (row 1), la ligne vide (row 2) et l'entête (row 3)
+      // précèdent le corps → le corps commence à la ligne Excel 4.
       const body: AoaCell[][] = [];
+      const subtotalRows: number[] = []; // lignes Excel des sous-totaux (pour le TOTAL)
+      let excelRow = 4;
       for (const [type, list] of groups) {
-        let capG = 0;
-        let paxG = 0;
+        const firstDataRow = excelRow;
         for (const r of list) {
-          const c = num(r.capacity);
-          const p = num(r.max_pax);
-          if (c != null) capG += c;
-          if (p != null) paxG += p;
           body.push([
             spaceLabel(r),
             r.space_type,
             r.service_type || '—',
-            c ?? '—',
-            p ?? '—',
+            num(r.capacity) ?? '—',
+            num(r.max_pax) ?? '—',
           ]);
+          excelRow++;
         }
-        body.push([`Sous-total ${type}`, '', `${list.length} espace(s)`, capG, paxG]);
+        const lastDataRow = excelRow - 1;
+        body.push([
+          `Sous-total ${type}`,
+          '',
+          `${list.length} espace(s)`,
+          sumFormula(3, firstDataRow, lastDataRow),
+          sumFormula(4, firstDataRow, lastDataRow),
+        ]);
+        subtotalRows.push(excelRow);
+        excelRow++;
       }
+      // TOTAL général = somme des seules lignes de sous-total (=D<r1>+D<r2>+…),
+      // pour ne pas re-compter les lignes de données déjà agrégées.
+      const sumSubtotals = (ci: number): AoaCell =>
+        subtotalRows.length
+          ? { f: '=' + subtotalRows.map((r) => `${colLetter(ci)}${r}`).join('+') }
+          : 0;
       const totalRow: AoaCell[] = [
-        'Total', '', `${summary.total} espace(s)`, summary.capSum, summary.paxSum,
+        'Total', '', `${summary.total} espace(s)`, sumSubtotals(3), sumSubtotals(4),
       ];
 
       // Feuille SYNTHÈSE : indicateurs clés + répartition par type.
@@ -132,7 +148,14 @@ export default function DataPilotCapacitesPage() {
           const paxG = list.reduce((s, r) => s + (num(r.max_pax) ?? 0), 0);
           return [type, list.length, capG, paxG];
         }),
-        ['Total', summary.total, summary.capSum, summary.paxSum],
+        // Tableau plat (une ligne par type, sans sous-total intercalé) : les 3 colonnes
+        // Espaces/Capacité/Pax sont additives → totaux auto-vérifiants (=SUM 12..11+n).
+        [
+          'Total',
+          sumFormula(1, 12, 11 + groups.length),
+          sumFormula(2, 12, 11 + groups.length),
+          sumFormula(3, 12, 11 + groups.length),
+        ],
       ];
 
       const sheets: AoaSheetOut[] = [

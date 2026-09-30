@@ -16,7 +16,7 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/context/ToastContext';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Button, Select, Spinner, StatTile } from '@/components/ui';
-import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, sumFormula, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
 import { INT, type ColumnStyle } from '@/lib/excelTheme';
 
 interface Space {
@@ -158,7 +158,9 @@ export default function SpacesPage() {
         [],
         ['Répartition par type', 'Nombre'],
         ...summary.typeRows.map((r): AoaCell[] => [r.label, r.count]),
-        ['Total', total],
+        // « Nombre » = colonne additive → total auto-vérifiant (=SUM). Les types
+        // occupent les lignes Excel 12..(11+n).
+        ['Total', sumFormula(1, 12, 11 + summary.typeRows.length)],
       ];
 
       // ── Feuille ESPACES : toutes les colonnes + ligne TOTAL / compteurs ──
@@ -186,11 +188,14 @@ export default function SpacesPage() {
         yesNo(s.retain_kegs_in_espace),
         yesNo(s.active),
       ]);
+      // « Capacité » = colonne additive → total auto-vérifiant (=SUM sur 4..3+n).
+      // « Conserve stock/fûts » et « Actif » restent des COMPTEURS de « Oui » (les
+      // cellules contiennent du texte Oui/Non, non sommable) → valeurs statiques.
       const totalRow: AoaCell[] = [
         'Total',
         `${summary.typeRows.length} type(s)`,
         '',
-        summary.totalCapacity,
+        sumFormula(3, 4, 3 + rows.length),
         summary.retainsStock,
         summary.retainsKegs,
         `${summary.active} actif(s)`,

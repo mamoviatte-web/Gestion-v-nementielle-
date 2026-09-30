@@ -30,7 +30,7 @@ import { CreateEventModal } from '@/components/events/CreateEventModal';
 import { ConfirmDeleteModal, BulkDeleteModal } from '@/components/events/DeleteEventModals';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Alert, Badge, Button, EmptyState, Input, Select, Spinner, StatTile } from '@/components/ui';
-import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, sumFormula, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
 import { INT, PCT, type ColumnStyle } from '@/lib/excelTheme';
 import { clsx } from 'clsx';
 import type { Event, EventStatus, EventType } from '@/lib/types';
@@ -177,11 +177,19 @@ export default function EventsPage() {
         [],
         ['Répartition par statut', 'Nombre', 'Part'],
         ...summary.statusRows.map((r): AoaCell[] => [r.label, r.count, total > 0 ? r.count / total : 0]),
-        ['Total', total, total > 0 ? 1 : 0],
+        // « Nombre » additive → =SUM ; les statuts occupent les lignes 11..(10+S).
+        // « Part » reste un ratio (non sommé, valeur statique).
+        ['Total', sumFormula(1, 11, 10 + summary.statusRows.length), total > 0 ? 1 : 0],
         [],
         ['Répartition par type', 'Nombre', 'Part'],
         ...summary.typeRows.map((r): AoaCell[] => [r.label, r.count, total > 0 ? r.count / total : 0]),
-        ['Total', total, total > 0 ? 1 : 0],
+        // « Nombre » additive → =SUM ; les types suivent le bloc statut : lignes
+        // (14+S)..(13+S+T), avec S = nb statuts. « Part » reste un ratio statique.
+        [
+          'Total',
+          sumFormula(1, 14 + summary.statusRows.length, 13 + summary.statusRows.length + summary.typeRows.length),
+          total > 0 ? 1 : 0,
+        ],
       ];
 
       // ── Feuille ÉVÉNEMENTS : toutes les colonnes + ligne TOTAL ──
@@ -201,9 +209,15 @@ export default function EventsPage() {
           counts_[e.event_id] ?? 0,
           seasonKey(e.event_date),
         ]);
-      const totalSpaces = list.reduce((s, e) => s + (counts_[e.event_id] ?? 0), 0);
+      // « Pax attendus » (col 5) et « Espaces » (col 7) = colonnes additives →
+      // totaux auto-vérifiants (=SUM sur 4..3+n). « Statut » (col 6) reste un
+      // compteur d'événements (texte, non sommable) → valeur statique.
       const totalRow: AoaCell[] = [
-        'Total', '', '', '', '', summary.totalPax, `${total} événement(s)`, totalSpaces, '',
+        'Total', '', '', '', '',
+        sumFormula(5, 4, 3 + rows.length),
+        `${total} événement(s)`,
+        sumFormula(7, 4, 3 + rows.length),
+        '',
       ];
 
       const sheets: AoaSheetOut[] = [

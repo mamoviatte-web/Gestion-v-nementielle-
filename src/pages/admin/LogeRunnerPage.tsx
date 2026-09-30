@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Printer, Download, Boxes, LayoutGrid, Lock, BarChart3, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, sumFormula, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
 import { INT, type ColumnStyle } from '@/lib/excelTheme';
 
 const LOGE_SPACES = [
@@ -143,7 +143,14 @@ export default function LogeRunnerPage() {
         ['Produit', 'Dotation fixe', 'Déjà en stock', 'À monter'],
         ...sheet.synthese.map((r): AoaCell[] => [r.produit, r.total, r.en_office, r.a_monter]),
         [],
-        ['TOTAL', totals.total, totals.office, totals.monter],
+        // 3 colonnes additives (Dotation fixe / Déjà en stock / À monter) → totaux
+        // auto-vérifiants (=SUM). Données : lignes Excel 4..(3+n), n = nb produits.
+        [
+          'TOTAL',
+          sumFormula(1, 4, 3 + sheet.synthese.length),
+          sumFormula(2, 4, 3 + sheet.synthese.length),
+          sumFormula(3, 4, 3 + sheet.synthese.length),
+        ],
       ],
       widths: [26, 14, 14, 12],
       columns: [colLeft, colInt, colInt, colInt],
@@ -157,7 +164,9 @@ export default function LogeRunnerPage() {
         ['Loge', 'Produit', 'Quantité'],
         ...sheet.loges.flatMap((l) => l.lignes.map((x): AoaCell[] => [l.loge, x.produit, x.qte])),
         [],
-        ['TOTAL', '', sheet.loges.reduce((a, l) => a + l.lignes.reduce((s, x) => s + x.qte, 0), 0)],
+        // Ici l'entête est en ligne 2 (titre en 1, pas de ligne vide) → les données
+        // commencent en ligne 3. « Quantité » additive → =SUM sur 3..(2+m).
+        ['TOTAL', '', sumFormula(2, 3, 2 + sheet.loges.reduce((a, l) => a + l.lignes.length, 0))],
       ],
       widths: [22, 30, 12],
       columns: [colLeft, colLeft, colInt],
@@ -179,7 +188,9 @@ export default function LogeRunnerPage() {
         ['Produit', 'Quantité'],
         ...l.lignes.map((x): AoaCell[] => [x.produit, x.qte]),
         [],
-        ['TOTAL', l.lignes.reduce((a, x) => a + x.qte, 0)],
+        // Données en lignes 4..(3+k) (titre/1, sous-titre/2, entête/3) → « Quantité »
+        // additive → total auto-vérifiant (=SUM).
+        ['TOTAL', sumFormula(1, 4, 3 + l.lignes.length)],
       ],
       widths: [30, 10],
       columns: [colLeft, colInt],

@@ -14,7 +14,7 @@ import {
   Spinner,
   StatTile,
 } from '@/components/ui';
-import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, sumFormula, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
 import { EUR, INT, PCT, type ColumnStyle } from '@/lib/excelTheme';
 import type { Product, ProductCategory } from '@/lib/types';
 
@@ -116,7 +116,9 @@ export default function CatalogPage() {
         ...[...summary.catRows]
           .sort((a, b) => b.count - a.count)
           .map((r): AoaCell[] => [r.label, r.count, active > 0 ? r.count / active : 0]),
-        ['Total', active, active > 0 ? 1 : 0],
+        // « Nombre » = colonne additive → total auto-vérifiant (=SUM). Les catégories
+        // occupent les lignes Excel 11..(10+n). « Part » reste une valeur (ratio, non sommé).
+        ['Total', sumFormula(1, 11, 10 + summary.catRows.length), active > 0 ? 1 : 0],
       ];
 
       // ── Feuille CATALOGUE : tous les produits, triés catégorie → nom ──
@@ -147,10 +149,13 @@ export default function CatalogPage() {
         return row;
       });
 
-      const totalMin = sorted.reduce((s, p) => s + (p.min_stock ?? p.stock_min ?? 0), 0);
+      // « Stock min » = colonne additive → total auto-vérifiant (=SUM sur les lignes
+      // de données 4..3+n). « Prix HT » n'est pas sommé (somme de prix unitaires sans
+      // sens) : la cellule reste un compteur « N sans prix ». « Actif » reste un compteur.
+      const minColIdx = PRICE_VISIBLE ? 5 : 4;
       const totalRow: AoaCell[] = ['Total', `${summary.total} produit(s)`, '', ''];
       if (PRICE_VISIBLE) totalRow.push(`${summary.missing} sans prix`);
-      totalRow.push(totalMin, `${summary.active} actif(s)`);
+      totalRow.push(sumFormula(minColIdx, 4, 3 + rows.length), `${summary.active} actif(s)`);
 
       const sheets: AoaSheetOut[] = [
         {
