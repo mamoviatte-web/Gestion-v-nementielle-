@@ -9,7 +9,7 @@
  * on écrit alors uniquement l'en-tête.
  */
 
-import { downloadAoaWorkbook, type AoaSheetOut } from './xlsxAoa';
+import { downloadAoaWorkbook, sumFormula, type AoaCell, type AoaSheetOut } from './xlsxAoa';
 import { EUR, INT, type ColumnStyle } from './excelTheme';
 import { computeConsumed } from './calculations';
 import { supabase } from '@/lib/supabase';
@@ -20,8 +20,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 /** Placeholder pour une valeur monétaire indisponible (RG-005). */
 const DASH = '—';
 
-type Cell = string | number;
-type Row = Cell[];
+// Une cellule peut aussi porter une formule Excel auto-vérifiante (ligne TOTAL).
+type Row = AoaCell[];
 
 /** Nettoie un libellé pour un nom de fichier. */
 function sanitize(name: string): string {
@@ -45,6 +45,24 @@ function appendSheet(
 ): void {
   const body = title ? ([[title], [], ...aoa] as Row[]) : aoa;
   sheets.push({ name, aoa: body, widths, columns });
+}
+
+/**
+ * Ligne TOTAL auto-vérifiante. Une fois le titre (ligne 1) + ligne vide (2) +
+ * en-tête (3) posés par `appendSheet`, les `n` lignes de données occupent les
+ * lignes Excel 4..3+n ; on pose donc `=SUM(col4:col{3+n})` sur chaque colonne
+ * ADDITIVE (quantités, coûts €, écarts) — le tableur recalcule et garantit que
+ * le total affiché est exactement la somme des lignes. Les colonnes non
+ * sommables (texte, ratios, seuils) restent vides.
+ * Retourne `null` si la feuille n'a aucune donnée (réduite à l'en-tête).
+ */
+function totalRow(ncols: number, n: number, additiveCols: number[]): Row | null {
+  if (n <= 0) return null;
+  const last = 3 + n;
+  const row: Row = Array.from({ length: ncols }, () => '' as AoaCell);
+  row[0] = 'TOTAL';
+  for (const ci of additiveCols) row[ci] = sumFormula(ci, 4, last);
+  return row;
 }
 
 /** Bandeau titre commun : « PROVENCE RUGBY — {sujet} ». */
@@ -169,6 +187,11 @@ export async function exportRapportEvenement(eventId: string): Promise<void> {
     ]);
   }
 
+  // Total additif : Initial, Réassort, Final, Consommé, Coût HT (colonnes 2..6).
+  // État/Anomalie/Responsable = texte, Espace/Produit = libellés → non sommés.
+  const total = totalRow(header.length, lines.length, [2, 3, 4, 5, 6]);
+  if (total) aoa.push(total);
+
   const ev = events.get(eventId);
   const label = ev ? `${sanitize(ev.name)}_${ev.date}` : sanitize(eventId);
   const sheets: AoaSheetOut[] = [];
@@ -217,6 +240,10 @@ export async function exportRapportEspace(spaceId: string): Promise<void> {
     const cost = price !== null ? Number((consumed * price).toFixed(2)) : DASH;
     aoa.push([product?.product_name ?? productId, consumed, cost]);
   }
+
+  // Total additif : Total consommé (col 1) + Coût HT (col 2). Produit = libellé.
+  const total = totalRow(header.length, totals.size, [1, 2]);
+  if (total) aoa.push(total);
 
   const spaceName = spaces.get(spaceId) ?? spaceId;
   const sheets: AoaSheetOut[] = [];
@@ -280,6 +307,11 @@ export async function exportRapportProduit(productId: string): Promise<void> {
         : DASH;
     aoa.push([r.date, r.eventName, r.spaceName, r.consumed ?? '', cost, r.responsable]);
   }
+
+  // Total additif : Consommé (col 3) + Coût HT (col 4). Date/Événement/Espace/
+  // Responsable = texte → non sommés.
+  const total = totalRow(header.length, rows.length, [3, 4]);
+  if (total) aoa.push(total);
 
   const productName = products.get(productId)?.product_name ?? productId;
   const sheets: AoaSheetOut[] = [];
@@ -365,6 +397,10 @@ export async function exportRapportStockGeneral(): Promise<void> {
       critical ? 'Critique' : 'OK',
     ]);
   }
+  // Total additif : Quantité totale (col 1) + Valeur HT (col 2). Stock min/max
+  // sont des SEUILS (non additifs) et Statut du texte → non sommés.
+  const globalTotal = totalRow(globalHeader.length, totalsByProduct.size, [1, 2]);
+  if (globalTotal) globalAoa.push(globalTotal);
 
   // Feuille 2 — Par emplacement.
   const locHeader: Row = ['Emplacement', 'Produit', 'Quantité'];
@@ -376,6 +412,9 @@ export async function exportRapportStockGeneral(): Promise<void> {
       Number(b.current_quantity),
     ]);
   }
+  // Total additif : Quantité (col 2). Emplacement/Produit = libellés.
+  const locTotal = totalRow(locHeader.length, balances.length, [2]);
+  if (locTotal) locAoa.push(locTotal);
 
   // Feuille 3 — Alertes (produits critiques + écarts inventaire non résolus).
   const alertHeader: Row = ['Type', 'Produit', 'Emplacement', 'Détail'];
@@ -523,6 +562,11 @@ export async function exportRapportInventaire(locationId: string): Promise<void>
       c.validated_at ? 'oui' : 'non',
     ]);
   }
+
+  // Total additif : Théorique, Réel, Écart (colonnes 1..3). Responsable/Date/
+  // Commentaire/Validé = texte → non sommés.
+  const total = totalRow(header.length, counts.length, [1, 2, 3]);
+  if (total) aoa.push(total);
 
   const locName = locations.get(locationId) ?? locationId;
   const sheets: AoaSheetOut[] = [];

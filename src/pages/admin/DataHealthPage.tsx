@@ -20,7 +20,7 @@ import { Activity, AlertTriangle, Beer, Boxes, CheckCircle2, ChevronDown, Chevro
 import { supabase } from '@/lib/supabase';
 import { Spinner, StatTile } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
-import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, sumFormula, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
 import { EUR, INT, type ColumnStyle } from '@/lib/excelTheme';
 
 const num = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -253,7 +253,9 @@ export default function DataHealthPage() {
         [],
         ['Anomalies par domaine', 'Nombre', 'Action'],
         ...anomalies.map((a): AoaCell[] => [a.label, a.count, a.hint]),
-        ['Total', totalAnomalies, ''],
+        // Bloc « Anomalies par domaine » : en-tête Excel ligne 16, données
+        // lignes 17..16+n → total auto-vérifiant sur la colonne « Nombre » (B).
+        ['Total', sumFormula(1, 17, 16 + anomalies.length), ''],
       ];
       sheets.push({ name: 'Synthèse', aoa: synthAoa, widths: [34, 12, 34], columns: [colLeft, colInt, colLeft] });
 
@@ -264,17 +266,20 @@ export default function DataHealthPage() {
           num(r.pleins_theoriques), num(r.pleins_affiche), num(r.ecart), num(r.vides_theoriques),
           r.valeur_pleins_ht == null ? '' : r2(r.valeur_pleins_ht),
         ]);
+        // Total auto-vérifiant : données lignes Excel 4..3+n, colonnes B..J
+        // toutes additives (quantités + valeur HT). Le tableur recalcule le SUM.
+        const last = 3 + kegRows.length;
         const total: AoaCell[] = [
           'Total',
-          kegRows.reduce((s, r) => s + num(r.recus), 0),
-          kegRows.reduce((s, r) => s + num(r.consommes), 0),
-          kegRows.reduce((s, r) => s + num(r.purges), 0),
-          kegRows.reduce((s, r) => s + num(r.en_espace), 0),
-          kegRows.reduce((s, r) => s + num(r.pleins_theoriques), 0),
-          totalPleins,
-          kegRows.reduce((s, r) => s + num(r.ecart), 0),
-          kegRows.reduce((s, r) => s + num(r.vides_theoriques), 0),
-          r2(totalValeur),
+          sumFormula(1, 4, last),
+          sumFormula(2, 4, last),
+          sumFormula(3, 4, last),
+          sumFormula(4, 4, last),
+          sumFormula(5, 4, last),
+          sumFormula(6, 4, last),
+          sumFormula(7, 4, last),
+          sumFormula(8, 4, last),
+          sumFormula(9, 4, last),
         ];
         sheets.push({
           name: 'Audit fûts',
@@ -306,11 +311,16 @@ export default function DataHealthPage() {
           r.ecart_abs_total == null ? '' : num(r.ecart_abs_total),
           r.derniere_ancre ? new Date(r.derniere_ancre).toLocaleDateString('fr-FR') : '—',
         ]);
+        // Total auto-vérifiant : données lignes 4..3+n. Colonnes C..G additives
+        // (réfs, écarts, négatifs, sans ancre, écart abs.) ; Nature/ancre = texte.
+        const last = 3 + ledger.synth.length;
         const total: AoaCell[] = [
           'Total', '',
-          ledger.synth.reduce((s, r) => s + num(r.refs), 0),
-          ledgerEcartsTot, ledgerNegTot, ledgerSansAncreTot,
-          ledger.synth.reduce((s, r) => s + num(r.ecart_abs_total), 0), '',
+          sumFormula(2, 4, last),
+          sumFormula(3, 4, last),
+          sumFormula(4, 4, last),
+          sumFormula(5, 4, last),
+          sumFormula(6, 4, last), '',
         ];
         sheets.push({
           name: 'Ledger par emplacement',
@@ -325,10 +335,13 @@ export default function DataHealthPage() {
         const rows: AoaCell[][] = (compQ.data ?? []).map((r) => [
           r.event_name, r.status, r.space_name, num(r.finals_manquants), num(r.unites_en_attente),
         ]);
+        // Total auto-vérifiant : données lignes 4..3+n. Colonnes D (finals
+        // manquants) et E (unités en attente) additives ; le reste = texte.
+        const last = 3 + (compQ.data ?? []).length;
         const total: AoaCell[] = [
           'Total', '', '',
-          finalsManquantsTot,
-          (compQ.data ?? []).reduce((s, r) => s + num(r.unites_en_attente), 0),
+          sumFormula(3, 4, last),
+          sumFormula(4, 4, last),
         ];
         sheets.push({
           name: 'Complétude clôture',
@@ -348,14 +361,18 @@ export default function DataHealthPage() {
             r.valeur_depot_ht == null ? '' : r2(r.valeur_depot_ht),
             r.alert_status ?? '',
           ]);
+        // Total auto-vérifiant : données lignes 4..3+n. Colonnes C..G (AUC, EST,
+        // Fûts, Total dépôt, En événement) + I (Valeur dépôt HT) additives.
+        // « Mini » (seuil) et « Alerte » (état) ne se somment pas → statiques ''.
+        const last = 3 + stock.length;
         const total: AoaCell[] = [
           'Total', '',
-          stock.reduce((s, r) => s + num(r.qty_auc), 0),
-          stock.reduce((s, r) => s + num(r.qty_est), 0),
-          stock.reduce((s, r) => s + num(r.qty_futs), 0),
-          stock.reduce((s, r) => s + num(r.qty_total_depot), 0),
-          stock.reduce((s, r) => s + num(r.qty_in_event), 0),
-          '', r2(stockValue), '',
+          sumFormula(2, 4, last),
+          sumFormula(3, 4, last),
+          sumFormula(4, 4, last),
+          sumFormula(5, 4, last),
+          sumFormula(6, 4, last),
+          '', sumFormula(8, 4, last), '',
         ];
         sheets.push({
           name: 'Cohérence stock',
