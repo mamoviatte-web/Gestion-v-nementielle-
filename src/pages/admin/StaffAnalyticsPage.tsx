@@ -4,7 +4,7 @@
  * Réservé au ROLE_STADE (aucun coût produit exposé ici — uniquement du RH).
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   Plus,
   Users,
@@ -16,11 +16,17 @@ import {
   Building2,
   Calendar,
   UserCheck,
+  ChevronDown,
+  ChevronRight,
+  LineChart,
 } from 'lucide-react';
-import { downloadAoaWorkbook } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, type AoaCell } from '@/lib/xlsxAoa';
+import { HOURS, DEC1, INT, type ColumnStyle } from '@/lib/excelTheme';
 import {
   Badge,
   Button,
+  Card,
+  SectionTitle,
   Alert,
   EmptyState,
   Spinner,
@@ -31,6 +37,7 @@ import {
   TH,
   TD,
 } from '@/components/ui';
+import { TrendChart, type TrendPoint } from '@/components/ui/charts/TrendChart';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useToast } from '@/context/ToastContext';
@@ -57,6 +64,9 @@ import type {
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
+
+/** Format Excel pour un pourcentage déjà exprimé en entier (0–100 → « 85 % »). */
+const PCT_INT = '0" %"';
 
 /** Date du jour au format YYYY-MM-DD (pour les noms de fichier). */
 function today(): string {
@@ -285,6 +295,96 @@ function Bar({ fill, tone }: { fill: number; tone: 'olive' | 'gold' | 'rust' }) 
   );
 }
 
+/** Ventilation horizontale « top N » (façon Breakdown RH), triée décroissant. */
+interface BreakItem {
+  key: string;
+  label: string;
+  value: number;
+  sub?: string;
+}
+function Breakdown({
+  title,
+  items,
+  unit = 'h',
+}: {
+  title: string;
+  items: BreakItem[];
+  unit?: string;
+}) {
+  const max = Math.max(0.001, ...items.map((i) => i.value));
+  return (
+    <div className="overflow-hidden rounded-2xl border border-pr-stone bg-white">
+      <div className="border-b border-pr-stone bg-pr-cream px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-pr-black-soft/50">
+        {title}
+      </div>
+      {items.length === 0 ? (
+        <p className="px-4 py-4 text-sm text-pr-black-soft/40">Aucune donnée.</p>
+      ) : (
+        <div className="divide-y divide-pr-stone/50">
+          {items.map((r) => (
+            <div key={r.key} className="px-4 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-sm font-medium text-pr-black-soft/80">{r.label}</span>
+                <span className="shrink-0 text-sm font-bold tabular-nums text-pr-olive-dark">
+                  {r.value.toFixed(1)} {unit}
+                </span>
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-pr-stone/50">
+                  <div
+                    className="h-full rounded-full bg-pr-olive"
+                    style={{ width: `${(r.value / max) * 100}%` }}
+                  />
+                </div>
+                {r.sub && (
+                  <span className="shrink-0 text-[11px] text-pr-black-soft/40">{r.sub}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Bloc repliable pour une longue table nominative (détail ligne-à-ligne). */
+function CollapsibleDetail({
+  title,
+  count,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-pr-stone bg-white">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-2 border-b border-pr-stone bg-pr-cream px-4 py-2.5 text-left transition-colors hover:bg-pr-stone/20"
+      >
+        <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-pr-black-soft/60">
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          {title}
+          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-pr-black-soft/50">
+            {count} ligne{count > 1 ? 's' : ''}
+          </span>
+        </span>
+        <span className="hidden text-[11px] font-medium normal-case tracking-normal text-pr-black-soft/40 sm:inline">
+          {open ? 'Masquer' : 'Afficher'} · détail complet dans l’export Excel ↑
+        </span>
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
 function VerdictBadge({ verdict }: { verdict: StaffVerdict }) {
   const meta = VERDICT_META[verdict];
   return (
@@ -342,6 +442,25 @@ function SyntheseView({
   const roleAggs = useMemo(() => aggregateByRole(schedules), [schedules]);
   const maxOvertime = Math.max(0.001, ...roleAggs.map((r) => r.avgOvertime));
 
+  // Tendance chronologique : heures prévues (référence) vs réelles par événement.
+  const trendData = useMemo<TrendPoint[]>(
+    () =>
+      [...summaries]
+        .filter((s) => s.event?.event_date)
+        .sort((a, b) => (a.event?.event_date ?? '').localeCompare(b.event?.event_date ?? ''))
+        .map((s) => ({
+          label: s.event?.event_date
+            ? new Date(s.event.event_date).toLocaleDateString('fr-FR', {
+                day: '2-digit',
+                month: 'short',
+              })
+            : '—',
+          value: Number(s.total_actual_hours.toFixed(1)),
+          ref: Number(s.total_planned_hours.toFixed(1)),
+        })),
+    [summaries],
+  );
+
   if (summaries.length === 0) {
     return (
       <EmptyState
@@ -380,6 +499,24 @@ function SyntheseView({
           sub="score dimensionnement"
         />
       </div>
+
+      {trendData.length > 1 && (
+        <Card>
+          <SectionTitle
+            icon={LineChart}
+            right={<span className="text-xs text-pr-black-soft/40">heures · par événement</span>}
+          >
+            Heures prévues vs réelles
+          </SectionTitle>
+          <TrendChart
+            data={trendData}
+            height={210}
+            format={(v) => `${v.toFixed(1)} h`}
+            valueLabel="Heures réelles"
+            refLabel="Heures prévues"
+          />
+        </Card>
+      )}
 
       <section>
         <h2 className="mb-3 font-display text-lg font-semibold text-pr-black">
@@ -464,6 +601,32 @@ function SyntheseView({
 
 function AgentView({ schedules }: { schedules: ScheduleRow[] }) {
   const agents = useMemo(() => aggregateByAgent(schedules), [schedules]);
+  const [showDetail, setShowDetail] = useState(false);
+
+  const topOvertime = useMemo(
+    () =>
+      [...agents]
+        .filter((a) => a.avgOvertime > 0)
+        .sort((a, b) => b.avgOvertime - a.avgOvertime)
+        .slice(0, 8),
+    [agents],
+  );
+  const topHours = useMemo(
+    () =>
+      [...agents]
+        .filter((a) => a.avgHours != null)
+        .sort((a, b) => (b.avgHours ?? 0) - (a.avgHours ?? 0))
+        .slice(0, 8),
+    [agents],
+  );
+
+  const kpis = useMemo(() => {
+    const withOvertime = agents.filter((a) => a.avgOvertime > 1).length;
+    const missingDep = agents.filter((a) => a.hasMissingDeparture).length;
+    const hours = agents.map((a) => a.avgHours).filter((v): v is number => v != null);
+    const avgHours = hours.length ? hours.reduce((x, y) => x + y, 0) / hours.length : null;
+    return { withOvertime, missingDep, avgHours };
+  }, [agents]);
 
   if (agents.length === 0) {
     return (
@@ -472,35 +635,84 @@ function AgentView({ schedules }: { schedules: ScheduleRow[] }) {
   }
 
   return (
-    <Table>
-      <THead>
-        <TR>
-          <TH>Agent</TH>
-          <TH>Poste</TH>
-          <TH className="text-right">Nb évén.</TH>
-          <TH className="text-right">Moy. heures</TH>
-          <TH className="text-right">Moy. sup</TH>
-          <TH>Alertes</TH>
-        </TR>
-      </THead>
-      <TBody>
-        {agents.map((a) => (
-          <TR key={a.name}>
-            <TD className="font-medium text-pr-black">{a.name}</TD>
-            <TD>{a.role}</TD>
-            <TD className="text-right">{a.nbEvents}</TD>
-            <TD className="text-right">{h1(a.avgHours)}</TD>
-            <TD className="text-right">{a.avgOvertime.toFixed(1)} h</TD>
-            <TD>
-              <div className="flex flex-wrap gap-1">
-                {a.avgOvertime > 1 && <Badge tone="warning">⚠️ dépassements</Badge>}
-                {a.hasMissingDeparture && <Badge tone="info">départ non saisi</Badge>}
-              </div>
-            </TD>
-          </TR>
-        ))}
-      </TBody>
-    </Table>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard icon={Users} label="Agents distincts" value={String(agents.length)} />
+        <KpiCard icon={Clock} label="Heures / agent" value={h1(kpis.avgHours)} sub="moyenne" />
+        <KpiCard
+          icon={TrendingUp}
+          label="Agents en dépassement"
+          value={String(kpis.withOvertime)}
+          sub="> 1 h sup moyenne"
+        />
+        <KpiCard
+          icon={AlertTriangle}
+          label="Départs non saisis"
+          value={String(kpis.missingDep)}
+          sub="agents concernés"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Breakdown
+          title="Top agents — heures sup (moy.)"
+          items={topOvertime.map((a) => ({
+            key: a.name,
+            label: a.name,
+            value: a.avgOvertime,
+            sub: `${a.nbEvents} évén.`,
+          }))}
+        />
+        <Breakdown
+          title="Top agents — heures réelles (moy.)"
+          items={topHours.map((a) => ({
+            key: a.name,
+            label: a.name,
+            value: a.avgHours ?? 0,
+            sub: a.role,
+          }))}
+        />
+      </div>
+
+      <CollapsibleDetail
+        title="Détail nominatif par agent"
+        count={agents.length}
+        open={showDetail}
+        onToggle={() => setShowDetail((v) => !v)}
+      >
+        <div className="overflow-x-auto">
+          <Table>
+            <THead>
+              <TR>
+                <TH>Agent</TH>
+                <TH>Poste</TH>
+                <TH className="text-right">Nb évén.</TH>
+                <TH className="text-right">Moy. heures</TH>
+                <TH className="text-right">Moy. sup</TH>
+                <TH>Alertes</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {agents.map((a) => (
+                <TR key={a.name}>
+                  <TD className="font-medium text-pr-black">{a.name}</TD>
+                  <TD>{a.role}</TD>
+                  <TD className="text-right">{a.nbEvents}</TD>
+                  <TD className="text-right">{h1(a.avgHours)}</TD>
+                  <TD className="text-right">{a.avgOvertime.toFixed(1)} h</TD>
+                  <TD>
+                    <div className="flex flex-wrap gap-1">
+                      {a.avgOvertime > 1 && <Badge tone="warning">⚠️ dépassements</Badge>}
+                      {a.hasMissingDeparture && <Badge tone="info">départ non saisi</Badge>}
+                    </div>
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </div>
+      </CollapsibleDetail>
+    </div>
   );
 }
 
@@ -596,6 +808,7 @@ function EspaceView({
 /* ---- 4. Par événement ---- */
 
 function EvenementView({ summaries }: { summaries: StaffEventSummary[] }) {
+  const [showDetail, setShowDetail] = useState(false);
   const rows = useMemo(
     () =>
       [...summaries].sort((a, b) => {
@@ -604,6 +817,23 @@ function EvenementView({ summaries }: { summaries: StaffEventSummary[] }) {
         return da.localeCompare(db);
       }),
     [summaries],
+  );
+
+  // Tendance : heures supplémentaires par événement (ordre chronologique).
+  const otTrend = useMemo<TrendPoint[]>(
+    () =>
+      rows
+        .filter((s) => s.event?.event_date)
+        .map((s) => ({
+          label: s.event?.event_date
+            ? new Date(s.event.event_date).toLocaleDateString('fr-FR', {
+                day: '2-digit',
+                month: 'short',
+              })
+            : '—',
+          value: Number(s.total_overtime_hours.toFixed(1)),
+        })),
+    [rows],
   );
 
   if (rows.length === 0) {
@@ -617,8 +847,33 @@ function EvenementView({ summaries }: { summaries: StaffEventSummary[] }) {
   }
 
   return (
-    <Table>
-      <THead>
+    <div className="space-y-6">
+      {otTrend.length > 1 && (
+        <Card>
+          <SectionTitle
+            icon={LineChart}
+            right={<span className="text-xs text-pr-black-soft/40">heures sup · par événement</span>}
+          >
+            Heures supplémentaires par événement
+          </SectionTitle>
+          <TrendChart
+            data={otTrend}
+            height={210}
+            format={(v) => `${v.toFixed(1)} h`}
+            valueLabel="Heures sup"
+          />
+        </Card>
+      )}
+
+      <CollapsibleDetail
+        title="Détail par événement"
+        count={rows.length}
+        open={showDetail}
+        onToggle={() => setShowDetail((v) => !v)}
+      >
+        <div className="overflow-x-auto">
+          <Table>
+            <THead>
         <TR>
           <TH>Événement</TH>
           <TH>Date</TH>
@@ -663,7 +918,10 @@ function EvenementView({ summaries }: { summaries: StaffEventSummary[] }) {
           );
         })}
       </TBody>
-    </Table>
+          </Table>
+        </div>
+      </CollapsibleDetail>
+    </div>
   );
 }
 
@@ -747,36 +1005,143 @@ function ExportView({
   const { showToast } = useToast();
 
   const exportHours = async () => {
-    const aoa: (string | number)[][] = [
-      [`PROVENCE RUGBY — RAPPORT HORAIRES — ${eventTypeLabel} — ${today()}`],
+    // Feuille 1 — Synthèse par événement (habillée, ligne TOTAL).
+    const synthAoa: AoaCell[][] = [
+      [`PROVENCE RUGBY — SYNTHÈSE HORAIRES — ${eventTypeLabel} — ${today()}`],
+      [],
+      [
+        'Événement',
+        'Date',
+        'Spectateurs',
+        'Total agents',
+        'Agents / 100 pax',
+        'Heures prévues',
+        'Heures réelles',
+        'Heures sup',
+        'Efficacité (%)',
+      ],
+    ];
+    let sAgents = 0;
+    let sPlanned = 0;
+    let sActual = 0;
+    let sOt = 0;
+    for (const s of summaries) {
+      sAgents += s.total_agents;
+      sPlanned += s.total_planned_hours;
+      sActual += s.total_actual_hours;
+      sOt += s.total_overtime_hours;
+      synthAoa.push([
+        s.event?.event_name ?? s.event_id,
+        s.event?.event_date ?? '',
+        s.real_attendance ?? '',
+        s.total_agents,
+        s.agents_per_100pax != null ? Number(s.agents_per_100pax.toFixed(1)) : '',
+        Number(s.total_planned_hours.toFixed(1)),
+        Number(s.total_actual_hours.toFixed(1)),
+        Number(s.total_overtime_hours.toFixed(1)),
+        s.efficiency_score != null ? Math.round(s.efficiency_score * 100) : '',
+      ]);
+    }
+    synthAoa.push([
+      'TOTAL',
+      '',
+      '',
+      sAgents,
+      '',
+      Number(sPlanned.toFixed(1)),
+      Number(sActual.toFixed(1)),
+      Number(sOt.toFixed(1)),
+      '',
+    ]);
+
+    // Feuille 2 — Détail nominatif par agent (habillé, ligne TOTAL).
+    const detailAoa: AoaCell[][] = [
+      [`PROVENCE RUGBY — DÉTAIL HORAIRES PAR AGENT — ${eventTypeLabel} — ${today()}`],
       [],
       ['Événement', 'Agent', 'Poste', 'Espace', 'Heures prévues', 'Heures réelles', 'Heures sup'],
     ];
+    let dPlanned = 0;
+    let dActual = 0;
+    let dOt = 0;
     for (const r of schedules) {
-      aoa.push([
+      const p = plannedH(r);
+      const a = actualH(r);
+      const o = overtimeH(r);
+      dPlanned += p ?? 0;
+      dActual += a ?? 0;
+      dOt += o;
+      detailAoa.push([
         r.events?.event_name ?? r.event_id,
         r.staff_name,
         r.role ?? '',
         r.spaces?.space_name ?? '',
-        plannedH(r) != null ? Number((plannedH(r) as number).toFixed(2)) : '',
-        actualH(r) != null ? Number((actualH(r) as number).toFixed(2)) : '',
-        Number(overtimeH(r).toFixed(2)),
+        p != null ? Number(p.toFixed(2)) : '',
+        a != null ? Number(a.toFixed(2)) : '',
+        Number(o.toFixed(2)),
       ]);
     }
+    detailAoa.push([
+      'TOTAL',
+      '',
+      '',
+      '',
+      Number(dPlanned.toFixed(2)),
+      Number(dActual.toFixed(2)),
+      Number(dOt.toFixed(2)),
+    ]);
+
+    const synthCols: (ColumnStyle | undefined)[] = [
+      undefined,
+      { align: 'center' },
+      { numFmt: INT, align: 'right' },
+      { numFmt: INT, align: 'right' },
+      { numFmt: DEC1, align: 'right' },
+      { numFmt: HOURS, align: 'right' },
+      { numFmt: HOURS, align: 'right' },
+      { numFmt: HOURS, align: 'right' },
+      { numFmt: PCT_INT, align: 'right' },
+    ];
+    const detailCols: (ColumnStyle | undefined)[] = [
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { numFmt: HOURS, align: 'right' },
+      { numFmt: HOURS, align: 'right' },
+      { numFmt: HOURS, align: 'right' },
+    ];
+
     await downloadAoaWorkbook(
-      [{ name: 'Horaires', aoa, widths: [24, 22, 16, 18, 14, 14, 10] }],
+      [
+        {
+          name: 'Synthèse',
+          aoa: synthAoa,
+          widths: [26, 12, 12, 12, 15, 14, 14, 12, 13],
+          columns: synthCols,
+        },
+        {
+          name: 'Détail agents',
+          aoa: detailAoa,
+          widths: [24, 22, 16, 18, 14, 14, 10],
+          columns: detailCols,
+        },
+      ],
       `Rapport_horaires_${eventTypeLabel}_${today()}.xlsx`,
     );
     showToast('Rapport horaires exporté', 'success');
   };
 
   const exportEfficiency = async () => {
-    const aoa: (string | number)[][] = [
+    const aoa: AoaCell[][] = [
       [`PROVENCE RUGBY — EFFICACITÉ RH — ${eventTypeLabel} — ${today()}`],
       [],
       ['Événement', 'Date', 'Total agents', 'Agents / 100 pax', 'Heures sup', 'Efficacité (%)'],
     ];
+    let tAgents = 0;
+    let tOt = 0;
     for (const s of summaries) {
+      tAgents += s.total_agents;
+      tOt += s.total_overtime_hours;
       aoa.push([
         s.event?.event_name ?? s.event_id,
         s.event?.event_date ?? '',
@@ -786,21 +1151,36 @@ function ExportView({
         s.efficiency_score != null ? Math.round(s.efficiency_score * 100) : '',
       ]);
     }
+    aoa.push(['TOTAL', '', tAgents, '', Number(tOt.toFixed(1)), '']);
+    const columns: (ColumnStyle | undefined)[] = [
+      undefined,
+      { align: 'center' },
+      { numFmt: INT, align: 'right' },
+      { numFmt: DEC1, align: 'right' },
+      { numFmt: HOURS, align: 'right' },
+      { numFmt: PCT_INT, align: 'right' },
+    ];
     await downloadAoaWorkbook(
-      [{ name: 'Efficacité RH', aoa, widths: [24, 14, 12, 16, 12, 14] }],
+      [{ name: 'Efficacité RH', aoa, widths: [24, 14, 12, 16, 12, 14], columns }],
       `Rapport_efficacite_RH_${eventTypeLabel}_${today()}.xlsx`,
     );
     showToast('Rapport efficacité RH exporté', 'success');
   };
 
   const exportComparison = async () => {
-    const build = (title: string, list: StaffEventSummary[]): (string | number)[][] => {
-      const aoa: (string | number)[][] = [
+    const build = (title: string, list: StaffEventSummary[]): AoaCell[][] => {
+      const aoa: AoaCell[][] = [
         [`PROVENCE RUGBY — SYNTHÈSE ${title} — ${today()}`],
         [],
         ['Événement', 'Spectateurs', 'Total agents', 'Agents / 100 pax', 'Heures totales', 'Heures sup', 'Efficacité (%)'],
       ];
+      let tAgents = 0;
+      let tHours = 0;
+      let tOt = 0;
       for (const s of list) {
+        tAgents += s.total_agents;
+        tHours += s.total_actual_hours;
+        tOt += s.total_overtime_hours;
         aoa.push([
           s.event?.event_name ?? s.event_id,
           s.real_attendance ?? '',
@@ -811,12 +1191,22 @@ function ExportView({
           s.efficiency_score != null ? Math.round(s.efficiency_score * 100) : '',
         ]);
       }
+      aoa.push(['TOTAL', '', tAgents, '', Number(tHours.toFixed(1)), Number(tOt.toFixed(1)), '']);
       return aoa;
     };
+    const columns: (ColumnStyle | undefined)[] = [
+      undefined,
+      { numFmt: INT, align: 'right' },
+      { numFmt: INT, align: 'right' },
+      { numFmt: DEC1, align: 'right' },
+      { numFmt: HOURS, align: 'right' },
+      { numFmt: HOURS, align: 'right' },
+      { numFmt: PCT_INT, align: 'right' },
+    ];
     await downloadAoaWorkbook(
       [
-        { name: 'Matchs', aoa: build('MATCHS', matchSummaries), widths: [24, 12, 12, 16, 14, 12, 14] },
-        { name: 'Séminaires', aoa: build('SÉMINAIRES', seminarSummaries), widths: [24, 12, 12, 16, 14, 12, 14] },
+        { name: 'Matchs', aoa: build('MATCHS', matchSummaries), widths: [24, 12, 12, 16, 14, 12, 14], columns },
+        { name: 'Séminaires', aoa: build('SÉMINAIRES', seminarSummaries), widths: [24, 12, 12, 16, 14, 12, 14], columns },
       ],
       `Comparaison_matchs_seminaires_${today()}.xlsx`,
     );
@@ -835,7 +1225,7 @@ function ExportView({
   }[] = [
     {
       title: 'Rapport horaires complet',
-      desc: 'Détail par agent : événement, poste, espace, heures prévues / réelles / sup.',
+      desc: 'Classeur habillé 2 feuilles : Synthèse par événement + Détail nominatif par agent (ligne TOTAL).',
       onClick: exportHours,
       variant: 'primary',
     },
