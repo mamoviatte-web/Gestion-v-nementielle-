@@ -9,7 +9,7 @@
  * reflètent le board runner (source unique stock_balances).
  */
 
-import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from './xlsxAoa';
+import { downloadAoaWorkbook, sumFormula, type AoaCell, type AoaSheetOut } from './xlsxAoa';
 import { INT, type ColumnStyle } from './excelTheme';
 
 export interface RunnerExcelLine {
@@ -88,11 +88,17 @@ export async function downloadRunnerWorkbook(opts: {
     const rows: AoaCell[][] = [...byProduct.values()]
       .sort((a, b) => b.manque - a.manque || a.name.localeCompare(b.name, 'fr'))
       .map((p) => [p.name, p.category, p.besoin, p.reserve, p.manque > 0 ? p.manque : '—']);
+    // Total auto-vérifiant : Besoin total (col C) et Manque (col E). Données en
+    // lignes Excel 4..(3+n) ; le Manque textuel « — » est ignoré par SUM.
+    const last = 3 + rows.length;
     const aoa: AoaCell[][] = [
       [`PROVENCE RUGBY — LISTE DE COURSES — ${matchNom} — ${matchDate}`],
       [],
       ['Produit', 'Catégorie', 'Besoin total', 'Réserve', 'Manque'],
       ...rows,
+      ...(rows.length
+        ? [['TOTAL', '', sumFormula(2, 4, last), '', sumFormula(4, 4, last)] as AoaCell[]]
+        : []),
     ];
     sheets.push({
       name: sheetName('Liste de courses', used),
@@ -105,26 +111,25 @@ export async function downloadRunnerWorkbook(opts: {
   /* Une feuille par espace. */
   for (const card of cards) {
     const lines = linesBySpace.get(card.space_id) ?? [];
-    let tot = 0;
-    const rows: AoaCell[][] = lines.map((l) => {
-      tot += num(l.qty_to_move);
-      return [
-        l.product_name,
-        l.category,
-        num(l.needed_qty),
-        num(l.qty_to_move),
-        num(l.area_stock),
-        num(l.reserve_qty),
-        l.stock_sufficient_live ? 'OK' : `Manque ${num(l.shortfall_qty)}`,
-      ];
-    });
+    const rows: AoaCell[][] = lines.map((l) => [
+      l.product_name,
+      l.category,
+      num(l.needed_qty),
+      num(l.qty_to_move),
+      num(l.area_stock),
+      num(l.reserve_qty),
+      l.stock_sufficient_live ? 'OK' : `Manque ${num(l.shortfall_qty)}`,
+    ]);
+    // Total « À acheminer » (col D) auto-vérifiant : =SUM sur les lignes de données.
+    // Données en lignes Excel 4..(3+n) ; ligne blanche puis TOTAL en dessous.
+    const totCell: AoaCell = rows.length ? sumFormula(3, 4, 3 + rows.length) : 0;
     const aoa: AoaCell[][] = [
       [`PROVENCE RUGBY — FICHE RUNNER — ${card.space_name} — ${card.family} — ${matchNom} — ${matchDate}`],
       [],
       ['Produit', 'Catégorie', 'Besoin', 'À acheminer', 'Stock espace', 'Stock réserve', 'Statut'],
       ...rows,
       [],
-      ['TOTAL', '', '', tot, '', '', ''],
+      ['TOTAL', '', '', totCell, '', '', ''],
     ];
     sheets.push({ name: sheetName(card.space_name, used), aoa, widths: WIDTHS, columns: COLS });
   }
