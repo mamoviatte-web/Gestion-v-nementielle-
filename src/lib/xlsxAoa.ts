@@ -88,7 +88,11 @@ export async function downloadAoaWorkbook(sheets: AoaSheetOut[], filename: strin
       const excelRow = ws.addRow([]);
       row.forEach((cell, i) => {
         const c = excelRow.getCell(i + 1);
-        c.value = isFormula(cell) ? ({ formula: cell.f } as ExcelJS.CellFormulaValue) : (cell ?? null);
+        // exceljs attend la formule SANS « = » de tête (sinon « ==SUM… » cassé) :
+        // on tolère les deux conventions en retirant un « = » initial.
+        c.value = isFormula(cell)
+          ? ({ formula: cell.f.replace(/^=/, '') } as ExcelJS.CellFormulaValue)
+          : (cell ?? null);
       });
     }
     if (s.widths) s.widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
