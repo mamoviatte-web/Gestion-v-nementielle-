@@ -420,6 +420,82 @@ et vérifier `final_is_derived` pour ne pas polluer les dotations.
 **Réflexe de contrôle post-clôture** : relire `event_closure_reconciliation_log`
 (`mode='error'`/`success=false` → rejouer), puis dérouler (a)→(h) ci-dessus.
 
+## INVENTAIRE DÉPÔT AUC (30/09/2026) — taxonomie erreurs départs/retours & marche « zéro erreur »
+
+Comptage physique de la zone **« AUC — Réserve générale »** par M. Viatte le
+30/09, saisi en `inventaire` (`space_id` NULL, `event_id` NULL = ajustement du
+dépôt central). 31 lignes, **écart net physique−système = −399 u** → le dépôt
+était **surévalué** : l'érosion par sorties non tracées domine. Ces écarts
+révèlent 4 signatures récurrentes sur les **départs** (dépôt→espaces/buvettes) et
+**retours** (buvettes→dépôt). But de l'agent : les **détecter avant** l'inventaire
+et faire converger vers l'erreur 0. (Met à jour les points (e)/(f) : l'inventaire
+30/09 a réancré AUC ; les fûts restent l'anomalie vive — voir (4).)
+
+**Ledger de référence par produit AUC** (pour attribuer chaque écart à un flux) :
+```sql
+with auc as (select id from stock_locations where name ilike 'AUC%')
+select p.product_name,
+  sum(case when sm.to_location_id in (select id from auc) and sm.movement_type like 'retour%' then sm.qty else 0 end) retours_in,
+  sum(case when sm.to_location_id in (select id from auc) and sm.movement_type not like 'retour%' then sm.qty else 0 end) autres_in,
+  sum(case when sm.from_location_id in (select id from auc) then sm.qty else 0 end) sorties_out
+from stock_movements sm join products p using(product_id)
+where sm.from_location_id in (select id from auc) or sm.to_location_id in (select id from auc)
+group by 1;
+```
+
+**(1) Départs fantômes — produit hors routage dispatch.** Réceptionné en AUC mais
+`sorties_out = 0` alors qu'il est consommé en buvette. Mesuré 30/09 : **FADA
+Abricot Bouteille** (20 in / 0 out / écart −100), **FADA IPA Bouteille** (144 in /
+0 out / écart −36), **Flying Fish** (60 in / 0 out / écart +12). Cause racine :
+produit **absent de `product_depot_routing` au moment du dispatch** → le dispatch
+ne génère aucune sortie → le dépôt reste artificiellement plein. Deux variantes
+mesurées : (a) **routage tardif** — FADA Abricot/IPA ont été routés *après* leur
+dispatch, jamais rejoué (les sorties manquent rétroactivement) ; (b) **encore non
+routé** — au 30/09, **seul `Flying Fish`** reste sans routage (cas ouvert).
+Signature : `autres_in>0 AND sorties_out=0` + présence en
+`event_stock_lines`/`consommation`. Contrôle du trou de routage :
+```sql
+select p.product_name from products p
+where p.active and not exists (select 1 from product_depot_routing r where r.product_id=p.product_id);
+```
+Prévention : **avant chaque match**, router tout produit dispatché (AUC par défaut
+pour softs & bières bouteille) ; si le routage est ajouté après coup, **rejouer le
+dispatch** pour matérialiser les sorties.
+
+**(2) Sous-enregistrement des départs à fort débit.** Écart **négatif** +
+throughput élevé : BUD bouteille −211, San Pellegrino 50cl −174, Jus de fruits
+−115, Corona −98, FADA Blonde −96, San Pellegrino (St-Pé) −88, Pepsi 1L −56. Les
+sorties existent (`sorties_out>0`) mais **< réel** : chaque match perd une part non
+tracée. Prévention : par match, rapprocher `Σ sorties AUC→espaces` vs
+`Σ(initial+réassort)` des fiches ; l'écart = départs à booker.
+
+**(3) Retours non crédités / dispatch sur-évalué.** Écart **positif** (physique >
+système) : Pepsi 50cl +291, Orangina +197, FADA Blanche +92, Perrier +39. Soit les
+retours buvette→AUC ne sont pas crédités, soit le dispatch a sur-compté.
+Prévention : après clôture, garantir que pleins/retours réutilisables génèrent un
+`retour_réutilisable`/`retour` vers AUC (analogue au flux fûts
+`return_buvette_kegs_to_central`), et vérifier l'anti-sur-comptage dispatch (§ dédié).
+
+**(4) Ledger fûts cassé — réceptions non bookées.** « Stockage Fûts » = **−374 u /
+−39 117 €** (Fût BUD −195, Goose −53, LEFFE −49, FADA Blonde −34, Hoegaarden −24,
+FADA IPA −13, FADA Abricot −12, FADA Blanche −9 ; CO2 +15). Solde négatif
+impossible → les **réceptions fûts** ne sont pas enregistrées dans le ledger
+location alors que dispatch + conso le sont, ce qui **contredit l'ancrage
+physique** (BUD 23 / LEFFE 21). Signal :
+`select * from v_depot_balance_derived where location_name='Stockage Fûts' and current_quantity<0;`
+Fix : **`record_keg_count` (comptage physique = vérité)** puis
+`reconcile_keg_inventory_to_truth` ; jamais planchonner à 0 sans anomalie.
+
+**Boucle « vers zéro erreur » (réflexe pré/post chaque événement) :**
+1. **Avant** — tout produit dispatché a un `product_depot_routing` (sinon router) → tue les départs fantômes (1).
+2. **Pendant/clôture** — chaque sortie dépôt→espace est bookée ; chaque retour/plein buvette→dépôt est crédité (2)(3).
+3. **Après** — `run_business_audit` + rapprochement `Σ sorties AUC` vs `Σ fiches`, et `v_depot_balance_derived` sans négatif (4).
+4. **Ancre au physique** — un `inventaire` (`space_id` NULL) sur AUC ou un `record_keg_count` est la **vérité du jour** : l'agent l'utilise comme point d'ancrage et **explique** l'écart par (1)-(4), il ne le « corrige » pas à rebours. Comptage physique prime ; la réconciliation aligne le ledger, jamais l'inverse.
+
+Objectif chiffré : ramener l'écart net d'inventaire dépôt (**−399 u au 30/09**) vers
+0, en éliminant d'abord les départs fantômes (routage) puis en fiabilisant
+sorties/retours à fort débit, et en réancrant les fûts au comptage physique.
+
 ## APPLICATION EN BASE — PROTOCOLE (garde-fou d'exécution)
 
 L'écriture directe en base de prod peut être bloquée par le bac à sable de session
