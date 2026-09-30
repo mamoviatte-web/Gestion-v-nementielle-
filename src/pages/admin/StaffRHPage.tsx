@@ -16,7 +16,7 @@ import { PeriodSelector, buildPeriod, type Period } from '@/components/rh/Period
 import { HorsEventSection } from '@/components/rh/HorsEventSection';
 import { useRhData, type EventKpi } from '@/hooks/useRhData';
 import { supabase } from '@/lib/supabase';
-import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, sumFormula, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
 import { EUR0, HOURS, INT, type ColumnStyle } from '@/lib/excelTheme';
 
 const OR_PR = '#C9A646';
@@ -113,6 +113,14 @@ export default function StaffRHPage() {
     const L: (s: ColumnStyle) => ColumnStyle = (s) => s;
     const tauxSup = g.totalHeures > 0 ? (g.totalHSup / g.totalHeures) * 100 : 0;
 
+    // Cellule TOTAL auto-vérifiante pour les feuilles au format standard
+    // [titre],[],[entêtes],…lignes,total (données en lignes Excel 4..3+n) :
+    // =SUM sur la colonne additive `ci`. Repli sur la valeur statique si aucune
+    // ligne (une plage inversée =SUM(X4:X3) serait invalide). Réservé aux
+    // colonnes ADDITIVES (montants, heures, compteurs) — jamais aux moyennes/%.
+    const totalCell = (ci: number, n: number, fallback: AoaCell): AoaCell =>
+      n > 0 ? sumFormula(ci, 4, 3 + n) : fallback;
+
     // Ventilation par rôle (tri décroissant).
     const roleSorted = [...chartRoles].sort((a, b) => b.value - a.value);
     // Ventilation par espace (agrégée sur la période, tri décroissant par coût).
@@ -147,6 +155,16 @@ export default function StaffRHPage() {
       ...espaceSorted.map((e): AoaCell[] => [e.name, e.agents, Math.round(e.cout)]),
       ['TOTAL', espaceSorted.reduce((s, e) => s + e.agents, 0), Math.round(espaceSorted.reduce((s, e) => s + e.cout, 0))],
     ];
+    // TOTAL du bloc « Répartition par espace » (dernier bloc) rendu auto-vérifiant.
+    // La plage est calculée depuis la matrice elle-même (robuste si les blocs du
+    // haut changent) : les E lignes espace précèdent la ligne TOTAL finale.
+    if (espaceSorted.length > 0) {
+      const total = synth[synth.length - 1];
+      const firstRow = synth.length - espaceSorted.length; // 1re ligne espace (Excel)
+      const lastRow = synth.length - 1;                    // dernière ligne espace (Excel)
+      total[1] = sumFormula(1, firstRow, lastRow); // Agents (additif)
+      total[2] = sumFormula(2, firstRow, lastRow); // Coût RH (additif)
+    }
 
     // ── Feuille 2 : PAR AGENT (détail nominatif) ──
     const agentHeader = ['Agent', 'Rôle', 'Événements', 'Moy. h/evt', 'Heures sup', 'Confirmation', 'Coût total'];
@@ -158,9 +176,10 @@ export default function StaffRHPage() {
         a.agent_nom, a.agent_role, a.nb_evenements, round1(a.moy_heures_par_evt),
         round1(a.total_heures_sup), a.taux_confirmation_pct, Math.round(a.total_cout_cumul),
       ]),
-      ['TOTAL', '', agents.reduce((s, a) => s + a.nb_evenements, 0), null,
-        round1(agents.reduce((s, a) => s + a.total_heures_sup, 0)), null,
-        Math.round(agents.reduce((s, a) => s + a.total_cout_cumul, 0))],
+      ['TOTAL', '',
+        totalCell(2, agents.length, agents.reduce((s, a) => s + a.nb_evenements, 0)), null,
+        totalCell(4, agents.length, round1(agents.reduce((s, a) => s + a.total_heures_sup, 0))), null,
+        totalCell(6, agents.length, Math.round(agents.reduce((s, a) => s + a.total_cout_cumul, 0)))],
     ];
 
     // ── Feuille 3 : CUMUL AGENTS (classement) ──
@@ -172,10 +191,11 @@ export default function StaffRHPage() {
         i + 1, a.agent_nom, a.agent_role, a.nb_evenements, round1(a.total_heures_cumul),
         round1(a.total_heures_sup), Math.round(a.total_cout_cumul), a.taux_confirmation_pct,
       ]),
-      ['TOTAL', '', '', agents.reduce((s, a) => s + a.nb_evenements, 0),
-        round1(agents.reduce((s, a) => s + a.total_heures_cumul, 0)),
-        round1(agents.reduce((s, a) => s + a.total_heures_sup, 0)),
-        Math.round(agents.reduce((s, a) => s + a.total_cout_cumul, 0)), null],
+      ['TOTAL', '', '',
+        totalCell(3, agents.length, agents.reduce((s, a) => s + a.nb_evenements, 0)),
+        totalCell(4, agents.length, round1(agents.reduce((s, a) => s + a.total_heures_cumul, 0))),
+        totalCell(5, agents.length, round1(agents.reduce((s, a) => s + a.total_heures_sup, 0))),
+        totalCell(6, agents.length, Math.round(agents.reduce((s, a) => s + a.total_cout_cumul, 0))), null],
     ];
 
     // ── Feuille 4 : PAR ÉVÉNEMENT ──
@@ -188,10 +208,13 @@ export default function StaffRHPage() {
         round1(k.moy_heures_agent), round1(k.total_heures), round1(k.total_heures_sup),
         Math.round(k.total_cout_rh), k.taux_confirmation_pct,
       ]),
-      ['TOTAL', '', '', kpis.reduce((s, k) => s + k.pax_count, 0), kpis.reduce((s, k) => s + k.nb_agents, 0),
-        null, null, round1(kpis.reduce((s, k) => s + k.total_heures, 0)),
-        round1(kpis.reduce((s, k) => s + k.total_heures_sup, 0)),
-        Math.round(kpis.reduce((s, k) => s + k.total_cout_rh, 0)), null],
+      ['TOTAL', '', '',
+        totalCell(3, kpis.length, kpis.reduce((s, k) => s + k.pax_count, 0)),
+        totalCell(4, kpis.length, kpis.reduce((s, k) => s + k.nb_agents, 0)),
+        null, null,
+        totalCell(7, kpis.length, round1(kpis.reduce((s, k) => s + k.total_heures, 0))),
+        totalCell(8, kpis.length, round1(kpis.reduce((s, k) => s + k.total_heures_sup, 0))),
+        totalCell(9, kpis.length, Math.round(kpis.reduce((s, k) => s + k.total_cout_rh, 0))), null],
     ];
 
     // ── Feuille 5 : PAR ESPACE (détail par ligne événement × espace) ──
@@ -203,8 +226,9 @@ export default function StaffRHPage() {
       ...espacesSorted.map((e): AoaCell[] => [
         frDate(e.event_date), e.space_name, e.service_type, e.nb_agents, round1(e.moy_heures), Math.round(e.cout_rh),
       ]),
-      ['TOTAL', '', '', espacesSorted.reduce((s, e) => s + e.nb_agents, 0), null,
-        Math.round(espacesSorted.reduce((s, e) => s + e.cout_rh, 0))],
+      ['TOTAL', '', '',
+        totalCell(3, espacesSorted.length, espacesSorted.reduce((s, e) => s + e.nb_agents, 0)), null,
+        totalCell(5, espacesSorted.length, Math.round(espacesSorted.reduce((s, e) => s + e.cout_rh, 0)))],
     ];
 
     // ── Feuille 6 : INTERVENTIONS (ligne-à-ligne agent × événement) ──
@@ -217,7 +241,8 @@ export default function StaffRHPage() {
         u.agent_nom, u.agent_role, evName.get(u.event_id) ?? u.event_id,
         u.heures_travaillees == null ? null : round1(u.heures_travaillees), u.confirme_agent ? 'Oui' : 'Non',
       ]),
-      ['TOTAL', '', '', round1(unified.reduce((s, u) => s + (u.heures_travaillees ?? 0), 0)), ''],
+      ['TOTAL', '', '',
+        totalCell(3, unified.length, round1(unified.reduce((s, u) => s + (u.heures_travaillees ?? 0), 0))), ''],
     ];
 
     return [

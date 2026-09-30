@@ -20,7 +20,7 @@ import {
   ChevronRight,
   LineChart,
 } from 'lucide-react';
-import { downloadAoaWorkbook, type AoaCell } from '@/lib/xlsxAoa';
+import { downloadAoaWorkbook, sumFormula, type AoaCell } from '@/lib/xlsxAoa';
 import { HOURS, DEC1, INT, type ColumnStyle } from '@/lib/excelTheme';
 import {
   Badge,
@@ -1042,15 +1042,19 @@ function ExportView({
         s.efficiency_score != null ? Math.round(s.efficiency_score * 100) : '',
       ]);
     }
+    // Ligne TOTAL auto-vérifiante : =SUM sur les lignes de données (Excel 4..3+n)
+    // pour les colonnes ADDITIVES (agents, heures). Colonnes non additives
+    // (spectateurs laissés vides, ratio /100 pax, efficacité %) restent vides.
+    const nSynth = summaries.length;
     synthAoa.push([
       'TOTAL',
       '',
       '',
-      sAgents,
+      nSynth ? sumFormula(3, 4, 3 + nSynth) : sAgents,
       '',
-      Number(sPlanned.toFixed(1)),
-      Number(sActual.toFixed(1)),
-      Number(sOt.toFixed(1)),
+      nSynth ? sumFormula(5, 4, 3 + nSynth) : Number(sPlanned.toFixed(1)),
+      nSynth ? sumFormula(6, 4, 3 + nSynth) : Number(sActual.toFixed(1)),
+      nSynth ? sumFormula(7, 4, 3 + nSynth) : Number(sOt.toFixed(1)),
       '',
     ]);
 
@@ -1080,14 +1084,16 @@ function ExportView({
         Number(o.toFixed(2)),
       ]);
     }
+    // TOTAL auto-vérifiant : =SUM des heures (colonnes additives) sur Excel 4..3+n.
+    const nDetail = schedules.length;
     detailAoa.push([
       'TOTAL',
       '',
       '',
       '',
-      Number(dPlanned.toFixed(2)),
-      Number(dActual.toFixed(2)),
-      Number(dOt.toFixed(2)),
+      nDetail ? sumFormula(4, 4, 3 + nDetail) : Number(dPlanned.toFixed(2)),
+      nDetail ? sumFormula(5, 4, 3 + nDetail) : Number(dActual.toFixed(2)),
+      nDetail ? sumFormula(6, 4, 3 + nDetail) : Number(dOt.toFixed(2)),
     ]);
 
     const synthCols: (ColumnStyle | undefined)[] = [
@@ -1151,7 +1157,17 @@ function ExportView({
         s.efficiency_score != null ? Math.round(s.efficiency_score * 100) : '',
       ]);
     }
-    aoa.push(['TOTAL', '', tAgents, '', Number(tOt.toFixed(1)), '']);
+    // TOTAL auto-vérifiant : =SUM des colonnes additives (agents, heures sup).
+    // Ratio /100 pax et efficacité % restent vides (non additifs).
+    const nEff = summaries.length;
+    aoa.push([
+      'TOTAL',
+      '',
+      nEff ? sumFormula(2, 4, 3 + nEff) : tAgents,
+      '',
+      nEff ? sumFormula(4, 4, 3 + nEff) : Number(tOt.toFixed(1)),
+      '',
+    ]);
     const columns: (ColumnStyle | undefined)[] = [
       undefined,
       { align: 'center' },
@@ -1191,7 +1207,18 @@ function ExportView({
           s.efficiency_score != null ? Math.round(s.efficiency_score * 100) : '',
         ]);
       }
-      aoa.push(['TOTAL', '', tAgents, '', Number(tHours.toFixed(1)), Number(tOt.toFixed(1)), '']);
+      // TOTAL auto-vérifiant : =SUM des colonnes additives (agents, heures).
+      // Spectateurs, ratio /100 pax et efficacité % restent vides (non additifs).
+      const nCmp = list.length;
+      aoa.push([
+        'TOTAL',
+        '',
+        nCmp ? sumFormula(2, 4, 3 + nCmp) : tAgents,
+        '',
+        nCmp ? sumFormula(4, 4, 3 + nCmp) : Number(tHours.toFixed(1)),
+        nCmp ? sumFormula(5, 4, 3 + nCmp) : Number(tOt.toFixed(1)),
+        '',
+      ]);
       return aoa;
     };
     const columns: (ColumnStyle | undefined)[] = [
