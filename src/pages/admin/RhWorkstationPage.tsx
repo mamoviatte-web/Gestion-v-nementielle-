@@ -19,10 +19,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Lock, ShieldCheck, CheckCircle2, Circle, Plus, Trash2, Users, Save, X,
-  AlertTriangle, HeartHandshake, Building2, Wrench,
+  AlertTriangle, HeartHandshake, Building2, Wrench, Download,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { EUR, EUR0, HOURS, INT, type ColumnStyle } from '@/lib/excelTheme';
 
 /* ───────────────────────── Types ───────────────────────── */
 
@@ -75,6 +77,23 @@ const num = (v: unknown): number => {
 };
 const eur = (v: number): string =>
   v.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €';
+
+const hhmm = (t: string | null): string => t?.slice(0, 5) ?? '';
+
+/** Coût estimé d'une ligne agent (bénévole = 0 € ; forfait ou horaire × heures). */
+const rowCost = (r: PreplanRow): number => {
+  if (r.staff_status === 'benevole') return 0;
+  if ((r.billing_mode ?? 'horaire') === 'forfait') return num(r.forfait_amount);
+  return num(r.actual_hours ?? r.planned_hours) * num(r.hourly_rate);
+};
+
+/** Styles de colonnes Excel (charte excelTheme) réutilisés par l'export. */
+const colLeft: ColumnStyle = { align: 'left' };
+const colCenter: ColumnStyle = { align: 'center' };
+const colInt: ColumnStyle = { numFmt: INT, align: 'right' };
+const colHours: ColumnStyle = { numFmt: HOURS, align: 'right' };
+const colEur: ColumnStyle = { numFmt: EUR, align: 'right' };
+const colEur0: ColumnStyle = { numFmt: EUR0, align: 'right' };
 
 const STATUT_LABEL: Record<string, string> = {
   salarie: 'Salarié', autoentrepreneur: 'Auto-entrepreneur', benevole: 'Bénévole',
@@ -367,6 +386,7 @@ export default function RhWorkstationPage({ basePath = '/admin/rh/poste' }: { ba
   const [report, setReport] = useState<RhReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [acting, setActing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [rhState, setRhState] = useState<RhState>('importe');
   const [isMatch, setIsMatch] = useState(true);
   const [checkingMatch, setCheckingMatch] = useState(false);
@@ -477,6 +497,137 @@ export default function RhWorkstationPage({ basePath = '/admin/rh/poste' }: { ba
   const horsResto = useMemo(() => rows.filter((x) => !x.space_id), [rows]);
   const curStep = stepIndex(rhState);
 
+  const selectedEvent = useMemo(() => events.find((e) => e.event_id === selected) ?? null, [events, selected]);
+
+  /** Export Excel complet et habillé du poste RH (synthèse + émargement + prestataires). */
+  async function exportExcel() {
+    if (rows.length === 0) return;
+    setExporting(true);
+    try {
+      const evName = selectedEvent?.event_name ?? 'Match';
+      const evDate = selectedEvent ? new Date(selectedEvent.event_date).toLocaleDateString('fr-FR') : '';
+      const stateLabel = STEPS[stepIndex(rhState)]?.label ?? '';
+
+      // Prestataires & missions (état local du panneau non remonté → relecture ciblée).
+      const { data: provData } = await supabase.from('event_service_providers')
+        .select('name, sort').eq('event_id', selected).order('sort').order('name');
+      const providers = (provData ?? []) as { name: string; sort: number }[];
+
+      // ── Feuille 1 : SYNTHÈSE (KPIs RH + ventilation par statut d'emploi) ──
+      const stCout = report?.par_statut.reduce((s, r) => s + (r.statut === 'benevole' ? 0 : r.cout), 0) ?? 0;
+      const stAgents = report?.par_statut.reduce((s, r) => s + r.agents, 0) ?? 0;
+      const stHeures = report?.par_statut.reduce((s, r) => s + r.heures, 0) ?? 0;
+      const synthAoa: AoaCell[][] = [
+        [`RH · Poste de travail — ${evName}${evDate ? ` (${evDate})` : ''}`],
+        [],
+        ['Indicateur', 'Nombre', 'Heures', 'Coût (€ HT)'],
+        ['Personnes planifiées', report?.nb_agents ?? 0, null, null],
+        ['Heures cumulées', null, report?.total_heures ?? 0, null],
+        ['Coût prévisionnel', null, null, report?.cout_previsionnel ?? 0],
+        ['Coût réel', null, null, report?.cout_reel ?? 0],
+        ['Espaces servis', bySpace.length, null, null],
+        ['Hors restauration (pôles)', horsResto.length, null, null],
+        ['Prestataires / missions', providers.length, null, null],
+        ['État du dispositif', stateLabel, null, null],
+        [],
+        ['Statut d’emploi', 'Agents', 'Heures', 'Coût (€ HT)'],
+        ...(report?.par_statut ?? []).map((s): AoaCell[] => [
+          STATUT_LABEL[s.statut] ?? s.statut,
+          s.agents,
+          Number(s.heures.toFixed(1)),
+          s.statut === 'benevole' ? 0 : Math.round(s.cout),
+        ]),
+        ['Total', stAgents, Number(stHeures.toFixed(1)), Math.round(stCout)],
+      ];
+
+      // ── Feuille 2 : ÉMARGEMENT (toutes les lignes agent, toutes colonnes) ──
+      const emargHeader: AoaCell[] = [
+        'Espace', 'Nom', 'Prénom', 'Rôle', 'Pôle', 'Statut d’emploi',
+        'Début prévu', 'Fin prévue', 'Début réel', 'Fin réelle',
+        'Heures prévues', 'Heures réelles', 'Facturation', 'Taux €/h', 'Forfait €',
+        'Coût estimé', 'Présence', 'Note',
+      ];
+      const sortedRows = [...rows].sort((a, b) => {
+        const sa = a.space_id ? (spaces[a.space_id] ?? 'zzz') : 'zzz — Hors restauration';
+        const sb = b.space_id ? (spaces[b.space_id] ?? 'zzz') : 'zzz — Hors restauration';
+        return sa.localeCompare(sb) || (a.agent_nom ?? '').localeCompare(b.agent_nom ?? '');
+      });
+      const emargRows: AoaCell[][] = sortedRows.map((r): AoaCell[] => {
+        const forfait = (r.billing_mode ?? 'horaire') === 'forfait';
+        return [
+          r.space_id ? (spaces[r.space_id] ?? 'Espace') : 'Hors restauration',
+          r.agent_nom ?? '', r.agent_prenom ?? '', r.agent_role ?? '', r.pole ?? '',
+          STATUT_LABEL[r.staff_status ?? 'non_precise'] ?? 'Non précisé',
+          hhmm(r.planned_start), hhmm(r.planned_end), hhmm(r.actual_start), hhmm(r.actual_end),
+          r.planned_hours == null ? null : Number(num(r.planned_hours).toFixed(1)),
+          r.actual_hours == null ? null : Number(num(r.actual_hours).toFixed(1)),
+          forfait ? 'Forfait' : 'Horaire',
+          forfait ? null : (r.hourly_rate == null ? null : num(r.hourly_rate)),
+          forfait ? (r.forfait_amount == null ? null : num(r.forfait_amount)) : null,
+          Math.round(rowCost(r)),
+          r.status ?? 'planifié',
+          r.note ?? '',
+        ];
+      });
+      const totPlanned = rows.reduce((s, r) => s + num(r.planned_hours), 0);
+      const totActual = rows.reduce((s, r) => s + num(r.actual_hours), 0);
+      const totCost = rows.reduce((s, r) => s + rowCost(r), 0);
+      const emargTotal: AoaCell[] = [
+        'Total', `${rows.length} agent(s)`, '', '', '', '', '', '', '', '',
+        Number(totPlanned.toFixed(1)), Number(totActual.toFixed(1)), '', '', '',
+        Math.round(totCost), '', '',
+      ];
+
+      const sheets: AoaSheetOut[] = [
+        {
+          name: 'Synthèse',
+          aoa: synthAoa,
+          widths: [30, 16, 12, 16],
+          columns: [colLeft, colInt, colHours, colEur0],
+        },
+        {
+          name: 'Émargement',
+          aoa: [
+            [`Émargement RH — ${evName}${evDate ? ` (${evDate})` : ''}`],
+            [],
+            emargHeader,
+            ...emargRows,
+            emargTotal,
+          ],
+          widths: [18, 16, 14, 16, 12, 16, 10, 10, 10, 10, 12, 12, 11, 10, 10, 12, 12, 26],
+          columns: [
+            colLeft, colLeft, colLeft, colLeft, colLeft, colLeft,
+            colCenter, colCenter, colCenter, colCenter,
+            colHours, colHours, colCenter, colEur, colEur,
+            colEur0, colCenter, colLeft,
+          ],
+          pageFit: { landscape: true },
+        },
+      ];
+
+      if (providers.length > 0) {
+        sheets.push({
+          name: 'Prestataires',
+          aoa: [
+            [`Prestataires & missions — ${evName}`],
+            [],
+            ['#', 'Prestataire / mission'],
+            ...providers.map((p, i): AoaCell[] => [i + 1, p.name]),
+          ],
+          widths: [6, 44],
+          columns: [colCenter, colLeft],
+        });
+      }
+
+      const slug = evName.normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '') || 'Match';
+      const dateStr = new Date().toISOString().slice(0, 10);
+      await downloadAoaWorkbook(sheets, `RH-Poste_${slug}_${dateStr}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
       {/* En-tête */}
@@ -489,16 +640,28 @@ export default function RhWorkstationPage({ basePath = '/admin/rh/poste' }: { ba
           <p className="ml-3.5 mt-1 text-sm text-stone-400">Pilotage RH d’un match — de l’import au gel du réel.</p>
         </div>
         {events.length > 0 && (
-          <select value={events.some((e) => e.event_id === selected) ? selected : ''}
-            onChange={(e) => navigate(`${basePath}/${e.target.value}`)}
-            className="min-w-[280px] rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
-            {!events.some((e) => e.event_id === selected) && <option value="" disabled>— Sélectionner un match —</option>}
-            {events.map((e) => (
-              <option key={e.event_id} value={e.event_id}>
-                🏉 {e.event_name} — {new Date(e.event_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2">
+            {isMatch && (
+              <button
+                onClick={() => void exportExcel()}
+                disabled={exporting || rows.length === 0}
+                className="flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-stone-700 disabled:opacity-40"
+                title={rows.length === 0 ? 'Aucune donnée à exporter' : 'Exporter le poste RH (Excel)'}
+              >
+                <Download size={15} /> {exporting ? 'Génération…' : 'Exporter Excel'}
+              </button>
+            )}
+            <select value={events.some((e) => e.event_id === selected) ? selected : ''}
+              onChange={(e) => navigate(`${basePath}/${e.target.value}`)}
+              className="min-w-[280px] rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+              {!events.some((e) => e.event_id === selected) && <option value="" disabled>— Sélectionner un match —</option>}
+              {events.map((e) => (
+                <option key={e.event_id} value={e.event_id}>
+                  🏉 {e.event_name} — {new Date(e.event_date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
       </div>
 

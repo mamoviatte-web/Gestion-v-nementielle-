@@ -11,18 +11,42 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link2, Trash2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Link2, Trash2, AlertTriangle, CheckCircle2, Download } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/context/ToastContext';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Alert, Button, Select, Spinner } from '@/components/ui';
+import { Alert, Button, Select, Spinner, StatTile } from '@/components/ui';
+import { downloadAoaWorkbook, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
+import { INT, type ColumnStyle } from '@/lib/excelTheme';
 
 interface Space {
   space_id: string;
   space_name: string;
+  space_type: string | null;
+  access_code: string | null;
+  capacity: number | null;
+  max_pax: number | null;
   active: boolean;
   service_type: string | null;
+  retains_stock: boolean | null;
+  retain_kegs_in_espace: boolean | null;
 }
+
+/* Styles de colonnes Excel réutilisés (charte excelTheme). */
+const colLeft: ColumnStyle = { align: 'left' };
+const colCenter: ColumnStyle = { align: 'center' };
+const colInt: ColumnStyle = { numFmt: INT, align: 'right' };
+
+/** Ordre d'affichage stable des types d'espace (les autres suivent, triés). */
+const TYPE_ORDER = ['VIP', 'Bar', 'Buvette'];
+const typeRank = (t: string): number => {
+  const i = TYPE_ORDER.indexOf(t);
+  return i === -1 ? TYPE_ORDER.length : i;
+};
+
+/** Capacité effective d'un espace (capacity, sinon max_pax de service). */
+const capacityOf = (s: Space): number | null => s.capacity ?? s.max_pax ?? null;
+const yesNo = (v: boolean | null | undefined): string => (v ? 'Oui' : 'Non');
 interface DuplicateRow {
   ghost_space_id: string;
   ghost_name: string;
@@ -45,11 +69,17 @@ export default function SpacesPage() {
   const [ghostId, setGhostId] = useState('');
   const [canonId, setCanonId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     const [sp, du, mp] = await Promise.all([
-      supabase.from('spaces').select('space_id, space_name, active, service_type').order('space_name'),
+      supabase
+        .from('spaces')
+        .select(
+          'space_id, space_name, space_type, access_code, capacity, max_pax, active, service_type, retains_stock, retain_kegs_in_espace',
+        )
+        .order('space_name'),
       supabase.from('space_duplicates_check').select('*'),
       supabase.from('space_canonical_map').select('ghost_space_id, canonical_space_id, created_at'),
     ]);
@@ -76,6 +106,117 @@ export default function SpacesPage() {
       })),
     [spaces],
   );
+
+  /**
+   * Synthèse du référentiel : espaces actifs, répartition par type (VIP/Bar/
+   * Buvette), conservateurs de stock / de fûts, capacité totale. Base des KPIs
+   * et des mini-barres.
+   */
+  const summary = useMemo(() => {
+    const active = spaces.filter((s) => s.active);
+    const byType = new Map<string, number>();
+    let totalCapacity = 0;
+    let retainsStock = 0;
+    let retainsKegs = 0;
+    for (const s of spaces) {
+      const t = s.space_type ?? 'Non défini';
+      byType.set(t, (byType.get(t) ?? 0) + 1);
+      totalCapacity += capacityOf(s) ?? 0;
+      if (s.retains_stock) retainsStock += 1;
+      if (s.retain_kegs_in_espace) retainsKegs += 1;
+    }
+    const typeRows = [...byType.entries()]
+      .map(([label, count]) => ({ key: label, label, count }))
+      .sort((a, b) => b.count - a.count || typeRank(a.label) - typeRank(b.label));
+    return {
+      total: spaces.length,
+      active: active.length,
+      inactive: spaces.length - active.length,
+      typeRows,
+      totalCapacity,
+      retainsStock,
+      retainsKegs,
+    };
+  }, [spaces]);
+
+  /** Export Excel complet et habillé du référentiel des espaces (charte excelTheme). */
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      // ── Feuille SYNTHÈSE : compteurs globaux + répartition par type ──
+      const total = summary.total;
+      const synthAoa: AoaCell[][] = [
+        ['Espaces — Provence Rugby · Stade Maurice-David'],
+        [],
+        ['Indicateur', 'Valeur'],
+        ['Total espaces', total],
+        ['Espaces actifs', summary.active],
+        ['Espaces inactifs', summary.inactive],
+        ['Conservent leur stock', summary.retainsStock],
+        ['Conservent les fûts sur place', summary.retainsKegs],
+        ['Capacité totale (pax)', summary.totalCapacity],
+        [],
+        ['Répartition par type', 'Nombre'],
+        ...summary.typeRows.map((r): AoaCell[] => [r.label, r.count]),
+        ['Total', total],
+      ];
+
+      // ── Feuille ESPACES : toutes les colonnes + ligne TOTAL / compteurs ──
+      const header: AoaCell[] = [
+        'Nom',
+        'Type',
+        "Code d'accès",
+        'Capacité',
+        'Conserve stock',
+        'Conserve fûts',
+        'Actif',
+      ];
+      const sorted = [...spaces].sort(
+        (a, b) =>
+          typeRank(a.space_type ?? '') - typeRank(b.space_type ?? '') ||
+          (a.space_type ?? '').localeCompare(b.space_type ?? '') ||
+          a.space_name.localeCompare(b.space_name),
+      );
+      const rows: AoaCell[][] = sorted.map((s) => [
+        s.space_name,
+        s.space_type ?? '—',
+        s.access_code ?? '—',
+        capacityOf(s) ?? '',
+        yesNo(s.retains_stock),
+        yesNo(s.retain_kegs_in_espace),
+        yesNo(s.active),
+      ]);
+      const totalRow: AoaCell[] = [
+        'Total',
+        `${summary.typeRows.length} type(s)`,
+        '',
+        summary.totalCapacity,
+        summary.retainsStock,
+        summary.retainsKegs,
+        `${summary.active} actif(s)`,
+      ];
+
+      const sheets: AoaSheetOut[] = [
+        {
+          name: 'Synthèse',
+          aoa: synthAoa,
+          widths: [30, 14],
+          columns: [colLeft, colInt],
+        },
+        {
+          name: 'Espaces',
+          aoa: [['Référentiel des espaces — Provence Rugby'], [], header, ...rows, totalRow],
+          widths: [26, 12, 14, 11, 15, 14, 9],
+          columns: [colLeft, colLeft, colCenter, colInt, colCenter, colCenter, colCenter],
+        },
+      ];
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      await downloadAoaWorkbook(sheets, `Espaces_Provence-Rugby_${dateStr}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function declareMapping() {
     if (!ghostId || !canonId) return;
@@ -117,7 +258,52 @@ export default function SpacesPage() {
       <PageHeader
         title="Espaces en double"
         description="Détection et résolution des doublons. Un responsable connecté sur un doublon voit toujours les données de l'espace canonique."
+        action={
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={spaces.length === 0 || exporting}
+            onClick={() => void exportExcel()}
+          >
+            <Download className="h-4 w-4" /> {exporting ? 'Génération…' : 'Exporter Excel'}
+          </Button>
+        }
       />
+
+      {/* Bande de synthèse (KPIs + mini-barres par type) — vue d'ensemble du référentiel. */}
+      {spaces.length > 0 && (
+        <div className="mb-6 space-y-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <StatTile
+              label="Espaces actifs"
+              value={summary.active}
+              tone="good"
+              sub={`${summary.total} au total · ${summary.inactive} inactif(s)`}
+            />
+            <StatTile
+              label="Types"
+              value={summary.typeRows.length}
+              sub={summary.typeRows.map((r) => `${r.label} ${r.count}`).join(' · ') || '—'}
+            />
+            <StatTile
+              label="Conservent le stock"
+              value={summary.retainsStock}
+              sub={`${summary.total - summary.retainsStock} remis au dépôt`}
+            />
+            <StatTile
+              label="Conservent les fûts"
+              value={summary.retainsKegs}
+              sub="fûts stockés sur place"
+            />
+            <StatTile
+              label="Capacité totale"
+              value={summary.totalCapacity.toLocaleString('fr-FR')}
+              sub="pax cumulés"
+            />
+          </div>
+          <TypeBreakdown items={summary.typeRows} total={summary.total} />
+        </div>
+      )}
 
       {/* Doublons détectés par motif (Buvette N ↔ BN) */}
       <section className="mb-8">
@@ -233,6 +419,47 @@ export default function SpacesPage() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+/** Mini-graphe : barres horizontales du nombre d'espaces par type (tri décroissant). */
+function TypeBreakdown({
+  items,
+  total,
+}: {
+  items: { key: string; label: string; count: number }[];
+  total: number;
+}) {
+  const visible = items.filter((i) => i.count > 0);
+  const max = Math.max(1, ...visible.map((i) => i.count));
+  return (
+    <div className="overflow-hidden rounded-2xl border border-pr-stone bg-white">
+      <div className="border-b border-pr-stone bg-pr-cream px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-pr-black-soft/50">
+        Répartition par type
+      </div>
+      {visible.length === 0 ? (
+        <p className="px-4 py-6 text-center text-sm text-pr-black-soft/40">Aucune donnée.</p>
+      ) : (
+        <div className="divide-y divide-pr-stone/50">
+          {visible.map((r) => (
+            <div key={r.key} className="px-4 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-sm font-medium text-pr-black-soft/80">{r.label}</span>
+                <span className="shrink-0 text-sm font-bold tabular-nums text-pr-olive-dark">
+                  {r.count}
+                  <span className="ml-1 text-[11px] font-normal text-pr-black-soft/40">
+                    {total > 0 ? `${Math.round((r.count / total) * 100)} %` : ''}
+                  </span>
+                </span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-pr-stone/50">
+                <div className="h-full rounded-full bg-pr-olive" style={{ width: `${(r.count / max) * 100}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
