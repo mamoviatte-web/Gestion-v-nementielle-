@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { ChevronDown, ChevronRight, Download, RefreshCw, Zap } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, RefreshCw, X, Zap } from 'lucide-react';
 import { AnalyseSeminaire } from '@/components/analytics/AnalyseSeminaire';
 import { SuiviFuts } from '@/components/analytics/SuiviFuts';
 import { downloadAoaWorkbook, sumFormula, type AoaCell, type AoaSheetOut } from '@/lib/xlsxAoa';
@@ -209,6 +209,187 @@ function BuvetteHeatmap({
       <p className="text-center text-xs text-stone-400">
         Intensité = consommation totale sur la sélection
       </p>
+    </div>
+  );
+}
+
+/* ─── Détail dynamique d'une buvette sélectionnée ───────────────────────────
+ * Panneau qui s'ouvre au clic sur une tuile de la carte : consommation par
+ * produit de la buvette, scopée exactement comme la carte (événement précis ou
+ * tous les événements du filtre courant). Source : event_space_product_consumption
+ * (consommé, coût, rempli/final → taux retour). RG-003 : page ROLE_STADE, coûts OK. */
+
+interface BuvetteDetailRow {
+  product_id: string;
+  product_name: string;
+  category: string;
+  consomme: number;
+  valeur_ht: number;
+  stock_rempli: number;
+  stock_final: number;
+  nb_events: number;
+  anomalie: boolean;
+}
+
+function BuvetteDetailPanel({
+  code,
+  scope,
+  eventIds,
+  onClose,
+}: {
+  code: string;
+  scope: string;
+  eventIds: string[];
+  onClose: () => void;
+}) {
+  const [rows, setRows] = useState<BuvetteDetailRow[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    (async () => {
+      let q = supabase
+        .from('event_space_product_consumption')
+        .select('event_id, product_id, product_name, category, consomme, valeur_ht, stock_rempli, stock_final, anomalie')
+        .eq('space_name', code);
+      if (scope !== 'all') q = q.eq('event_id', scope);
+      else if (eventIds.length > 0) q = q.in('event_id', eventIds);
+      const { data } = await q;
+      if (!active) return;
+      const map = new Map<string, BuvetteDetailRow>();
+      for (const r of (data ?? []) as Record<string, unknown>[]) {
+        const id = String(r.product_id);
+        const e =
+          map.get(id) ??
+          {
+            product_id: id,
+            product_name: String(r.product_name ?? '—'),
+            category: String(r.category ?? 'Autre'),
+            consomme: 0,
+            valeur_ht: 0,
+            stock_rempli: 0,
+            stock_final: 0,
+            nb_events: 0,
+            anomalie: false,
+          };
+        e.consomme += num(r.consomme);
+        e.valeur_ht += num(r.valeur_ht);
+        e.stock_rempli += num(r.stock_rempli);
+        e.stock_final += num(r.stock_final);
+        e.nb_events += 1;
+        e.anomalie = e.anomalie || Boolean(r.anomalie);
+        map.set(id, e);
+      }
+      setRows([...map.values()].sort((a, b) => b.consomme - a.consomme));
+      setLoading(false);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [code, scope, eventIds]);
+
+  const totals = useMemo(() => {
+    const r = rows ?? [];
+    const rempli = r.reduce((s, x) => s + x.stock_rempli, 0);
+    const final = r.reduce((s, x) => s + x.stock_final, 0);
+    return {
+      consomme: r.reduce((s, x) => s + x.consomme, 0),
+      cout: r.reduce((s, x) => s + x.valeur_ht, 0),
+      taux: rempli > 0 ? (final / rempli) * 100 : 0,
+      nbProd: r.length,
+    };
+  }, [rows]);
+
+  const maxConso = Math.max(...(rows ?? []).map((x) => x.consomme), 1);
+
+  return (
+    <div className="rounded-2xl border-2 border-amber-300 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="flex flex-wrap items-center gap-1.5 text-lg font-black text-stone-900">
+            🍺 Détail buvette — <span style={{ color: OR_PR }}>{code}</span>
+          </h3>
+          <p className="mt-0.5 text-xs text-stone-400">
+            Consommation par produit {scope === 'all' ? 'sur la sélection courante' : "sur l'événement sélectionné"} · cliquez une autre buvette pour changer
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="shrink-0 rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
+          aria-label="Fermer le détail"
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="mt-4 space-y-2">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-8 animate-pulse rounded bg-stone-100" />
+          ))}
+        </div>
+      ) : rows && rows.length > 0 ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            {[
+              { l: 'Unités consommées', v: totals.consomme.toLocaleString('fr-FR') },
+              { l: 'Coût HT', v: `${totals.cout.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` },
+              { l: 'Taux retour', v: `${totals.taux.toFixed(1)} %` },
+              { l: 'Produits', v: String(totals.nbProd) },
+            ].map((k) => (
+              <div key={k.l} className="rounded-xl bg-stone-50 px-3 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-stone-400">{k.l}</div>
+                <div className="mt-0.5 text-lg font-black text-stone-900">{k.v}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-stone-100 text-xs uppercase tracking-wide text-stone-400">
+                  <th className="py-2 pr-2 text-left font-semibold">Produit</th>
+                  <th className="px-2 py-2 text-right font-semibold">Consommé</th>
+                  <th className="px-2 py-2 text-right font-semibold">Coût HT</th>
+                  <th className="px-2 py-2 text-right font-semibold">Taux retour</th>
+                  <th className="px-2 py-2 text-right font-semibold">Évts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((p) => {
+                  const taux = p.stock_rempli > 0 ? (p.stock_final / p.stock_rempli) * 100 : 0;
+                  const color = CAT_COLORS[p.category] ?? CAT_COLORS.Autre;
+                  return (
+                    <tr key={p.product_id} className="border-b border-stone-50 last:border-0">
+                      <td className="py-2 pr-2">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+                          <span className="font-medium text-stone-800">{p.product_name}</span>
+                          {p.anomalie && (
+                            <span className="rounded bg-rose-100 px-1 text-[10px] font-bold text-rose-700">anomalie</span>
+                          )}
+                        </div>
+                        <div className="ml-[18px] mt-1 h-1 w-full max-w-[160px] overflow-hidden rounded-full bg-stone-100">
+                          <div className="h-full rounded-full" style={{ width: `${(p.consomme / maxConso) * 100}%`, background: color }} />
+                        </div>
+                      </td>
+                      <td className="px-2 py-2 text-right font-bold text-stone-900 num">{p.consomme.toLocaleString('fr-FR')}</td>
+                      <td className="px-2 py-2 text-right text-stone-600 num">
+                        {p.valeur_ht.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                      </td>
+                      <td className={`px-2 py-2 text-right num ${taux > 20 ? 'text-rose-600' : 'text-stone-600'}`}>{taux.toFixed(0)} %</td>
+                      <td className="px-2 py-2 text-right text-stone-400 num">{p.nb_events}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <p className="py-10 text-center text-sm text-stone-400">Aucune consommation pour {code} sur cette sélection.</p>
+      )}
     </div>
   );
 }
@@ -417,6 +598,8 @@ export default function AnalyticsPage() {
   }
 
   const heatmap = data?.buvettes ?? [];
+  // IDs d'événements du scope courant (pour le détail buvette, cohérent avec la carte).
+  const eventIds = useMemo(() => events.map((e) => e.event_id), [events]);
   const donutData = useMemo(
     () =>
       (data?.categories ?? [])
@@ -789,6 +972,16 @@ export default function AnalyticsPage() {
                 )}
               </div>
             </div>
+
+            {/* Détail dynamique de la buvette sélectionnée (clic sur une tuile) */}
+            {selectedCode && (
+              <BuvetteDetailPanel
+                code={selectedCode}
+                scope={scope}
+                eventIds={eventIds}
+                onClose={() => setSelectedCode(null)}
+              />
+            )}
 
             {/* Suivi des fûts (masqué si aucun fût, ex. scope séminaire) */}
             <SuiviFuts scope={scope} />
