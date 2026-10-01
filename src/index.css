@@ -71,6 +71,13 @@
 .dash .kpi.accent .kpi-l { color: #9b7d2e; }
 .dash .kpi.accent .kpi-v { color: var(--accent-ink); }
 
+/* Mobile (< md, KPI en 2 colonnes) : réduire la valeur pour que les montants
+   longs (ex. « Coût consommations HT » en €) tiennent sur une ligne. N'affecte
+   pas la version ordinateur. */
+@media (max-width: 767px) {
+  .dash .kpi-v { font-size: 21px; letter-spacing: -0.3px; }
+}
+
 /* Carte + graphe barres */
 .dash .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow); }
 .dash .bar-row { display: grid; grid-template-columns: 92px 1fr 92px; align-items: center; gap: 12px; margin: 14px 0; }
