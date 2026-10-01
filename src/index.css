@@ -75,7 +75,7 @@
    longs (ex. « Coût consommations HT » en €) tiennent sur une ligne. N'affecte
    pas la version ordinateur. */
 @media (max-width: 767px) {
-  .dash .kpi-v { font-size: 21px; letter-spacing: -0.3px; }
+  .dash .kpi-v { font-size: 18px; letter-spacing: -0.3px; }
 }
 
 /* Carte + graphe barres */
