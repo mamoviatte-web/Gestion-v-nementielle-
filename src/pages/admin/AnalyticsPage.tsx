@@ -346,46 +346,41 @@ function BuvetteDetailPanel({
             ))}
           </div>
 
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-stone-100 text-xs uppercase tracking-wide text-stone-400">
-                  <th className="py-2 pr-2 text-left font-semibold">Produit</th>
-                  <th className="px-2 py-2 text-right font-semibold">Consommé</th>
-                  <th className="px-2 py-2 text-right font-semibold">Coût HT</th>
-                  <th className="px-2 py-2 text-right font-semibold">Taux retour</th>
-                  <th className="px-2 py-2 text-right font-semibold">Évts</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => {
-                  const taux = p.stock_rempli > 0 ? (p.stock_final / p.stock_rempli) * 100 : 0;
-                  const color = CAT_COLORS[p.category] ?? CAT_COLORS.Autre;
-                  return (
-                    <tr key={p.product_id} className="border-b border-stone-50 last:border-0">
-                      <td className="py-2 pr-2">
-                        <div className="flex items-center gap-2">
-                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
-                          <span className="font-medium text-stone-800">{p.product_name}</span>
-                          {p.anomalie && (
-                            <span className="rounded bg-rose-100 px-1 text-[10px] font-bold text-rose-700">anomalie</span>
-                          )}
-                        </div>
-                        <div className="ml-[18px] mt-1 h-1 w-full max-w-[160px] overflow-hidden rounded-full bg-stone-100">
-                          <div className="h-full rounded-full" style={{ width: `${(p.consomme / maxConso) * 100}%`, background: color }} />
-                        </div>
-                      </td>
-                      <td className="px-2 py-2 text-right font-bold text-stone-900 num">{p.consomme.toLocaleString('fr-FR')}</td>
-                      <td className="px-2 py-2 text-right text-stone-600 num">
-                        {p.valeur_ht.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-                      </td>
-                      <td className={`px-2 py-2 text-right num ${taux > 20 ? 'text-rose-600' : 'text-stone-600'}`}>{taux.toFixed(0)} %</td>
-                      <td className="px-2 py-2 text-right text-stone-400 num">{p.nb_events}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          {/* Liste responsive (pas de scroll horizontal sur mobile) : chaque
+              produit = nom + consommé en évidence, puis coût · taux · évts. */}
+          <div className="mt-3 divide-y divide-stone-50">
+            {rows.map((p) => {
+              const taux = p.stock_rempli > 0 ? (p.stock_final / p.stock_rempli) * 100 : 0;
+              const color = CAT_COLORS[p.category] ?? CAT_COLORS.Autre;
+              return (
+                <div key={p.product_id} className="py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+                      <span className="truncate font-medium text-stone-800">{p.product_name}</span>
+                      {p.anomalie && (
+                        <span className="shrink-0 rounded bg-rose-100 px-1 text-[10px] font-bold text-rose-700">anomalie</span>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-base font-black text-stone-900 num">
+                      {p.consomme.toLocaleString('fr-FR')}
+                    </span>
+                  </div>
+                  <div className="ml-[18px] mt-1 flex items-center gap-3">
+                    <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-stone-100 sm:max-w-[160px]">
+                      <div className="h-full rounded-full" style={{ width: `${(p.consomme / maxConso) * 100}%`, background: color }} />
+                    </div>
+                    <div className="shrink-0 text-xs text-stone-500">
+                      <span className="num">{p.valeur_ht.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                      <span className="text-stone-300"> · </span>
+                      <span className={taux > 20 ? 'text-rose-600' : ''}>{taux.toFixed(0)}% ret.</span>
+                      <span className="text-stone-300"> · </span>
+                      <span className="text-stone-400">{p.nb_events} évt</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </>
       ) : (
