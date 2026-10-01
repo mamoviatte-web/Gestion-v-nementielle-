@@ -139,7 +139,7 @@ function KPICard({ label, value, sub, color = 'stone' }: { label: string; value:
   return (
     <div className={`rounded-xl border p-4 ${colors[color]}`}>
       <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">{label}</p>
-      <p className="text-2xl font-bold text-stone-900">{value}</p>
+      <p className="text-lg font-bold text-stone-900 sm:text-2xl">{value}</p>
       {sub && <p className="mt-1 text-xs text-stone-400">{sub}</p>}
     </div>
   );
