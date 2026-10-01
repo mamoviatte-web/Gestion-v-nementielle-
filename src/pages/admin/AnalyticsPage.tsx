@@ -234,12 +234,10 @@ interface BuvetteDetailRow {
 function BuvetteDetailPanel({
   code,
   scope,
-  eventIds,
   onClose,
 }: {
   code: string;
   scope: string;
-  eventIds: string[];
   onClose: () => void;
 }) {
   const [rows, setRows] = useState<BuvetteDetailRow[] | null>(null);
@@ -249,12 +247,14 @@ function BuvetteDetailPanel({
     let active = true;
     setLoading(true);
     (async () => {
+      // Même source que la carte (match_consumption_report) → la somme du
+      // panneau réconcilie exactement le total de la tuile. Scope 'all' = tous
+      // les matchs (la vue est match-only, comme l'agrégat de la carte).
       let q = supabase
-        .from('event_space_product_consumption')
-        .select('event_id, product_id, product_name, category, consomme, valeur_ht, stock_rempli, stock_final, anomalie')
+        .from('match_consumption_report')
+        .select('event_id, product_id, product_name, category, consumed_qty, cost_ht, initial_qty, reassort_qty, final_qty')
         .eq('space_name', code);
       if (scope !== 'all') q = q.eq('event_id', scope);
-      else if (eventIds.length > 0) q = q.in('event_id', eventIds);
       const { data } = await q;
       if (!active) return;
       const map = new Map<string, BuvetteDetailRow>();
@@ -273,21 +273,22 @@ function BuvetteDetailPanel({
             nb_events: 0,
             anomalie: false,
           };
-        e.consomme += num(r.consomme);
-        e.valeur_ht += num(r.valeur_ht);
-        e.stock_rempli += num(r.stock_rempli);
-        e.stock_final += num(r.stock_final);
+        e.consomme += num(r.consumed_qty);
+        e.valeur_ht += num(r.cost_ht);
+        e.stock_rempli += num(r.initial_qty) + num(r.reassort_qty);
+        e.stock_final += num(r.final_qty);
         e.nb_events += 1;
-        e.anomalie = e.anomalie || Boolean(r.anomalie);
         map.set(id, e);
       }
-      setRows([...map.values()].sort((a, b) => b.consomme - a.consomme));
+      // Anomalie = consommation négative agrégée (RG-004).
+      const out = [...map.values()].map((e) => ({ ...e, anomalie: e.consomme < 0 }));
+      setRows(out.sort((a, b) => b.consomme - a.consomme));
       setLoading(false);
     })();
     return () => {
       active = false;
     };
-  }, [code, scope, eventIds]);
+  }, [code, scope]);
 
   const totals = useMemo(() => {
     const r = rows ?? [];
@@ -598,8 +599,6 @@ export default function AnalyticsPage() {
   }
 
   const heatmap = data?.buvettes ?? [];
-  // IDs d'événements du scope courant (pour le détail buvette, cohérent avec la carte).
-  const eventIds = useMemo(() => events.map((e) => e.event_id), [events]);
   const donutData = useMemo(
     () =>
       (data?.categories ?? [])
@@ -978,7 +977,6 @@ export default function AnalyticsPage() {
               <BuvetteDetailPanel
                 code={selectedCode}
                 scope={scope}
-                eventIds={eventIds}
                 onClose={() => setSelectedCode(null)}
               />
             )}
