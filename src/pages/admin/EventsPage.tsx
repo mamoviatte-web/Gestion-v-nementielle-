@@ -495,7 +495,7 @@ function EventTabs({
   counts: Record<EventTabKey, number>;
 }) {
   return (
-    <div className="mb-4 flex gap-1 border-b border-pr-stone">
+    <div className="mb-4 flex gap-1 overflow-x-auto border-b border-pr-stone">
       {EVENT_TAB_META.map((t) => {
         const isActive = active === t.key;
         return (
@@ -503,7 +503,7 @@ function EventTabs({
             key={t.key}
             onClick={() => onChange(t.key)}
             className={clsx(
-              'flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
+              'flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4',
               isActive
                 ? 'border-pr-black text-pr-black'
                 : 'border-transparent text-pr-black-soft/50 hover:text-pr-black',
