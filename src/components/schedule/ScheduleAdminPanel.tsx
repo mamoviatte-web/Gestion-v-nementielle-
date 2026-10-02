@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { UserPlus, Check, X } from 'lucide-react';
+import { UserPlus, Check, X, Pencil } from 'lucide-react';
 import { useSchedules, type NewSchedule } from '@/hooks/useSchedules';
+import type { Schedule } from '@/lib/types';
 import { computeHoursWorked, formatHours } from '@/lib/calculations';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -28,10 +29,11 @@ export function ScheduleAdminPanel({
   eventId: string;
   spaceId: string;
 }) {
-  const { schedules, addSchedule, submitting } = useSchedules(eventId, spaceId);
+  const { schedules, addSchedule, updateSchedule, submitting } = useSchedules(eventId, spaceId);
   const [form, setForm] = useState(EMPTY);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editTarget, setEditTarget] = useState<Schedule | null>(null);
 
   const list = schedules.data ?? [];
   const totalHours = useMemo(
@@ -131,6 +133,7 @@ export function ScheduleAdminPanel({
               <TH className="text-right">Heures</TH>
               <TH>✓ Emp.</TH>
               <TH>✓ Resp.</TH>
+              <TH className="text-right">Éditer</TH>
             </TR>
           </THead>
           <TBody>
@@ -149,6 +152,15 @@ export function ScheduleAdminPanel({
                   <TD className="text-right">{hours === null ? '—' : formatHours(hours)}</TD>
                   <TD>{s.confirmed_by_staff ? <Check className="h-4 w-4 text-emerald-600" /> : <X className="h-4 w-4 text-pr-black-soft/30" />}</TD>
                   <TD>{s.confirmed_by_manager ? <Check className="h-4 w-4 text-emerald-600" /> : <X className="h-4 w-4 text-pr-black-soft/30" />}</TD>
+                  <TD className="text-right">
+                    <button
+                      onClick={() => setEditTarget(s)}
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-pr-black-soft/60 transition-colors hover:bg-pr-cream hover:text-pr-black"
+                      title="Corriger les horaires"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Éditer
+                    </button>
+                  </TD>
                 </TR>
               );
             })}
@@ -158,11 +170,80 @@ export function ScheduleAdminPanel({
               <TD className="font-semibold">Total</TD>
               <TD /><TD /><TD /><TD />
               <TD className="text-right font-semibold">{formatHours(totalHours)}</TD>
-              <TD /><TD />
+              <TD /><TD /><TD />
             </TR>
           </TFoot>
         </Table>
       )}
+
+      {editTarget && (
+        <EditScheduleModal
+          schedule={editTarget}
+          saving={submitting}
+          onClose={() => setEditTarget(null)}
+          onSave={async (fields) => {
+            await updateSchedule(editTarget.schedule_id, fields);
+            setEditTarget(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Correction manuelle des horaires d'un agent/régisseur par l'équipe stade
+ *  (arrivée prévue / départ prévu / départ réel). Un champ vidé repasse à NULL.
+ *  Les heures/coûts sont recalculés automatiquement. RG-007 : format HH:MM. */
+function EditScheduleModal({
+  schedule,
+  saving,
+  onClose,
+  onSave,
+}: {
+  schedule: Schedule;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (fields: Partial<Schedule>) => void;
+}) {
+  const hhmm = (t: string | null | undefined): string => (t ? t.slice(0, 5) : '');
+  const [arr, setArr] = useState(hhmm(schedule.planned_arrival));
+  const [depPlan, setDepPlan] = useState(hhmm(schedule.planned_departure));
+  const [depReal, setDepReal] = useState(hhmm(schedule.actual_departure));
+  const norm = (v: string): string | null => (v.trim() ? v.trim() : null);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+        <div className="mb-3 flex items-start justify-between">
+          <h2 className="font-display text-lg font-black text-pr-black">Corriger les horaires</h2>
+          <button onClick={onClose} aria-label="Fermer" className="text-pr-black-soft/40 hover:text-pr-black">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <p className="mb-4 text-sm text-pr-black-soft/60">
+          {schedule.staff_name}
+          {schedule.role ? ` — ${schedule.role}` : ''}. Les heures sont recalculées automatiquement.
+        </p>
+        <div className="space-y-3">
+          <Input type="time" label="Arrivée prévue" value={arr} onChange={(e) => setArr(e.target.value)} />
+          <Input type="time" label="Départ prévu" value={depPlan} onChange={(e) => setDepPlan(e.target.value)} />
+          <Input type="time" label="Départ réel" value={depReal} onChange={(e) => setDepReal(e.target.value)} />
+        </div>
+        <Button
+          fullWidth
+          className="mt-4"
+          loading={saving}
+          onClick={() =>
+            onSave({
+              planned_arrival: norm(arr),
+              planned_departure: norm(depPlan),
+              actual_departure: norm(depReal),
+            })
+          }
+        >
+          Enregistrer les horaires
+        </Button>
+      </div>
     </div>
   );
 }

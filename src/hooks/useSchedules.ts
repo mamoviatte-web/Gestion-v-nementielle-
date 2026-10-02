@@ -71,6 +71,8 @@ export function useSchedules(
   return {
     schedules,
     addSchedule: (data: NewSchedule) => addMutation.mutateAsync(data),
+    updateSchedule: (id: string, fields: Partial<Schedule>) =>
+      updateMutation.mutateAsync({ id, fields }),
     updateDeparture: (id: string, actual_departure: string) =>
       updateMutation.mutateAsync({ id, fields: { actual_departure } }),
     setConfirm: (

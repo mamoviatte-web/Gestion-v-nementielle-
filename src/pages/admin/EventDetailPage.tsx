@@ -37,6 +37,7 @@ import { DeleteEventButton } from '@/components/events/DeleteEventButton';
 import { BuvetteGroupsTab } from '@/components/buvette/BuvetteGroupsTab';
 import { RhOperationalBoard } from '@/components/rh/RhOperationalBoard';
 import { OccasionalHoursPanel } from '@/components/rh/OccasionalHoursPanel';
+import { ForfaitsRhPanel } from '@/components/seminaire/ForfaitsRhPanel';
 import { VipPaxPanel } from '@/components/events/VipPaxPanel';
 import { KegReconciliationPanel } from '@/components/events/KegReconciliationPanel';
 import { SelectionGroupsPanel } from '@/components/events/SelectionGroupsPanel';
@@ -738,6 +739,7 @@ export default function EventDetailPage() {
           )}
           <OccasionalHoursPanel eventId={event.event_id} eventDate={event.event_date} />
           <RhOperationalBoard eventId={event.event_id} />
+          <ForfaitsRhPanel eventId={event.event_id} />
           <StaffEventInsights event={event} />
         </div>
       )}
