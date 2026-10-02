@@ -122,6 +122,57 @@ export function ScheduleAdminPanel({
           message="Ajoutez les agents prévus pour cet espace."
         />
       ) : (
+        <>
+        {/* Mobile : liste en cartes (bouton Éditer visible sans scroll latéral). */}
+        <div className="space-y-2 sm:hidden">
+          {list.map((s) => {
+            const hours =
+              s.planned_arrival && s.actual_departure
+                ? computeHoursWorked(s.planned_arrival, s.actual_departure)
+                : null;
+            return (
+              <div key={s.schedule_id} className="rounded-xl border border-pr-stone bg-white p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-pr-black">{s.staff_name}</p>
+                    <p className="text-xs text-pr-black-soft/50">{s.role ?? '—'}</p>
+                  </div>
+                  <button
+                    onClick={() => setEditTarget(s)}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-pr-cream px-3 py-2 text-xs font-semibold text-pr-black transition-colors hover:bg-pr-stone"
+                    title="Corriger les horaires"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Éditer
+                  </button>
+                </div>
+                <div className="mt-2 grid grid-cols-4 gap-2 text-center">
+                  {[
+                    { l: 'Arrivée', v: s.planned_arrival?.slice(0, 5) ?? '—' },
+                    { l: 'Dép. prévu', v: s.planned_departure?.slice(0, 5) ?? '—' },
+                    { l: 'Dép. réel', v: s.actual_departure?.slice(0, 5) ?? '—' },
+                    { l: 'Heures', v: hours === null ? '—' : formatHours(hours) },
+                  ].map((c) => (
+                    <div key={c.l}>
+                      <p className="text-[10px] uppercase tracking-wide text-pr-black-soft/40">{c.l}</p>
+                      <p className="text-sm font-medium text-pr-black">{c.v}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 flex items-center gap-4 text-xs text-pr-black-soft/50">
+                  <span className="inline-flex items-center gap-1">Emp. {s.confirmed_by_staff ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <X className="h-3.5 w-3.5 text-pr-black-soft/30" />}</span>
+                  <span className="inline-flex items-center gap-1">Resp. {s.confirmed_by_manager ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <X className="h-3.5 w-3.5 text-pr-black-soft/30" />}</span>
+                </div>
+              </div>
+            );
+          })}
+          <div className="flex items-center justify-between px-1 pt-1 text-sm font-semibold text-pr-black">
+            <span>Total</span>
+            <span>{formatHours(totalHours)}</span>
+          </div>
+        </div>
+
+        {/* Ordinateur : table complète. */}
+        <div className="hidden sm:block">
         <Table>
           <THead>
             <TR>
@@ -174,6 +225,8 @@ export function ScheduleAdminPanel({
             </TR>
           </TFoot>
         </Table>
+        </div>
+        </>
       )}
 
       {editTarget && (
