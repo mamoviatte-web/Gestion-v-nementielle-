@@ -95,25 +95,35 @@ export function ForfaitsRhPanel({ eventId, onChanged }: { eventId: string; onCha
       {form && (
         <div className="mb-4 space-y-3 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="text-sm">
-              <span className="mb-1 block text-xs font-semibold text-stone-500">Type</span>
-              <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as FormState['category'] })}>
-                {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </Select>
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-xs font-semibold text-stone-500">Montant HT (€)</span>
-              <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Ex : 350" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-            </label>
+            <Select
+              label="Type"
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value as FormState['category'] })}
+              options={CATEGORIES.map((c) => ({ value: c.value, label: c.label }))}
+            />
+            <Input
+              label="Montant HT (€)"
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              placeholder="Ex : 350"
+              value={form.amount}
+              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+            />
           </div>
-          <label className="block text-sm">
-            <span className="mb-1 block text-xs font-semibold text-stone-500">Intitulé</span>
-            <Input placeholder="Ex : Prestataire son freelance · Équipe manutention montage" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-xs font-semibold text-stone-500">Note (optionnel)</span>
-            <Input placeholder="Précision libre" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
-          </label>
+          <Input
+            label="Intitulé"
+            placeholder="Ex : Prestataire son freelance · Équipe manutention montage"
+            value={form.label}
+            onChange={(e) => setForm({ ...form, label: e.target.value })}
+          />
+          <Input
+            label="Note (optionnel)"
+            placeholder="Précision libre"
+            value={form.note}
+            onChange={(e) => setForm({ ...form, note: e.target.value })}
+          />
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => void add()} loading={busy}><Check size={14} /> Enregistrer</Button>
             <Button size="sm" variant="secondary" onClick={() => setForm(null)}><X size={14} /> Annuler</Button>
