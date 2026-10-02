@@ -18,7 +18,7 @@ import { supabase } from '@/lib/supabase';
 const num = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const eur = (v: number): string => v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
-interface Line { label: string; agents: number; hours: number; cost: number; hors?: boolean }
+interface Line { label: string; agents: number; hours: number; cost: number; hors?: boolean; forfait?: boolean }
 
 export function SeminaireRhKpiCard({ eventId, reloadKey }: { eventId: string; reloadKey: number }) {
   const [lines, setLines] = useState<Line[]>([]);
@@ -27,14 +27,16 @@ export function SeminaireRhKpiCard({ eventId, reloadKey }: { eventId: string; re
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [zone, occ] = await Promise.all([
+    const [zone, occ, forf] = await Promise.all([
       supabase.from('zone_staff_hours').select('staff_name, hours_worked, rh_cost, space_id, spaces(space_name)').eq('event_id', eventId),
       supabase.from('occasional_hours').select('staff_name, hours_worked, total_cost').eq('event_id', eventId),
+      supabase.from('event_rh_forfaits').select('amount_ht').eq('event_id', eventId),
     ]);
     type ZRow = { staff_name: string | null; hours_worked: number | null; rh_cost: number | null; space_id: string | null; spaces: { space_name: string | null } | null };
     type ORow = { staff_name: string | null; hours_worked: number | null; total_cost: number | null };
     const zrows = (zone.data as ZRow[] | null) ?? [];
     const orows = (occ.data as ORow[] | null) ?? [];
+    const frows = (forf.data as { amount_ht: number | null }[] | null) ?? [];
 
     const bySpace = new Map<string, Line>();
     const names = new Set<string>();
@@ -51,6 +53,12 @@ export function SeminaireRhKpiCard({ eventId, reloadKey }: { eventId: string; re
       const hors: Line = { label: 'Manutention / runner (hors espace)', agents: orows.length, hours: 0, cost: 0, hors: true };
       for (const r of orows) { hors.hours += num(r.hours_worked); hors.cost += num(r.total_cost); if (r.staff_name) names.add(r.staff_name.toLowerCase()); }
       result.push(hors);
+    }
+
+    // Forfaits (freelance / manutention) — montants forfaitaires sans heures.
+    if (frows.length) {
+      const forfaitCost = frows.reduce((a, r) => a + num(r.amount_ht), 0);
+      result.push({ label: 'Forfaits (freelance / manutention)', agents: frows.length, hours: 0, cost: forfaitCost, forfait: true });
     }
 
     setLines(result);
@@ -101,7 +109,7 @@ export function SeminaireRhKpiCard({ eventId, reloadKey }: { eventId: string; re
                   {lines.map((l) => (
                     <tr key={l.label} className="text-stone-800">
                       <td className="px-3 py-2 font-medium">
-                        <span className="inline-flex items-center gap-1.5">{l.hors ? <Truck size={13} className="text-amber-500" /> : <MapPin size={13} className="text-stone-300" />}{l.label}</span>
+                        <span className="inline-flex items-center gap-1.5">{l.forfait ? <Euro size={13} className="text-emerald-500" /> : l.hors ? <Truck size={13} className="text-amber-500" /> : <MapPin size={13} className="text-stone-300" />}{l.label}</span>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums text-stone-500">{l.agents}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{l.hours.toFixed(2)}</td>

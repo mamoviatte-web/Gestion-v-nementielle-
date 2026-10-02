@@ -7,7 +7,7 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Clock, Users, X } from 'lucide-react';
+import { Clock, Users, X, Pencil } from 'lucide-react';
 import { Alert, Button, Input, Spinner } from '@/components/ui';
 import { formatEuro } from '@/lib/calculations';
 import { supabase } from '@/lib/supabase';
@@ -39,6 +39,7 @@ interface ScheduleRow {
 export function BilanRegisseur({ event, variant = 'full' }: { event: Event; variant?: 'full' | 'rh' }) {
   const queryClient = useQueryClient();
   const [rateTarget, setRateTarget] = useState<ScheduleRow | null>(null);
+  const [horaireTarget, setHoraireTarget] = useState<ScheduleRow | null>(null);
 
   const schedulesQuery = useQuery({
     queryKey: ['bilanRegisseur', event.event_id],
@@ -71,6 +72,31 @@ export function BilanRegisseur({ event, variant = 'full' }: { event: Event; vari
   const saveRate = useMutation({
     mutationFn: async ({ scheduleId, rate }: { scheduleId: string; rate: number }) => {
       const { error } = await supabase.from('schedules').update({ hourly_rate: rate }).eq('schedule_id', scheduleId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['bilanRegisseur', event.event_id] });
+    },
+  });
+
+  // Correction des horaires par l'équipe stade (si le régisseur s'est trompé).
+  // Les heures et le coût RH sont recalculés automatiquement à partir des temps.
+  const saveHoraires = useMutation({
+    mutationFn: async ({
+      scheduleId,
+      planned_arrival,
+      planned_departure,
+      actual_departure,
+    }: {
+      scheduleId: string;
+      planned_arrival: string | null;
+      planned_departure: string | null;
+      actual_departure: string | null;
+    }) => {
+      const { error } = await supabase
+        .from('schedules')
+        .update({ planned_arrival, planned_departure, actual_departure })
+        .eq('schedule_id', scheduleId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -125,6 +151,7 @@ export function BilanRegisseur({ event, variant = 'full' }: { event: Event; vari
                 <th className="px-3 py-2.5 text-right font-semibold">Heures</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Écart</th>
                 {hasRates && <th className="px-3 py-2.5 text-right font-semibold">Coût RH</th>}
+                <th className="px-3 py-2.5 text-right font-semibold" aria-label="Actions" />
               </tr>
             </thead>
             <tbody className="divide-y divide-pr-stone">
@@ -159,6 +186,16 @@ export function BilanRegisseur({ event, variant = 'full' }: { event: Event; vari
                       {cost != null ? formatEuro(cost) : <span className="text-xs text-amber-500">taux ?</span>}
                     </td>
                   )}
+                  <td className="px-3 py-2.5 text-right">
+                    <button
+                      onClick={() => setHoraireTarget(sc)}
+                      className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-pr-black-soft/60 transition-colors hover:bg-pr-cream hover:text-pr-black"
+                      aria-label="Corriger les horaires"
+                      title="Corriger les horaires"
+                    >
+                      <Pencil size={13} /> Éditer
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -247,7 +284,89 @@ export function BilanRegisseur({ event, variant = 'full' }: { event: Event; vari
           }}
         />
       )}
+
+      {horaireTarget && (
+        <HoraireModal
+          schedule={horaireTarget}
+          saving={saveHoraires.isPending}
+          onClose={() => setHoraireTarget(null)}
+          onSave={async (vals) => {
+            await saveHoraires.mutateAsync({ scheduleId: horaireTarget.schedule_id, ...vals });
+            setHoraireTarget(null);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/** Correction manuelle des horaires d'un régisseur par l'équipe stade (RG-007 :
+ *  format HH:MM via input time). Un champ vidé repasse à « non renseigné ». */
+function HoraireModal({
+  schedule,
+  saving,
+  onClose,
+  onSave,
+}: {
+  schedule: ScheduleRow;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (vals: {
+    planned_arrival: string | null;
+    planned_departure: string | null;
+    actual_departure: string | null;
+  }) => void;
+}) {
+  const hhmm = (t: string | null): string => (t ? t.slice(0, 5) : '');
+  const [arr, setArr] = useState(hhmm(schedule.planned_arrival));
+  const [depPlan, setDepPlan] = useState(hhmm(schedule.planned_departure));
+  const [depReal, setDepReal] = useState(hhmm(schedule.actual_departure));
+
+  const norm = (v: string): string | null => (v.trim() ? v.trim() : null);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+        <div className="mb-3 flex items-start justify-between">
+          <h2 className="font-display text-lg font-black text-pr-black">Corriger les horaires</h2>
+          <button onClick={onClose} aria-label="Fermer" className="text-pr-black-soft/40 hover:text-pr-black">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <p className="mb-4 text-sm text-pr-black-soft/60">
+          {getResponsableName(schedule.staff_name)} — {schedule.spaces?.space_name ?? ''}. Les heures et le coût RH sont
+          recalculés automatiquement.
+        </p>
+        <div className="space-y-3">
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-pr-black-soft/60">Arrivée prévue</span>
+            <Input type="time" value={arr} onChange={(e) => setArr(e.target.value)} />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-pr-black-soft/60">Départ prévu</span>
+            <Input type="time" value={depPlan} onChange={(e) => setDepPlan(e.target.value)} />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-pr-black-soft/60">Départ réel</span>
+            <Input type="time" value={depReal} onChange={(e) => setDepReal(e.target.value)} />
+          </label>
+        </div>
+        <Button
+          fullWidth
+          className="mt-4"
+          loading={saving}
+          onClick={() =>
+            onSave({
+              planned_arrival: norm(arr),
+              planned_departure: norm(depPlan),
+              actual_departure: norm(depReal),
+            })
+          }
+        >
+          Enregistrer les horaires
+        </Button>
+      </div>
+    </div>
   );
 }
 

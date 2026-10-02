@@ -19,6 +19,7 @@ import { OccasionalHoursPanel } from '@/components/rh/OccasionalHoursPanel';
 import { SeminaireStaffHoursPanel } from './SeminaireStaffHoursPanel';
 import { SeminaireRhKpiCard } from './SeminaireRhKpiCard';
 import { BilanRegisseur } from './BilanRegisseur';
+import { ForfaitsRhPanel } from './ForfaitsRhPanel';
 
 export function SeminaireRhTab({ event, spaces }: { event: Event; spaces: EventSpaceWithSpace[] }) {
   const active = spaces.filter((s) => s.spaces);
@@ -78,6 +79,9 @@ export function SeminaireRhTab({ event, spaces }: { event: Event; spaces: EventS
       )}
 
       <OccasionalHoursPanel eventId={event.event_id} eventDate={event.event_date} onChanged={bump} />
+
+      {/* Forfaits financiers (freelance / manutention) — montants sans heures. */}
+      <ForfaitsRhPanel eventId={event.event_id} onChanged={bump} />
     </div>
   );
 }
