@@ -373,30 +373,49 @@ export function SeminaireBilanTab({
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-pr-black">
-            <BarChart3 className="h-5 w-5 text-pr-olive-dark" aria-hidden />
-            Bilan {event.event_name}
-          </h2>
-          <p className="mt-1 text-sm text-pr-black-soft/50">
-            {formatDate(event.event_date)} · {event.expected_attendees ?? '—'} participants
-          </p>
+      {/* En-tête + actions + sommaire — sticky : actions et navigation toujours visibles au scroll. */}
+      <div className="sticky top-2 z-20 flex flex-col gap-2 rounded-xl border border-pr-stone bg-pr-cream/95 p-2.5 shadow-sm backdrop-blur">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-semibold text-pr-black">
+              <BarChart3 className="h-5 w-5 text-pr-olive-dark" aria-hidden />
+              Bilan {event.event_name}
+            </h2>
+            <p className="mt-0.5 text-xs text-pr-black-soft/50">
+              {formatDate(event.event_date)} · {event.expected_attendees ?? '—'} participants
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={handleDownloadPhotos}>
+              <Image className="mr-1.5 h-4 w-4" aria-hidden />
+              📸 Télécharger toutes les photos
+            </Button>
+            <Button onClick={handleExport}>
+              <Download className="mr-1.5 h-4 w-4" aria-hidden />
+              📥 Exporter le bilan Excel
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={handleDownloadPhotos}>
-            <Image className="mr-1.5 h-4 w-4" aria-hidden />
-            📸 Télécharger toutes les photos
-          </Button>
-          <Button onClick={handleExport}>
-            <Download className="mr-1.5 h-4 w-4" aria-hidden />
-            📥 Exporter le bilan Excel
-          </Button>
-        </div>
+        <nav className="-mb-0.5 flex flex-wrap gap-1 overflow-x-auto">
+          {[
+            { id: 'bil-avancement', label: 'Avancement' },
+            { id: 'bil-couts', label: 'Coûts F&B' },
+            { id: 'bil-rh', label: 'RH & régisseur' },
+            { id: 'bil-debriefs', label: 'Débriefs' },
+          ].map((s) => (
+            <button
+              key={s.id}
+              onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-pr-black-soft/55 transition-colors hover:bg-pr-stone/60 hover:text-pr-black"
+            >
+              {s.label}
+            </button>
+          ))}
+        </nav>
       </div>
 
       {/* 1 — Avancement --------------------------------------------------- */}
-      <section className="space-y-3">
+      <section id="bil-avancement" className="scroll-mt-28 space-y-3">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-pr-black-soft/70">
           Avancement par espace
         </h3>
@@ -451,7 +470,7 @@ export function SeminaireBilanTab({
       </section>
 
       {/* 2 — Synthèse des coûts (prix U × consommé) ----------------------- */}
-      <section className="space-y-3">
+      <section id="bil-couts" className="scroll-mt-28 space-y-3">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-pr-black-soft/70">
           Synthèse des coûts F&amp;B
         </h3>
@@ -462,10 +481,12 @@ export function SeminaireBilanTab({
       </section>
 
       {/* 3 — Horaires régisseur + charges RH ------------------------------ */}
-      <BilanRegisseur event={event} />
+      <div id="bil-rh" className="scroll-mt-28">
+        <BilanRegisseur event={event} />
+      </div>
 
       {/* 4 — Débriefs & photos -------------------------------------------- */}
-      <section className="space-y-3">
+      <section id="bil-debriefs" className="scroll-mt-28 space-y-3">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-pr-black-soft/70">
           Débriefs &amp; photos
         </h3>

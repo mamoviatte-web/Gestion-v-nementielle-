@@ -111,9 +111,9 @@ function ScoreEditor({ label, value, onChange }: { label: string; value: number 
 
 /* ─────────────── Carte section ─────────────── */
 
-function Card({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Card({ id, title, hint, children }: { id?: string; title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-pr-stone bg-white">
+    <section id={id} className="scroll-mt-28 rounded-xl border border-pr-stone bg-white">
       <div className="flex items-center justify-between border-b border-pr-stone px-4 py-2.5">
         <span className="text-sm font-semibold text-pr-black">{title}</span>
         {hint && <span className="text-xs text-pr-black-soft/50">{hint}</span>}
@@ -123,10 +123,23 @@ function Card({ title, hint, children }: { title: string; hint?: string; childre
   );
 }
 
+/** Sections du rapport pour le sommaire d'ancres (sticky). */
+const REPORT_SECTIONS: { id: string; label: string }[] = [
+  { id: 'rpt-couverture', label: 'Couverture' },
+  { id: 'rpt-commercial', label: 'Commercial' },
+  { id: 'rpt-financier', label: 'Financier' },
+  { id: 'rpt-photos', label: 'Photos' },
+  { id: 'rpt-debrief', label: 'Débrief' },
+  { id: 'rpt-satisfaction', label: 'Satisfaction' },
+];
+function scrollToSection(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-baseline gap-2">
-      <span className="w-40 shrink-0 text-pr-black-soft/60">{label}</span>
+      <span className="w-full shrink-0 text-pr-black-soft/60 sm:w-40">{label}</span>
       {children}
     </div>
   );
@@ -139,7 +152,7 @@ function DebriefSection({ draft, update }: { draft: SeminarReportDraft; update: 
   const setBullets = (next: ReportBullet[]) => update({ debrief_bullets: next });
 
   return (
-    <Card title="Débrief interne" hint="Auto-rempli depuis les débriefs soumis">
+    <Card id="rpt-debrief" title="Débrief interne" hint="Auto-rempli depuis les débriefs soumis">
       <div className="space-y-2">
         {bullets.map((b, i) => (
           <div key={i} className="flex items-start gap-2">
@@ -348,26 +361,40 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
         </Alert>
       )}
 
-      {/* Barre de statut + actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Badge tone={STATUS_TONE[draft.draft_status] ?? 'neutral'}>{draft.draft_status}</Badge>
-          <span className="text-xs text-pr-black-soft/50">
-            {saving ? 'Sauvegarde…' : savedAt ? `Enregistré ${new Date(savedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : provisioned ? 'Auto-généré à la clôture' : 'Mode aperçu'}
-          </span>
+      {/* Barre de statut + actions + sommaire — sticky : toujours accessible au scroll. */}
+      <div className="sticky top-2 z-20 space-y-2 rounded-xl border border-pr-stone bg-pr-cream/95 p-2.5 shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Badge tone={STATUS_TONE[draft.draft_status] ?? 'neutral'}>{draft.draft_status}</Badge>
+            <span className="text-xs text-pr-black-soft/50">
+              {saving ? 'Sauvegarde…' : savedAt ? `Enregistré ${new Date(savedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : provisioned ? 'Auto-généré à la clôture' : 'Mode aperçu'}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setPreview(true)}>
+              <Eye className="h-4 w-4" /> Aperçu
+            </Button>
+            <Button loading={exporting} onClick={handleExport}>
+              <Download className="h-4 w-4" /> Exporter PDF
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setPreview(true)}>
-            <Eye className="h-4 w-4" /> Aperçu
-          </Button>
-          <Button loading={exporting} onClick={handleExport}>
-            <Download className="h-4 w-4" /> Exporter PDF
-          </Button>
-        </div>
+        {/* Sommaire d'ancres — saut direct vers une section. */}
+        <nav className="-mb-0.5 flex flex-wrap gap-1 overflow-x-auto">
+          {REPORT_SECTIONS.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => scrollToSection(s.id)}
+              className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-pr-black-soft/55 transition-colors hover:bg-pr-stone/60 hover:text-pr-black"
+            >
+              {s.label}
+            </button>
+          ))}
+        </nav>
       </div>
 
       {/* Couverture */}
-      <Card title="Couverture">
+      <Card id="rpt-couverture" title="Couverture">
         <Row label="Titre du rapport">
           <InlineEditable value={draft.report_title} onSave={(v) => updateDraft({ report_title: v })} />
         </Row>
@@ -377,7 +404,7 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
       </Card>
 
       {/* Commercial */}
-      <Card title="Données commerciales">
+      <Card id="rpt-commercial" title="Données commerciales">
         <Row label="Client"><InlineEditable value={draft.client_name} onSave={(v) => updateDraft({ client_name: v })} /></Row>
         <Row label="PAX"><InlineEditable type="number" value={draft.pax} onSave={(v) => updateDraft({ pax: v ? Number(v) : null })} /></Row>
         <Row label="Responsable comm."><InlineEditable value={draft.responsable_commercial} onSave={(v) => updateDraft({ responsable_commercial: v })} /></Row>
@@ -431,7 +458,7 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
       </Card>
 
       {/* Bilan financier — P&L complet + charges externes (traiteur, sécurité…) */}
-      <Card title="Bilan financier">
+      <Card id="rpt-financier" title="Bilan financier">
         <div className="space-y-6">
           <FullPnL
             caHT={Number(draft.ca_ht ?? 0)}
@@ -451,7 +478,7 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
 
       {/* Rapport photo terrain — UNE SEULE VISU : toutes les photos, une grille,
           choix des photos du PDF (Axe 2). Checklist + récap sélection. */}
-      <Card title="📸 Rapport photo — vue unique">
+      <Card id="rpt-photos" title="📸 Rapport photo — vue unique">
         <div className="space-y-6">
           <UnifiedPhotoManager eventId={event.event_id} responsableNom={reportRegisseur} />
           <hr className="border-stone-100" />
@@ -470,7 +497,7 @@ function SeminarReportEditorInner({ event }: { event: Event }) {
       <DebriefSection draft={draft} update={updateDraft} />
 
       {/* Satisfaction client */}
-      <Card title="Satisfaction client">
+      <Card id="rpt-satisfaction" title="Satisfaction client">
         <Row label="Répondu par"><InlineEditable value={draft.survey_respondent} onSave={(v) => updateDraft({ survey_respondent: v })} /></Row>
         <Row label="Rôle"><InlineEditable value={draft.survey_respondent_role} onSave={(v) => updateDraft({ survey_respondent_role: v })} /></Row>
         {(['cadre_score', 'proprete_score', 'traiteur_score', 'organisation_score', 'equipes_score', 'renouveler_score'] as const).map((k) => (

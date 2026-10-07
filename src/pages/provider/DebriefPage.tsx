@@ -159,8 +159,8 @@ function DebriefContent({
           : 'Sauvegarde automatique activée'}
       </p>
 
-      {/* Barre de progression */}
-      <div>
+      {/* Barre de progression — sticky : repère d'avancement toujours visible. */}
+      <div className="sticky top-2 z-10 rounded-lg border border-pr-stone bg-pr-cream/95 p-2 backdrop-blur">
         <div className="mb-1 flex justify-between text-xs text-pr-black-soft/50">
           <span>
             Section {step + 1} / {DEBRIEF_SECTIONS.length}
@@ -246,24 +246,27 @@ function DebriefContent({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="ghost"
-          size="lg"
-          disabled={step === 0}
-          onClick={() => setStep((s) => Math.max(0, s - 1))}
-        >
-          <ChevronLeft className="h-5 w-5" /> Précédent
-        </Button>
-        {isLast ? (
-          <Button size="lg" loading={submitting || uploading} onClick={handleSubmit}>
-            <Send className="h-5 w-5" /> Soumettre le débrief
+      {/* Navigation d'étape — sticky en bas : actions toujours atteignables. */}
+      <div className="sticky bottom-2 z-10 rounded-xl border border-pr-stone bg-pr-cream/95 p-2 shadow-sm backdrop-blur">
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="ghost"
+            size="lg"
+            disabled={step === 0}
+            onClick={() => setStep((s) => Math.max(0, s - 1))}
+          >
+            <ChevronLeft className="h-5 w-5" /> Précédent
           </Button>
-        ) : (
-          <Button size="lg" onClick={() => setStep((s) => s + 1)}>
-            Suivant <ChevronRight className="h-5 w-5" />
-          </Button>
-        )}
+          {isLast ? (
+            <Button size="lg" loading={submitting || uploading} onClick={handleSubmit}>
+              <Send className="h-5 w-5" /> Soumettre le débrief
+            </Button>
+          ) : (
+            <Button size="lg" onClick={() => setStep((s) => s + 1)}>
+              Suivant <ChevronRight className="h-5 w-5" />
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
