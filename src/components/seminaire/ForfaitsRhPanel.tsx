@@ -4,12 +4,16 @@
  * et persistés dans event_rh_forfaits. RG-003 : réservé ROLE_STADE (RLS is_stade()).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, Trash2, Check, X, BadgeEuro } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import { useAutosaveDraft } from '@/hooks/useAutosaveDraft';
 import { Button, Input, Select, Spinner } from '@/components/ui';
+
+const savedLabel = (ts: number | null): string =>
+  ts ? `Brouillon enregistré · ${new Date(ts).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : '';
 
 interface Forfait {
   forfait_id: string;
@@ -38,6 +42,19 @@ export function ForfaitsRhPanel({ eventId, onChanged }: { eventId: string; onCha
   const [rows, setRows] = useState<Forfait[] | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Autosave du brouillon de saisie : un forfait en cours de saisie n'est jamais
+  // perdu si l'on change d'onglet/de page avant de cliquer « Enregistrer ».
+  // Pas de clearDraft (qui suspendrait l'autosave) : remettre le form à null
+  // persiste un brouillon vide → rien à restaurer au prochain montage.
+  const { loadDraft, lastSavedAt } = useAutosaveDraft(`forfait.${eventId}`, form);
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (restoredFor.current === eventId) return;
+    restoredFor.current = eventId;
+    const d = loadDraft();
+    if (d) setForm(d);
+  }, [eventId, loadDraft]);
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -124,9 +141,10 @@ export function ForfaitsRhPanel({ eventId, onChanged }: { eventId: string; onCha
             value={form.note}
             onChange={(e) => setForm({ ...form, note: e.target.value })}
           />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={() => void add()} loading={busy}><Check size={14} /> Enregistrer</Button>
             <Button size="sm" variant="secondary" onClick={() => setForm(null)}><X size={14} /> Annuler</Button>
+            {lastSavedAt && <span className="text-xs text-stone-400">{savedLabel(lastSavedAt)}</span>}
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useEvent, useEventSpaces, useEventActions, useEventsList } from '@/hooks/useEvents';
@@ -162,10 +162,23 @@ export default function EventDetailPage() {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [tab, setTab] = useState<Tab>('espaces'); // onglets séminaire uniquement
-  const [phase, setPhase] = useState<Phase>('prep'); // phase active (matchs)
-  const [sub, setSub] = useState<MatchSub>('pax'); // sous-onglet actif (matchs)
-  const [spaceId, setSpaceId] = useState<string>('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Persistance de la navigation dans l'URL : l'onglet / sous-onglet / phase /
+  // espace actifs survivent au changement de page et au rechargement, pour qu'on
+  // ne reparte jamais de zéro (fluidité — pas de perte de contexte).
+  const setParam = (key: string, value: string) =>
+    setSearchParams(
+      (prev) => { const n = new URLSearchParams(prev); n.set(key, value); return n; },
+      { replace: true },
+    );
+  const [tab, setTabState] = useState<Tab>(() => (searchParams.get('tab') as Tab) || 'espaces'); // onglets séminaire uniquement
+  const [phase, setPhaseState] = useState<Phase>(() => (searchParams.get('phase') as Phase) || 'prep'); // phase active (matchs)
+  const [sub, setSubState] = useState<MatchSub>(() => (searchParams.get('sub') as MatchSub) || 'pax'); // sous-onglet actif (matchs)
+  const [spaceId, setSpaceIdState] = useState<string>(() => searchParams.get('space') || '');
+  const setTab = (t: Tab) => { setTabState(t); setParam('tab', t); };
+  const setPhase = (p: Phase) => { setPhaseState(p); setParam('phase', p); };
+  const setSub = (s: MatchSub) => { setSubState(s); setParam('sub', s); };
+  const setSpaceId = (s: string) => { setSpaceIdState(s); setParam('space', s); };
 
   /** Change de phase et positionne sur le 1er sous-onglet de la phase. */
   function selectPhase(p: Phase) {

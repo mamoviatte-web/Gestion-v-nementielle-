@@ -10,12 +10,16 @@
  * RG-003 : réservé ROLE_STADE (RLS `stade_all_staff_hours` = is_stade()).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Pencil, Trash2, Check, X, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import { useAutosaveDraft } from '@/hooks/useAutosaveDraft';
 import { Button, Input, Select, Spinner } from '@/components/ui';
+
+const savedLabel = (ts: number | null): string =>
+  ts ? `Brouillon enregistré · ${new Date(ts).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : '';
 
 const ROLES = [
   'Serveur', 'Chef de rang', 'Barman', 'Agent de sécurité',
@@ -67,6 +71,18 @@ export function SeminaireStaffHoursPanel({ eventId, spaceId, spaceName, onChange
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<FormState | null>(null);
+
+  // Autosave du brouillon par espace : une saisie d'agent en cours n'est pas
+  // perdue si l'on change d'espace / d'onglet / de page avant de valider (✓).
+  const { loadDraft, lastSavedAt } = useAutosaveDraft(`staffhours.${eventId}.${spaceId}`, form);
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    const scope = `${eventId}.${spaceId}`;
+    if (restoredFor.current === scope) return;
+    restoredFor.current = scope;
+    const d = loadDraft();
+    if (d) setForm(d);
+  }, [eventId, spaceId, loadDraft]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -151,6 +167,7 @@ export function SeminaireStaffHoursPanel({ eventId, spaceId, spaceName, onChange
               <Button size="sm" loading={busy} onClick={() => void save()}><Check size={14} /></Button>
               <button onClick={() => setForm(null)} className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100"><X size={16} /></button>
             </div>
+            {lastSavedAt && <p className="mt-1 text-[10px] leading-tight text-stone-400">{savedLabel(lastSavedAt)}</p>}
           </div>
         </div>
       )}
